@@ -31,7 +31,15 @@
 
 ## Installation
 
-### From source (Meson — recommended)
+### Flatpak (recommended)
+
+```bash
+# Once published on Flathub:
+flatpak install flathub org.qmic.app
+flatpak run org.qmic.app
+```
+
+### From source (Meson)
 
 ```bash
 # Install system dependencies
@@ -115,7 +123,10 @@ Ring/
 │   ├── imagemagick/    # ImageMagick CLI integration, built-in filters
 │   ├── resources/      # Blueprint UI files
 │   └── style.css       # Application stylesheet
+├── flatpak/            # Flatpak build manifest
+├── .github/            # CI workflows
 ├── meson.build         # Top-level build definition
+├── Makefile            # Developer convenience wrappers
 ├── pyproject.toml      # Python package metadata
 └── run.sh              # Quick development launcher
 ```
