@@ -2,8 +2,6 @@
 
 **Ring** is a modern, node-based image editor for Linux. Think of it as a visual patcher for the [G'MIC](https://gmic.eu) image processing framework — you load an image, connect processing nodes, and render the result. No coding required.
 
-![Screenshot placeholder](data/icons/qmic.svg)
-
 ## Features
 
 - **Node graph editor** — drag, drop, and connect nodes to build image processing pipelines visually
