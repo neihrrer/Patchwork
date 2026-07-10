@@ -1,4 +1,5 @@
 import gettext
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -31,6 +32,11 @@ try:
     _ = gettext.gettext
 except Exception:
     _ = lambda s: s
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 def _find_ui_file(name: str) -> str:
@@ -101,6 +107,13 @@ class RingWindow(Adw.ApplicationWindow):
         self._search_entry = builder.get_object("search_entry")
         self._search_revealer = builder.get_object("search_revealer")
         self._search_toggle = builder.get_object("search_toggle")
+        self._output_text = builder.get_object("output_text")
+        self._output_box = builder.get_object("output_box")
+        self._output_paned = builder.get_object("output_paned")
+        self._output_scrolled = builder.get_object("output_scrolled")
+
+        if self._output_paned:
+            self._output_paned.set_position(100000)
 
         filter_list = builder.get_object("filter_list")
         if filter_list:
@@ -477,10 +490,16 @@ class RingWindow(Adw.ApplicationWindow):
         self._update_render_button()
 
         if not result.success:
-            self._show_error(result.error or _("Render failed"))
-            toast = Adw.Toast(title=_("Render failed"), timeout=3)
-            if self._toast_overlay:
-                self._toast_overlay.add_toast(toast)
+            self._set_status(_("Render failed"))
+            details = ""
+            if result.stdout:
+                details += result.stdout + "\n"
+            if result.stderr:
+                details += result.stderr
+            if not details:
+                details = result.error or ""
+            if details:
+                self._show_output(details.strip())
             return
 
         try:
@@ -593,3 +612,14 @@ class RingWindow(Adw.ApplicationWindow):
         toast = Adw.Toast(title=message, timeout=3)
         if self._toast_overlay:
             self._toast_overlay.add_toast(toast)
+
+    def _show_output(self, text: str):
+        cleaned = _strip_ansi(text)
+        if self._output_text:
+            buf = self._output_text.get_buffer()
+            buf.set_text(cleaned)
+            buf.move_mark_by_name("insert", buf.get_start_iter())
+        if self._output_paned:
+            alloc = self._output_paned.get_allocation()
+            if alloc and alloc.height > 100:
+                self._output_paned.set_position(max(100, alloc.height - 250))

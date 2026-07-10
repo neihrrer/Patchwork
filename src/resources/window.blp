@@ -93,11 +93,46 @@ Adw.NavigationPage content_page {
           styles ["osd"]
         };
       }
-      Box canvas_container {
+      Gtk.Paned output_paned {
         orientation: vertical;
         hexpand: true;
         vexpand: true;
-      }
+        resize-start-child: true;
+        resize-end-child: false;
+        shrink-start-child: false;
+        shrink-end-child: false;
+
+        Box canvas_container {
+          orientation: vertical;
+          hexpand: true;
+          vexpand: true;
+        };
+
+        Box output_box {
+          orientation: vertical;
+          hexpand: true;
+          styles ["output-panel"]
+
+          ScrolledWindow output_scrolled {
+            hexpand: true;
+            vexpand: true;
+            min-height: 60;
+
+            child: TextView output_text {
+              editable: false;
+              cursor-visible: false;
+              wrap-mode: word-char;
+              hexpand: true;
+              vexpand: true;
+              margin-start: 8;
+              margin-end: 8;
+              margin-top: 4;
+              margin-bottom: 4;
+              styles ["output-text"]
+            };
+          };
+        };
+      };
       Box status_box {
         orientation: horizontal;
         spacing: 6;
