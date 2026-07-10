@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>@APP_ID@</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Q'MIC</name>
+  <summary>GTK4 frontend for G'MIC image processing</summary>
+  <description>
+    <p>Q'MIC is a modern GTK4/Libadwaita frontend for the G'MIC image processing framework.</p>
+    <p>Apply any of 600+ filters to images and videos with a clean, adaptive interface.</p>
+  </description>
+  <url type="homepage">https://github.com/anomalyco/opencode</url>
+  <launchable type="desktop-id">@APP_ID@.desktop</launchable>
+  <provides>
+    <binary>qmic</binary>
+  </provides>
+  <releases>
+    <release version="@VERSION@" date="2026-07-09"/>
+  </releases>
+</component>

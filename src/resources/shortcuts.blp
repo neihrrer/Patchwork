@@ -1,0 +1,50 @@
+using Gtk 4.0;
+using Adw 1;
+
+Adw.ShortcutsDialog {
+  Adw.ShortcutsSection {
+    title: _("General");
+    Adw.ShortcutsItem {
+      title: _("Open Image");
+      accelerator: "<primary>o";
+    }
+    Adw.ShortcutsItem {
+      title: _("Export");
+      accelerator: "<primary>s";
+    }
+    Adw.ShortcutsItem {
+      title: _("Quit");
+      accelerator: "<primary>q";
+    }
+    Adw.ShortcutsItem {
+      title: _("Toggle Preview");
+      accelerator: "<primary>p";
+    }
+  }
+  Adw.ShortcutsSection {
+    title: _("Editing");
+    Adw.ShortcutsItem {
+      title: _("Apply Filter");
+      accelerator: "<primary>Return";
+    }
+    Adw.ShortcutsItem {
+      title: _("Reset Parameters");
+      accelerator: "<primary>r";
+    }
+  }
+  Adw.ShortcutsSection {
+    title: _("View");
+    Adw.ShortcutsItem {
+      title: _("Before / After");
+      accelerator: "<primary>t";
+    }
+    Adw.ShortcutsItem {
+      title: _("Zoom In");
+      accelerator: "<primary>plus";
+    }
+    Adw.ShortcutsItem {
+      title: _("Zoom Out");
+      accelerator: "<primary>minus";
+    }
+  }
+}

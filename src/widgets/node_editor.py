@@ -1,0 +1,1650 @@
+import math
+import gettext
+from typing import Optional
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+
+from gi.repository import GObject, Gtk, Gdk, GdkPixbuf, GLib, Gsk, Graphene
+
+try:
+    _ = gettext.gettext
+except Exception:
+    _ = lambda s: s
+
+try:
+    from OpenGL import GL
+except ImportError:
+    GL = None
+
+from nodes import (
+    Node, NodeGraph, Port, PortDirection, FilterNode, InputNode, OutputNode, BlendNode,
+    OpacityNode, ColoringNode,
+)
+from models.filter import FilterDef, ParamKind
+from .filter_browser import get_pending_drag_text
+
+CURVE_SEGMENTS = 48
+
+
+def _compute_bezier_segments(x1, y1, x2, y2, segments=CURVE_SEGMENTS):
+    dx = abs(x2 - x1)
+    ctrl_offset = max(dx * 0.4, 60.0)
+    p0, p3 = (x1, y1), (x2, y2)
+    p1 = (x1 + ctrl_offset, y1)
+    p2 = (x2 - ctrl_offset, y2)
+    pts = []
+    for i in range(segments + 1):
+        t = i / segments
+        u = 1 - t
+        x = u*u*u*p0[0] + 3*u*u*t*p1[0] + 3*u*t*t*p2[0] + t*t*t*p3[0]
+        y = u*u*u*p0[1] + 3*u*u*t*p1[1] + 3*u*t*t*p2[1] + t*t*t*p3[1]
+        pts.extend([x, y])
+    return pts
+
+
+class PortWidget(Gtk.Widget):
+    __gtype_name__ = "PortWidget"
+
+    def __init__(self, port: Port, node_widget: "NodeWidget"):
+        super().__init__()
+        self._port = port
+        self._node_widget = node_widget
+        self._canvas = node_widget._canvas
+        self._hovered = False
+        self._connected = False
+        self._center_x: float = 0.0
+        self._center_y: float = 0.0
+        self._offset_x: float = 0.0
+        self._offset_y: float = 0.0
+        self.set_size_request(14, 14)
+        self.set_css_classes(["port-circle"])
+
+        self._drag = Gtk.GestureDrag(button=1)
+        self._drag.connect("drag-begin", self._on_drag_begin)
+        self._drag.connect("drag-update", self._on_drag_update)
+        self._drag.connect("drag-end", self._on_drag_end)
+        self.add_controller(self._drag)
+
+        enter = Gtk.EventControllerMotion()
+        enter.connect("enter", lambda c, x, y: self._set_hover(True))
+        enter.connect("leave", lambda c: self._set_hover(False))
+        self.add_controller(enter)
+
+    @property
+    def port(self):
+        return self._port
+
+    @property
+    def node_widget(self):
+        return self._node_widget
+
+    @property
+    def center_x(self) -> float:
+        return self._center_x
+
+    @property
+    def center_y(self) -> float:
+        return self._center_y
+
+    def set_connected(self, connected: bool):
+        self._connected = connected
+        if connected:
+            self.add_css_class("connected")
+        else:
+            self.remove_css_class("connected")
+        self.queue_draw()
+
+    def update_center(self):
+        alloc = self.get_allocation()
+        x = alloc.x + alloc.width / 2
+        y = alloc.y + alloc.height / 2
+        p = self.get_parent()
+        while p is not None and not isinstance(p, NodeWidget):
+            pa = p.get_allocation()
+            x += pa.x
+            y += pa.y
+            p = p.get_parent()
+        if isinstance(p, NodeWidget):
+            self._offset_x = x
+            self._offset_y = y
+            self._center_x = p._screen_x + x
+            self._center_y = p._screen_y + y
+        else:
+            self._center_x = x
+            self._center_y = y
+
+    def _set_hover(self, hover: bool):
+        self._hovered = hover
+        self.queue_draw()
+
+    def _on_click(self, gesture, n_press, x, y):
+        if self._canvas:
+            self.update_center()
+            self._canvas.handle_port_click(self)
+
+    def _on_drag_begin(self, gesture, start_x, start_y):
+        if self._canvas:
+            self.update_center()
+            self._canvas.start_port_drag(self)
+
+    def _on_drag_update(self, gesture, offset_x, offset_y):
+        if self._canvas:
+            self._canvas.update_port_drag(offset_x, offset_y)
+
+    def _on_drag_end(self, gesture, offset_x, offset_y):
+        if self._canvas:
+            self._canvas.end_port_drag(offset_x, offset_y)
+
+    def do_snapshot(self, snapshot):
+        w, h = self.get_width(), self.get_height()
+        cx, cy = w / 2, h / 2
+        r = min(w, h) / 2 - 1
+        if r < 1:
+            return
+
+        if self._canvas and self._canvas._selected_port is self:
+            color = Gdk.RGBA(0.9, 0.7, 0.1, 1.0)
+        elif self._hovered:
+            color = Gdk.RGBA(0.8, 0.8, 0.8, 1.0)
+        elif self._connected:
+            color = Gdk.RGBA(0.35, 0.6, 0.95, 1.0)
+        else:
+            color = Gdk.RGBA(0.53, 0.53, 0.53, 1.0)
+
+        rect = Graphene.Rect().init(cx - r, cy - r, r * 2, r * 2)
+        rounded = Gsk.RoundedRect()
+        rounded.init_from_rect(rect, r)
+        snapshot.push_rounded_clip(rounded)
+        snapshot.append_color(color, rect)
+        snapshot.pop()
+
+
+class NodeWidget(Gtk.Box):
+    __gtype_name__ = "NodeWidget"
+
+    def __init__(self, node: Node, canvas: "NodeCanvas"):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self._node = node
+        self._canvas = canvas
+        self._selected = False
+        self._input_port_widgets: dict[str, PortWidget] = {}
+        self._output_port_widgets: dict[str, PortWidget] = {}
+        self._param_controls: list[Gtk.Widget] = []
+        self._ctrl_widgets: list[Gtk.Widget] = []
+        self._thumb_box: Optional[Gtk.Box] = None
+        self._thumb_picture: Optional[Gtk.Picture] = None
+        self._image_aspect: Optional[float] = None
+        self._resize_start_w = 0
+        self._resize_start_h = 0
+        self._resize_start_px = 0.0
+        self._resize_start_py = 0.0
+        self._min_node_w = 180
+        self._min_node_h = 160
+        self._has_image = False
+        self._logical_w = int(self._node.width or 240)
+        self._logical_h = int(self._node.height or 200)
+        self._screen_x = 0.0
+        self._screen_y = 0.0
+
+        self.set_css_classes(["node-widget"])
+        self._build_ui()
+
+        self._drag = Gtk.GestureDrag(button=1)
+        self._drag.connect("drag-begin", self._on_drag_begin)
+        self._drag.connect("drag-update", self._on_drag_update)
+        self._drag.connect("drag-end", self._on_drag_end)
+        self.add_controller(self._drag)
+
+        self._click = Gtk.GestureClick(button=1)
+        self._click.connect("pressed", self._on_click)
+        self.add_controller(self._click)
+
+        self._right_click = Gtk.GestureClick(button=3)
+        self._right_click.connect("pressed", self._on_right_click)
+        self.add_controller(self._right_click)
+
+    @property
+    def graph_node(self):
+        return self._node
+
+    @property
+    def selected(self):
+        return self._selected
+
+    def set_selected(self, sel: bool):
+        self._selected = sel
+        if sel:
+            self.add_css_class("selected")
+        else:
+            self.remove_css_class("selected")
+        self.queue_draw()
+
+    def get_input_port_widget(self, name: str) -> Optional[PortWidget]:
+        return self._input_port_widgets.get(name)
+
+    def get_output_port_widget(self, name: str) -> Optional[PortWidget]:
+        return self._output_port_widgets.get(name)
+
+    def _add_input_port_widget(self, port: Port):
+        if self._input_port_widgets.get(port.name):
+            return
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        pw = PortWidget(port, self)
+        self._input_port_widgets[port.name] = pw
+        lbl = Gtk.Label(label=port.label, xalign=0)
+        lbl.set_css_classes(["port-label"])
+        row.append(pw)
+        row.append(lbl)
+        row._row_port = pw
+        click = Gtk.GestureClick(button=1)
+        click.connect("pressed", lambda g, n, x, y, pw=pw: pw._on_click(g, n, x, y))
+        row.add_controller(click)
+        self._left_box.append(row)
+
+    def _build_ui(self):
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        header.set_css_classes(["node-header"])
+        header.set_hexpand(True)
+        ctx = header.get_style_context()
+        ctx.add_class(self._node.node_type)
+
+        title = Gtk.Label(label=self._node.label, xalign=0, hexpand=True)
+        title.set_css_classes(["node-title"])
+        header.append(title)
+        self.append(header)
+
+        ports_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        ports_box.set_hexpand(True)
+
+        self._left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self._left_box.set_hexpand(True)
+        self._left_box.set_halign(Gtk.Align.START)
+        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        right_box.set_hexpand(True)
+        right_box.set_halign(Gtk.Align.END)
+
+        for inp in self._node.inputs:
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            pw = PortWidget(inp, self)
+            self._input_port_widgets[inp.name] = pw
+            lbl = Gtk.Label(label=inp.label, xalign=0)
+            lbl.set_css_classes(["port-label"])
+            row.append(pw)
+            row.append(lbl)
+            row._row_port = pw
+            click = Gtk.GestureClick(button=1)
+            click.connect("pressed", lambda g, n, x, y, pw=pw: pw._on_click(g, n, x, y))
+            row.add_controller(click)
+            self._left_box.append(row)
+
+        for out in self._node.outputs:
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            pw = PortWidget(out, self)
+            self._output_port_widgets[out.name] = pw
+            lbl = Gtk.Label(label=out.label, xalign=1)
+            lbl.set_css_classes(["port-label"])
+            row.append(lbl)
+            row.append(pw)
+            row._row_port = pw
+            click = Gtk.GestureClick(button=1)
+            click.connect("pressed", lambda g, n, x, y, pw=pw: pw._on_click(g, n, x, y))
+            row.add_controller(click)
+            right_box.append(row)
+
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        ports_box.append(self._left_box)
+        ports_box.append(spacer)
+        ports_box.append(right_box)
+        self.append(ports_box)
+
+        self._thumb_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self._thumb_box.set_hexpand(True)
+        self._thumb_box.set_vexpand(True)
+        self._thumb_box.set_visible(False)
+
+        self._thumb_overlay = Gtk.Overlay()
+        self._thumb_overlay.set_hexpand(True)
+        self._thumb_overlay.set_vexpand(True)
+
+        self._thumb_picture = Gtk.Picture()
+        self._thumb_picture.set_hexpand(True)
+        self._thumb_picture.set_vexpand(True)
+        self._thumb_picture.set_keep_aspect_ratio(True)
+        self._thumb_picture.set_can_shrink(True)
+        self._thumb_overlay.set_child(self._thumb_picture)
+
+        self._resize_handle = Gtk.Box()
+        self._resize_handle.set_size_request(12, 12)
+        self._resize_handle.set_halign(Gtk.Align.END)
+        self._resize_handle.set_valign(Gtk.Align.END)
+        self._resize_handle.add_css_class("resize-handle")
+        self._resize_handle.set_cursor(Gdk.Cursor.new_from_name("se-resize"))
+        self._resize_handle.set_visible(False)
+
+        self._thumb_overlay.add_overlay(self._resize_handle)
+        self._thumb_box.append(self._thumb_overlay)
+        self.append(self._thumb_box)
+
+        self._build_params()
+
+    def _build_params(self):
+        if isinstance(self._node, FilterNode):
+            self._build_filter_params()
+        elif isinstance(self._node, BlendNode):
+            self._build_blend_params()
+        elif isinstance(self._node, OpacityNode):
+            self._build_opacity_params()
+        elif isinstance(self._node, ColoringNode):
+            self._build_coloring_params()
+
+    def _build_filter_params(self):
+        fd = self._node.filter_def
+        for p in fd.parameters:
+            if p.is_hidden:
+                continue
+            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+            row.set_css_classes(["node-param-row"])
+            lbl = Gtk.Label(label=p.label, xalign=0)
+            lbl.set_css_classes(["node-param-label"])
+            row.append(lbl)
+            ctrl = self._make_control(p)
+            if ctrl:
+                ctrl.set_css_classes(["node-param-control"])
+                row.append(ctrl)
+            self.append(row)
+            self._param_controls.append(row)
+
+    def _build_blend_params(self):
+        node: BlendNode = self._node
+
+        mode_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        mode_row.set_css_classes(["node-param-row"])
+        mlbl = Gtk.Label(label="Mode", xalign=0)
+        mlbl.set_css_classes(["node-param-label"])
+        mode_row.append(mlbl)
+        dd = Gtk.DropDown()
+        dd.set_model(Gtk.StringList.new(node.BLEND_LABELS))
+        idx = node.BLEND_MODES.index(node.mode) if node.mode in node.BLEND_MODES else 0
+        dd.set_selected(idx)
+        dd.set_halign(Gtk.Align.START)
+        dd.connect("notify::selected", lambda d, ps: setattr(node, "mode", node.BLEND_MODES[d.get_selected()]))
+        dd.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(dd)
+        mode_row.append(dd)
+        self.append(mode_row)
+        self._param_controls.append(mode_row)
+
+    def _build_opacity_params(self):
+        node: OpacityNode = self._node
+        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        row.set_css_classes(["node-param-row"])
+        lbl = Gtk.Label(label="Opacity", xalign=0)
+        lbl.set_css_classes(["node-param-label"])
+        row.append(lbl)
+        adj = Gtk.Adjustment(value=node.opacity, lower=0.0, upper=1.0, step_increment=0.05)
+        spin = Gtk.SpinButton(adjustment=adj, climb_rate=0.05, digits=2)
+        spin.connect("value-changed", lambda s: setattr(node, "opacity", s.get_value()))
+        spin.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin)
+        row.append(spin)
+        self.append(row)
+        self._param_controls.append(row)
+
+    def _build_coloring_params(self):
+        node: ColoringNode = self._node
+        for label, attr, lo, hi in [
+            ("Hue", "hue", -180.0, 180.0),
+            ("Saturation", "saturation", -100.0, 100.0),
+            ("Lightness", "lightness", -100.0, 100.0),
+        ]:
+            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+            row.set_css_classes(["node-param-row"])
+            lbl = Gtk.Label(label=label, xalign=0)
+            lbl.set_css_classes(["node-param-label"])
+            row.append(lbl)
+            adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
+            spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
+            spin.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(spin)
+            row.append(spin)
+            self.append(row)
+            self._param_controls.append(row)
+
+    def _make_control(self, p) -> Optional[Gtk.Widget]:
+        node = self._node
+        val = node.param_values.get(p.name, p.default)
+
+        if p.kind == ParamKind.INT:
+            lo = p.min_val or 0
+            hi = p.max_val or 1000
+            adj = Gtk.Adjustment(value=val or 0, lower=lo, upper=hi, step_increment=1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=0)
+            spin.connect("value-changed", lambda s: node.set_param(p.name, int(s.get_value())))
+            self._ctrl_widgets.append(spin)
+            return spin
+        elif p.kind == ParamKind.FLOAT:
+            lo = p.min_val or 0
+            hi = p.max_val or 1000
+            adj = Gtk.Adjustment(value=val or 0, lower=lo, upper=hi, step_increment=0.1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=0.1, digits=2)
+            spin.connect("value-changed", lambda s: node.set_param(p.name, s.get_value()))
+            self._ctrl_widgets.append(spin)
+            return spin
+        elif p.kind == ParamKind.BOOL:
+            sw = Gtk.Switch()
+            sw.set_active(bool(val))
+            sw.set_halign(Gtk.Align.START)
+            sw.connect("notify::active", lambda s, ps: node.set_param(p.name, s.get_active()))
+            self._ctrl_widgets.append(sw)
+            return sw
+        elif p.kind == ParamKind.CHOICE:
+            dd = Gtk.DropDown()
+            dd.set_model(Gtk.StringList.new(p.choices))
+            dd.set_selected(val if isinstance(val, int) else 0)
+            dd.set_halign(Gtk.Align.START)
+            dd.connect("notify::selected", lambda d, ps: node.set_param(p.name, d.get_selected()))
+            self._ctrl_widgets.append(dd)
+            return dd
+        return None
+
+    def set_thumbnail(self, pixbuf: GdkPixbuf.Pixbuf):
+        if self._thumb_picture:
+            w = pixbuf.get_width()
+            h = pixbuf.get_height()
+            if w > 0 and h > 0:
+                self._image_aspect = w / h
+            texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+            self._thumb_picture.set_paintable(texture)
+            self._thumb_box.set_visible(True)
+            self._has_image = True
+            self._resize_handle.set_visible(True)
+            cur_w, cur_h = self.get_size_request()
+            if cur_w < 0 or cur_h < 0:
+                self._logical_w = 240
+                self._logical_h = max(160, int(240 / self._image_aspect))
+            self.apply_zoom(self._canvas._zoom)
+
+    def clear_thumbnail(self):
+        if self._thumb_picture:
+            self._thumb_picture.set_paintable(None)
+            self._thumb_box.set_visible(False)
+            self._has_image = False
+            self._image_aspect = None
+            self._resize_handle.set_visible(False)
+            self._logical_w = int(self._node.width or 240)
+            self._logical_h = int(self._node.height or 200)
+            self.set_size_request(-1, -1)
+
+    # ─── Zoom scaling ─────────────────────────────────────────────────
+
+    def apply_zoom(self, zoom: float):
+        if not self._has_image:
+            self._logical_w = int(self._node.width)
+            self._logical_h = int(self._node.height)
+        for pw in self._input_port_widgets.values():
+            pw.set_size_request(max(1, int(14 * zoom)), max(1, int(14 * zoom)))
+        for pw in self._output_port_widgets.values():
+            pw.set_size_request(max(1, int(14 * zoom)), max(1, int(14 * zoom)))
+        hs = max(1, int(12 * zoom))
+        self._resize_handle.set_size_request(hs, hs)
+        for ctrl in self._ctrl_widgets:
+            if isinstance(ctrl, Gtk.SpinButton):
+                ctrl.set_size_request(max(40, int(80 * zoom)), max(20, int(28 * zoom)))
+            elif isinstance(ctrl, Gtk.DropDown):
+                ctrl.set_size_request(max(60, int(120 * zoom)), max(20, int(28 * zoom)))
+            elif isinstance(ctrl, Gtk.Switch):
+                ctrl.set_size_request(max(24, int(40 * zoom)), max(14, int(22 * zoom)))
+        if self._has_image:
+            self.set_size_request(
+                max(1, int(self._logical_w * zoom)),
+                max(1, int(self._logical_h * zoom)),
+            )
+
+    # ─── Resize (handled via NodeWidget's own GestureDrag) ───────────────
+
+    def _begin_resize(self, gesture, start_x, start_y):
+        alloc = self.get_allocation()
+        zoom = self._canvas._zoom
+        self._resize_start_w = alloc.width / zoom
+        self._resize_start_h = alloc.height / zoom
+        event = gesture.get_last_event()
+        if event:
+            _, self._resize_start_px, self._resize_start_py = event.get_position()
+
+    def _update_resize(self, gesture, offset_x, offset_y):
+        aspect = self._image_aspect or 1.0
+        event = gesture.get_last_event()
+        if not event:
+            return
+        _, cx, cy = event.get_position()
+        zoom = self._canvas._zoom
+        dx = (cx - self._resize_start_px) / zoom
+        dy = (cy - self._resize_start_py) / zoom
+        if abs(dx) >= abs(dy * aspect):
+            dw = dx
+        else:
+            dw = dy * aspect
+        new_w = max(self._min_node_w, self._resize_start_w + dw)
+        new_h = max(self._min_node_h, int(new_w / aspect + 0.5))
+        self._logical_w = int(new_w)
+        self._logical_h = int(new_h)
+        self._node.width = self._logical_w
+        self._node.height = self._logical_h
+        self.set_size_request(
+            max(1, int(self._logical_w * zoom)),
+            max(1, int(self._logical_h * zoom)),
+        )
+
+    def _end_resize(self):
+        self._canvas._update_port_centers(self._node)
+        self._canvas.queue_gl_render()
+
+    def _on_drag_begin(self, gesture, start_x, start_y):
+        child = self.pick(start_x, start_y, Gtk.PickFlags.DEFAULT)
+        if child:
+            p = child
+            while p and p is not self:
+                if isinstance(p, PortWidget):
+                    return
+                if self._resize_handle.get_visible() and p is self._resize_handle:
+                    self._canvas._resizing_node = self._node
+                    self._begin_resize(gesture, start_x, start_y)
+                    return
+                p = p.get_parent()
+        if not self._selected:
+            self._canvas.select_node(self)
+        self._canvas._dragging_node = self._node
+        self._canvas._drag_start_x = self._node.x
+        self._canvas._drag_start_y = self._node.y
+        event = gesture.get_last_event()
+        if event:
+            _, sx, sy = event.get_position()
+            self._canvas._drag_pointer_start_x = sx
+            self._canvas._drag_pointer_start_y = sy
+
+    def _on_drag_update(self, gesture, offset_x, offset_y):
+        if self._canvas._resizing_node is self._node:
+            self._update_resize(gesture, offset_x, offset_y)
+            return
+        if self._canvas._dragging_node is not self._node:
+            return
+        event = gesture.get_last_event()
+        if not event:
+            return
+        _, sx, sy = event.get_position()
+        dx = sx - self._canvas._drag_pointer_start_x
+        dy = sy - self._canvas._drag_pointer_start_y
+        zoom = self._canvas._zoom
+        self._node.x = self._canvas._drag_start_x + dx / zoom
+        self._node.y = self._canvas._drag_start_y + dy / zoom
+        self._canvas.update_node_position(self)
+
+    def _on_drag_end(self, gesture, offset_x, offset_y):
+        if self._canvas._resizing_node is self._node:
+            self._canvas._resizing_node = None
+            self._end_resize()
+            return
+        if self._canvas._dragging_node is self._node:
+            self._canvas._dragging_node = None
+
+    def _on_click(self, gesture, n_press, x, y):
+        self._canvas.select_node(self)
+        self._canvas.grab_focus()
+        if isinstance(self._node, InputNode) and not self._node.file_path:
+            self._canvas.emit("input-node-open", self._node.id)
+
+    def _on_right_click(self, gesture, n_press, x, y):
+        a = self.get_allocation()
+        self._canvas._on_canvas_right_click(gesture, n_press, a.x + x, a.y + y)
+
+
+VERTEX_SHADER_SRC = """
+#version 330 core
+layout(location = 0) in vec2 position;
+uniform vec2 screen_size;
+void main() {
+    vec2 ndc = position / screen_size * 2.0 - 1.0;
+    ndc.y = -ndc.y;
+    gl_Position = vec4(ndc, 0.0, 1.0);
+}
+"""
+
+FRAGMENT_SHADER_SRC = """
+#version 330 core
+uniform vec4 color;
+out vec4 frag_color;
+void main() {
+    frag_color = color;
+}
+"""
+
+
+class WireOverlay(Gtk.Widget):
+    __gtype_name__ = "WireOverlay"
+
+    def __init__(self, canvas: "NodeCanvas"):
+        super().__init__()
+        self._canvas = canvas
+        self.set_hexpand(True)
+        self.set_vexpand(True)
+
+    def do_snapshot(self, snapshot):
+        canvas = self._canvas
+        canvas._update_all_port_centers()
+        w = self.get_width()
+        h = self.get_height()
+        if w < 1 or h < 1:
+            return
+
+        # background
+        snapshot.append_color(Gdk.RGBA(0.14, 0.14, 0.145, 1.0), Graphene.Rect().init(0, 0, w, h))
+
+        zoom = canvas._zoom
+        pan_x = canvas._pan_x
+        pan_y = canvas._pan_y
+
+        spacing = max(40 * zoom, 10)
+        ox = pan_x % spacing
+        oy = pan_y % spacing
+
+        b = canvas._grid_brightness
+        grid_color = Gdk.RGBA(b, b, b + 0.01, 1.0)
+        x = ox
+        while x < w:
+            snapshot.append_color(grid_color, Graphene.Rect().init(x, 0, 1, h))
+            x += spacing
+        y = oy
+        while y < h:
+            snapshot.append_color(grid_color, Graphene.Rect().init(0, y, w, 1))
+            y += spacing
+
+        # clip wires to widget bounds so they don't leak above the header bar
+        snapshot.push_clip(Graphene.Rect().init(0, 0, w, h))
+        self._draw_wires(snapshot, canvas)
+        snapshot.pop()
+
+    def _draw_wires(self, snapshot, canvas):
+        from nodes import PortDirection
+        graph = canvas._graph
+        for edge in graph.edges:
+            src_n = graph.get_node(edge.src_node)
+            dst_n = graph.get_node(edge.dst_node)
+            if not src_n or not dst_n:
+                continue
+            sw = canvas._node_widgets.get(edge.src_node)
+            dw = canvas._node_widgets.get(edge.dst_node)
+            if not sw or not dw:
+                continue
+            src_p = src_n.get_output_port(edge.src_port)
+            dst_p = dst_n.get_input_port(edge.dst_port)
+            if not src_p or not dst_p:
+                continue
+            spw = sw.get_output_port_widget(edge.src_port)
+            dpw = dw.get_input_port_widget(edge.dst_port)
+            if not spw or not dpw:
+                continue
+            x1, y1 = spw.center_x, spw.center_y
+            x2, y2 = dpw.center_x, dpw.center_y
+            pts = _compute_bezier_segments(x1, y1, x2, y2)
+            if len(pts) >= 4:
+                for i in range(0, len(pts) - 2, 2):
+                    snapshot.append_color(
+                        Gdk.RGBA(0.5, 0.5, 0.5, 0.8),
+                        Graphene.Rect().init(pts[i], pts[i + 1], 2, 2),
+                    )
+
+        # drag wire
+        if canvas._drag_port:
+            x1, y1 = canvas._drag_port_start
+            x2, y2 = canvas._drag_port_current
+            pts = _compute_bezier_segments(x1, y1, x2, y2)
+            color = Gdk.RGBA(0.3, 0.9, 0.3, 0.9) if canvas._drag_valid_target else Gdk.RGBA(0.7, 0.7, 0.7, 0.5)
+            if len(pts) >= 4:
+                for i in range(0, len(pts) - 2, 2):
+                    snapshot.append_color(
+                        color,
+                        Graphene.Rect().init(pts[i], pts[i + 1], 2, 2),
+                    )
+
+
+class Minimap(Gtk.Widget):
+    __gtype_name__ = "Minimap"
+
+    NODE_COLORS = {
+        "input": Gdk.RGBA(0.18, 0.42, 0.18, 1.0),
+        "output": Gdk.RGBA(0.48, 0.23, 0.23, 1.0),
+        "filter": Gdk.RGBA(0.04, 0.28, 0.44, 1.0),
+        "blend": Gdk.RGBA(0.42, 0.29, 0.18, 1.0),
+        "mask": Gdk.RGBA(0.18, 0.35, 0.42, 1.0),
+        "color": Gdk.RGBA(0.23, 0.42, 0.48, 1.0),
+        "opacity": Gdk.RGBA(0.35, 0.23, 0.48, 1.0),
+        "coloring": Gdk.RGBA(0.23, 0.42, 0.48, 1.0),
+    }
+
+    SIZE = (180, 130)
+    PAD = 8
+
+    def __init__(self, canvas: "NodeCanvas"):
+        super().__init__()
+        self._canvas = canvas
+        self.set_size_request(*self.SIZE)
+        click = Gtk.GestureClick(button=1)
+        click.connect("pressed", self._on_click)
+        self.add_controller(click)
+
+    def _get_bounds(self):
+        nodes = list(self._canvas._graph.nodes.values())
+        if not nodes:
+            return None
+        pad = 40
+        mwx = min(n.x - pad for n in nodes)
+        mwy = min(n.y - pad for n in nodes)
+        mx = max(n.x + (n.width or 180) + pad for n in nodes)
+        my = max(n.y + (n.height or 100) + pad for n in nodes)
+        return mwx, mwy, mx, my
+
+    def _on_click(self, gesture, n_press, x, y):
+        bounds = self._get_bounds()
+        if not bounds:
+            return
+        mwx, mwy, mx, my = bounds
+        c = self._canvas
+        mw = self.get_width()
+        mh = self.get_height()
+        iw = mw - 2 * self.PAD
+        ih = mh - 2 * self.PAD
+        cw = mx - mwx or 1
+        ch = my - mwy or 1
+        scale = min(iw / cw, ih / ch)
+        cx = x - self.PAD
+        cy = y - self.PAD
+        wx = cx / scale + mwx
+        wy = cy / scale + mwy
+        parent = self.get_parent()
+        vw = parent.get_width() if parent else 800
+        vh = parent.get_height() if parent else 600
+        c._pan_x = -wx * c._zoom + vw / 2
+        c._pan_y = -wy * c._zoom + vh / 2
+        c._clamp_pan()
+        c._update_all_positions()
+
+    def _draw_line(self, snapshot, x1, y1, x2, y2, color):
+        dx = x2 - x1
+        dy = y2 - y1
+        dist = max(abs(dx), abs(dy))
+        steps = max(int(dist / 2), 1)
+        for i in range(steps + 1):
+            t = i / steps
+            snapshot.append_color(
+                color,
+                Graphene.Rect().init(x1 + dx * t, y1 + dy * t, 1, 1),
+            )
+
+    def do_snapshot(self, snapshot):
+        c = self._canvas
+        w = self.get_width()
+        h = self.get_height()
+        if w < 1 or h < 1:
+            return
+        bg = Gdk.RGBA(0, 0, 0, 0.45)
+        border = Gdk.RGBA(1, 1, 1, 0.18)
+        snapshot.append_color(bg, Graphene.Rect().init(0, 0, w, h))
+        snapshot.append_color(border, Graphene.Rect().init(0, 0, w, 1))
+        snapshot.append_color(border, Graphene.Rect().init(0, h - 1, w, 1))
+        snapshot.append_color(border, Graphene.Rect().init(0, 0, 1, h))
+        snapshot.append_color(border, Graphene.Rect().init(w - 1, 0, 1, h))
+
+        bounds = self._get_bounds()
+        if not bounds:
+            return
+        mwx, mwy, mx, my = bounds
+        iw = w - 2 * self.PAD
+        ih = h - 2 * self.PAD
+        cw = mx - mwx or 1
+        ch = my - mwy or 1
+        scale = min(iw / cw, ih / ch)
+        ox = self.PAD + (iw - cw * scale) / 2
+        oy = self.PAD + (ih - ch * scale) / 2
+
+        def to_mm(gx, gy):
+            return (gx - mwx) * scale + ox, (gy - mwy) * scale + oy
+
+        wire_color = Gdk.RGBA(0.5, 0.5, 0.5, 0.4)
+        for edge in c._graph.edges:
+            src_n = c._graph.get_node(edge.src_node)
+            dst_n = c._graph.get_node(edge.dst_node)
+            if not src_n or not dst_n:
+                continue
+            sx, sy = to_mm(src_n.x + src_n.width, src_n.y + src_n.height / 2)
+            dx_, dy_ = to_mm(dst_n.x, dst_n.y + dst_n.height / 2)
+            self._draw_line(snapshot, sx, sy, dx_, dy_, wire_color)
+
+        colors = self.NODE_COLORS
+        for node in c._graph.nodes.values():
+            color = colors.get(node.node_type, Gdk.RGBA(0.3, 0.3, 0.3, 1))
+            nx, ny = to_mm(node.x, node.y)
+            nw = max(2, (node.width or 180) * scale)
+            nh = max(2, (node.height or 100) * scale)
+            snapshot.append_color(color, Graphene.Rect().init(nx, ny, nw, nh))
+
+        vw = float(c._wire_overlay.get_width())
+        vh = float(c._wire_overlay.get_height())
+        if vw > 0 and vh > 0:
+            vx = -c._pan_x / c._zoom
+            vy = -c._pan_y / c._zoom
+            vx2 = vx + vw / c._zoom
+            vy2 = vy + vh / c._zoom
+            vx_mm, vy_mm = to_mm(vx, vy)
+            vx2_mm, vy2_mm = to_mm(vx2, vy2)
+            vx_mm = max(ox, min(ox + (mx - mwx) * scale, vx_mm))
+            vy_mm = max(oy, min(oy + (my - mwy) * scale, vy_mm))
+            vx2_mm = max(ox, min(ox + (mx - mwx) * scale, vx2_mm))
+            vy2_mm = max(oy, min(oy + (my - mwy) * scale, vy2_mm))
+            vpw = max(2, vx2_mm - vx_mm)
+            vph = max(2, vy2_mm - vy_mm)
+            vpc = Gdk.RGBA(1, 1, 1, 0.7)
+            snapshot.append_color(vpc, Graphene.Rect().init(vx_mm, vy_mm, 1, vph))
+            snapshot.append_color(vpc, Graphene.Rect().init(vx_mm, vy_mm, vpw, 1))
+            snapshot.append_color(vpc, Graphene.Rect().init(vx_mm, vy2_mm, vpw, 1))
+            snapshot.append_color(vpc, Graphene.Rect().init(vx2_mm, vy_mm, 1, vph))
+
+
+class NodeCanvas(Gtk.Overlay):
+    __gtype_name__ = "NodeCanvas"
+
+    __gsignals__ = {
+        "node-selected": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
+        "graph-changed": (GObject.SignalFlags.RUN_FIRST, None, []),
+        "input-node-open": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+    }
+
+    def __init__(self, graph: NodeGraph):
+        super().__init__()
+        self._graph = graph
+        self._gl_ok_local = False
+        self.set_focusable(True)
+        self._extended_zoom: bool = False
+
+        self._wire_overlay = WireOverlay(self)
+        self._wire_overlay.set_hexpand(True)
+        self._wire_overlay.set_vexpand(True)
+        self.set_child(self._wire_overlay)
+        self._wire_overlay.connect("notify::width", lambda *_: self._on_overlay_resize())
+        self._wire_overlay.connect("notify::height", lambda *_: self._on_overlay_resize())
+
+        self._fixed = Gtk.Fixed()
+        self._fixed.set_hexpand(True)
+        self._fixed.set_vexpand(True)
+        self.add_overlay(self._fixed)
+        self._fixed.set_halign(Gtk.Align.FILL)
+        self._fixed.set_valign(Gtk.Align.FILL)
+
+        self._zoom = 1.0
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+        self._grid_brightness: float = 0.22
+        self._node_widgets: dict[str, NodeWidget] = {}
+        self._selected_widget: Optional[NodeWidget] = None
+        self._dragging_node: Optional[Node] = None
+        self._resizing_node: Optional[Node] = None
+        self._drag_start_x = 0.0
+        self._drag_start_y = 0.0
+        self._drag_pointer_start_x = 0.0
+        self._drag_pointer_start_y = 0.0
+
+        self._drag_port: Optional[PortWidget] = None
+        self._drag_port_start = (0.0, 0.0)
+        self._drag_port_current = (0.0, 0.0)
+        self._drag_valid_target: Optional[PortWidget] = None
+        self._selected_port: Optional[PortWidget] = None
+
+        self._filter_def_map: dict[str, FilterDef] = {}
+
+        self._gl_program = 0
+        self._gl_vao = 0
+        self._gl_vbo = 0
+
+        self._zoom_css = Gtk.CssProvider()
+        self._zoom_css.load_from_data(b"")
+
+        self._zoom_css_applied = False
+
+        self._minimap = Minimap(self)
+        self._minimap.set_halign(Gtk.Align.START)
+        self._minimap.set_valign(Gtk.Align.END)
+        self._minimap.set_margin_start(8)
+        self._minimap.set_margin_bottom(8)
+        self.add_overlay(self._minimap)
+
+        self._zoom_label = Gtk.Label(label="100%")
+        self._zoom_label.set_css_classes(["zoom-label"])
+        self._zoom_label.set_halign(Gtk.Align.END)
+        self._zoom_label.set_valign(Gtk.Align.END)
+        self._zoom_label.set_margin_end(8)
+        self._zoom_label.set_margin_bottom(8)
+        self.add_overlay(self._zoom_label)
+
+        self._key_controller = Gtk.EventControllerKey()
+        self._key_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(self._key_controller)
+
+        self._pan_drag = Gtk.GestureDrag(button=2)
+        self._pan_drag.connect("drag-begin", self._on_pan_begin)
+        self._pan_drag.connect("drag-update", self._on_pan_update)
+        self._pan_drag.connect("drag-end", self._on_pan_end)
+        self._fixed.add_controller(self._pan_drag)
+
+        self._canvas_click = Gtk.GestureClick(button=1)
+        self._canvas_click.connect("pressed", self._on_canvas_click)
+        self._fixed.add_controller(self._canvas_click)
+
+        self._canvas_right_click = Gtk.GestureClick(button=3)
+        self._canvas_right_click.connect("pressed", self._on_canvas_right_click)
+        self._fixed.add_controller(self._canvas_right_click)
+
+        self._scroll = Gtk.EventControllerScroll(flags=Gtk.EventControllerScrollFlags.VERTICAL | Gtk.EventControllerScrollFlags.DISCRETE)
+        self._scroll.connect("scroll", self._on_scroll)
+        self._fixed.add_controller(self._scroll)
+
+        # Drop target for sidebar drag
+        self._drop_target = Gtk.DropTarget.new(GObject.TYPE_STRING, Gdk.DragAction.COPY)
+        self._drop_target.connect("accept", self._on_drop_accept)
+        self._drop_target.connect("drop", self._on_drop)
+        self._drop_target.set_propagation_limit(Gtk.PropagationLimit.NONE)
+        self.add_controller(self._drop_target)
+
+        for node in self._graph.nodes.values():
+            self._add_node_widget(node)
+        self.connect("realize", lambda *_: self._apply_zoom_css(self._zoom))
+
+    def _update_zoom_label(self):
+        pct = int(round(self._zoom * 100))
+        self._zoom_label.set_text(f"{pct}%")
+
+    def queue_gl_render(self):
+        self._wire_overlay.queue_draw()
+        self._minimap.queue_draw()
+
+    def get_node_widget(self, node_id: str) -> Optional[NodeWidget]:
+        return self._node_widgets.get(node_id)
+
+    def select_node(self, widget: Optional[NodeWidget]):
+        if self._selected_widget and self._selected_widget is not widget:
+            self._selected_widget.set_selected(False)
+        self._selected_widget = widget
+        if widget:
+            widget.set_selected(True)
+        self.emit("node-selected", widget.graph_node if widget else None)
+
+    def add_node(self, node: Node):
+        self._graph.add_node(node)
+        self._add_node_widget(node)
+        self._clamp_pan()
+        self.emit("graph-changed")
+
+    def _add_node_widget(self, node: Node):
+        w = NodeWidget(node, self)
+        self._node_widgets[node.id] = w
+        sx, sy = self._graph_to_screen(node.x, node.y)
+        w._screen_x = sx
+        w._screen_y = sy
+        self._fixed.put(w, int(sx), int(sy))
+        w.apply_zoom(self._zoom)
+        self._update_node_port_colors(node)
+        def defer():
+            self._update_port_centers(node)
+            self.queue_gl_render()
+            return False
+        GLib.idle_add(defer)
+        if isinstance(node, InputNode) and node.file_path:
+            GLib.idle_add(lambda: self.update_node_display(node.id) or False)
+
+    def clear_all(self):
+        for w in self._node_widgets.values():
+            self._fixed.remove(w)
+        self._node_widgets.clear()
+        self._selected_widget = None
+        self._selected_port = None
+        self._drag_port = None
+        self._graph.clear()
+        self.queue_gl_render()
+        self.emit("graph-changed")
+
+    def remove_node(self, node_id: str):
+        w = self._node_widgets.pop(node_id, None)
+        if w:
+            self._fixed.remove(w)
+        self._graph.remove_node(node_id)
+        self._update_all_port_colors()
+        self.queue_gl_render()
+        self.emit("graph-changed")
+
+    def update_node_position(self, widget: NodeWidget):
+        node = widget.graph_node
+        sx, sy = self._graph_to_screen(node.x, node.y)
+        widget._screen_x = sx
+        widget._screen_y = sy
+        self._fixed.move(widget, int(sx), int(sy))
+        self._update_port_centers(node)
+        self.queue_gl_render()
+
+    def _update_all_positions(self):
+        for nid, w in self._node_widgets.items():
+            node = self._graph.get_node(nid)
+            if node:
+                sx, sy = self._graph_to_screen(node.x, node.y)
+                w._screen_x = sx
+                w._screen_y = sy
+                self._fixed.move(w, int(sx), int(sy))
+                w.apply_zoom(self._zoom)
+                self._quick_port_centers(node)
+        self._apply_zoom_css(self._zoom)
+        self.queue_gl_render()
+        self.queue_resize()
+
+    def _quick_port_centers(self, node: Node):
+        w = self._node_widgets.get(node.id)
+        if not w:
+            return
+        for inp in node.inputs:
+            pw = w.get_input_port_widget(inp.name)
+            if pw:
+                pw._center_x = w._screen_x + pw._offset_x
+                pw._center_y = w._screen_y + pw._offset_y
+        for out in node.outputs:
+            pw = w.get_output_port_widget(out.name)
+            if pw:
+                pw._center_x = w._screen_x + pw._offset_x
+                pw._center_y = w._screen_y + pw._offset_y
+
+    def _update_all_port_centers(self):
+        for node in self._graph.nodes.values():
+            self._update_port_centers(node)
+
+    def _apply_zoom_css(self, zoom: float):
+        display = self.get_display()
+        if not display:
+            GLib.idle_add(lambda: self._apply_zoom_css(zoom) or False)
+            return
+        if not self._zoom_css_applied:
+            self._zoom_css_applied = True
+            self._zoom_css.connect("parsing-error", lambda p, section, error: print(f"CSS: {error}"))
+            Gtk.StyleContext.add_provider_for_display(
+                display, self._zoom_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+            )
+        bw = max(1, int(1 * zoom))
+        br = max(1, int(8 * zoom))
+        hp = max(1, int(6 * zoom))
+        hr = max(1, int(7 * zoom))
+        rp = max(1, int(3 * zoom))
+        sp = max(1, int(10 * zoom))
+        cm = max(1, int(4 * zoom))
+        fs = max(1, int(12 * zoom))
+        pfs = max(1, int(0.85 * 12 * zoom))
+        tfs = max(1, int(14 * zoom))
+        lfs = max(1, int(0.80 * 12 * zoom))
+        css = (
+            f".node-widget {{ font-size: {fs}px; border-width: {bw}px; border-radius: {br}px; min-width: 0; min-height: 0; }}\n"
+            f".node-widget spinbutton text {{ min-width: 0; min-height: 0; }}\n"
+            f".node-widget spinbutton button {{ min-width: 0; min-height: 0; }}\n"
+            f".node-widget switch trough {{ min-width: 0; min-height: 0; }}\n"
+            f".node-widget switch slider {{ min-width: 0; min-height: 0; }}\n"
+            f".node-widget dropdown button {{ min-width: 0; min-height: 0; }}\n"
+            f".node-header {{ padding: {hp}px {sp}px; border-radius: {hr}px {hr}px 0 0; min-width: 0; min-height: 0; }}\n"
+            f".port-label {{ font-size: {pfs}px; min-width: 0; min-height: 0; }}\n"
+            f".node-title {{ font-size: {tfs}px; min-width: 0; min-height: 0; }}\n"
+            f".node-param-row {{ padding: {rp}px {sp}px; min-width: 0; min-height: 0; }}\n"
+            f".node-param-label {{ font-size: {lfs}px; min-width: 0; min-height: 0; }}\n"
+            f".node-param-control {{ margin-bottom: {cm}px; min-width: 0; min-height: 0; }}\n"
+            f".port-circle {{ border-radius: {max(1, int(7 * zoom))}px; }}\n"
+            f".resize-handle {{ border-top-left-radius: {max(1, int(4 * zoom))}px; }}\n"
+        )
+        self._zoom_css.load_from_data(css.encode())
+
+    def _update_port_centers(self, node: Node):
+        w = self._node_widgets.get(node.id)
+        if not w:
+            return
+        for inp in node.inputs:
+            pw = w.get_input_port_widget(inp.name)
+            if pw:
+                pw.update_center()
+        for out in node.outputs:
+            pw = w.get_output_port_widget(out.name)
+            if pw:
+                pw.update_center()
+
+    def _update_node_port_colors(self, node: Node):
+        w = self._node_widgets.get(node.id)
+        if not w:
+            return
+        for inp in node.inputs:
+            pw = w.get_input_port_widget(inp.name)
+            if pw:
+                pw.set_connected(self._graph.get_connected_input(node.id, inp.name) is not None)
+
+    def _update_all_port_colors(self):
+        for node in self._graph.nodes.values():
+            self._update_node_port_colors(node)
+
+    def update_node_display(self, node_id: str):
+        w = self._node_widgets.get(node_id)
+        if not w:
+            return
+        node = self._graph.get_node(node_id)
+        if not node:
+            return
+
+        if isinstance(node, InputNode):
+            path = node.file_path
+            if path:
+                try:
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
+                    wgt = pixbuf.get_width()
+                    hgt = pixbuf.get_height()
+                    max_w = 320
+                    if wgt > max_w:
+                        scale = max_w / wgt
+                        pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.BILINEAR)
+                    w.set_thumbnail(pixbuf)
+                except Exception:
+                    w.clear_thumbnail()
+            else:
+                w.clear_thumbnail()
+        elif isinstance(node, OutputNode):
+            pass
+
+    def set_output_thumbnail(self, node_id: str, pixbuf: GdkPixbuf.Pixbuf):
+        node = self._graph.get_node(node_id)
+        if not node or not self._graph.get_connected_input(node_id, "image"):
+            return
+        w = self._node_widgets.get(node_id)
+        if w:
+            wgt = pixbuf.get_width()
+            hgt = pixbuf.get_height()
+            max_w = 320
+            if wgt > max_w:
+                scale = max_w / wgt
+                pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.BILINEAR)
+            w.set_thumbnail(pixbuf)
+
+    def set_filter_defs(self, defs: list["FilterDef"]):
+        self._filter_def_map.clear()
+        for fd in defs:
+            self._filter_def_map[f"{fd.engine}:{fd.name}"] = fd
+
+    # ─── Drop from sidebar ───────────────────────────────────────────────────────
+
+    def _on_drop_accept(self, target, drop):
+        formats = drop.get_formats()
+        return formats.contain_mime_type("text/plain")
+
+    def _on_drop(self, target, value, x, y):
+        text = get_pending_drag_text()
+        if text and text.startswith("filter:"):
+            parts = text.split(":", 2)
+            if len(parts) == 3:
+                key = f"{parts[1]}:{parts[2]}"
+                fd = self._filter_def_map.get(key)
+                if fd:
+                    gx = (x - self._pan_x) / self._zoom
+                    gy = (y - self._pan_y) / self._zoom
+                    nid = str(id(fd)) + "_" + str(hash(fd.name))
+                    node = FilterNode(nid, fd, gx, gy)
+                    self.add_node(node)
+                    w = self.get_node_widget(nid)
+                    if w:
+                        self.select_node(w)
+                    return True
+        elif text and text.startswith("blend:"):
+            parts = text.split(":", 1)
+            mode = parts[1] if len(parts) == 2 else "over"
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "blend_" + mode + "_" + str(GLib.get_monotonic_time())
+            node = BlendNode(nid, mode, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("opacity:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "opacity_" + str(GLib.get_monotonic_time())
+            node = OpacityNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("coloring:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "coloring_" + str(GLib.get_monotonic_time())
+            node = ColoringNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("input:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "input_" + str(GLib.get_monotonic_time())
+            node = InputNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("output:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "output_" + str(GLib.get_monotonic_time())
+            node = OutputNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        return False
+
+    # ─── Port click (connection creation) ─────────────────────────────────────
+
+    def handle_port_click(self, port_widget: PortWidget):
+        if self._selected_port is None:
+            self._selected_port = port_widget
+            port_widget.queue_draw()
+            self._wire_overlay.queue_draw()
+        elif self._selected_port is port_widget:
+            self._clear_selected_port()
+        else:
+            src = self._selected_port
+            dst = port_widget
+            src_nid, src_pn = src.port.node_id, src.port.name
+            dst_nid, dst_pn = dst.port.node_id, dst.port.name
+            edge = self._graph.add_edge(src_nid, src_pn, dst_nid, dst_pn)
+            if edge:
+                self._update_all_port_colors()
+                self.emit("graph-changed")
+                self._maybe_add_blend_port(dst_nid, dst_pn)
+            self._clear_selected_port()
+            self._wire_overlay.queue_draw()
+
+    def _clear_selected_port(self):
+        if self._selected_port:
+            self._selected_port.queue_draw()
+            self._selected_port = None
+
+    # ─── Port drag (connection creation) ───────────────────────────────────────
+
+    def start_port_drag(self, port_widget: PortWidget):
+        self._drag_port = port_widget
+        self._drag_port_start = (port_widget.center_x, port_widget.center_y)
+        self._drag_port_current = self._drag_port_start
+        self._drag_valid_target = None
+
+    def update_port_drag(self, offset_x, offset_y):
+        if not self._drag_port:
+            return
+        cx, cy = self._drag_port_start
+        self._drag_port_current = (cx + offset_x, cy + offset_y)
+        self._drag_valid_target = self._find_port_at(cx + offset_x, cy + offset_y)
+        self.queue_gl_render()
+
+    def end_port_drag(self, offset_x, offset_y):
+        if not self._drag_port:
+            return
+        target = self._drag_valid_target
+        if target:
+            src_port, dst_port = self._drag_port.port, target.port
+            if src_port.direction == PortDirection.OUTPUT:
+                src_nid, src_pn = src_port.node_id, src_port.name
+                dst_nid, dst_pn = dst_port.node_id, dst_port.name
+            else:
+                src_nid, src_pn = dst_port.node_id, dst_port.name
+                dst_nid, dst_pn = src_port.node_id, src_port.name
+            edge = self._graph.add_edge(src_nid, src_pn, dst_nid, dst_pn)
+            if edge:
+                self._update_all_port_colors()
+                self.emit("graph-changed")
+                self._maybe_add_blend_port(dst_nid, dst_pn)
+        self._clear_selected_port()
+        self._drag_port = None
+        self._drag_valid_target = None
+        self.queue_gl_render()
+
+    def _maybe_add_blend_port(self, node_id: str, port_name: str):
+        node = self._graph.get_node(node_id)
+        if isinstance(node, BlendNode) and port_name.startswith("blend"):
+            new_port = node.add_input_port()
+            widget = self._node_widgets.get(node_id)
+            if widget:
+                widget._add_input_port_widget(new_port)
+                self._update_port_centers(node)
+
+    def _find_port_at(self, x, y) -> Optional[PortWidget]:
+        if not self._drag_port:
+            return None
+        src = self._drag_port.port
+        for w in self._node_widgets.values():
+            for name, pw in w._input_port_widgets.items():
+                if src.direction == PortDirection.OUTPUT:
+                    if abs(pw.center_x - x) < 10 and abs(pw.center_y - y) < 10:
+                        return pw
+            for name, pw in w._output_port_widgets.items():
+                if src.direction == PortDirection.INPUT:
+                    if abs(pw.center_x - x) < 10 and abs(pw.center_y - y) < 10:
+                        return pw
+        return None
+
+    def _graph_to_screen(self, gx, gy):
+        return (gx * self._zoom + self._pan_x, gy * self._zoom + self._pan_y)
+
+    def _screen_to_graph(self, sx, sy):
+        return ((sx - self._pan_x) / self._zoom, (sy - self._pan_y) / self._zoom)
+
+    def _get_world_bounds(self):
+        nodes = list(self._graph.nodes.values())
+        pad = 500
+        if not nodes:
+            return -1200, -800, 1200, 800
+        mwx = min(n.x - pad for n in nodes)
+        mwy = min(n.y - pad for n in nodes)
+        mx = max(n.x + (n.width or 180) + pad for n in nodes)
+        my = max(n.y + (n.height or 100) + pad for n in nodes)
+        return mwx, mwy, mx, my
+
+    def _on_overlay_resize(self):
+        self._clamp_pan()
+        self._update_all_positions()
+
+    def _clamp_pan(self):
+        cw = self._wire_overlay.get_width()
+        ch = self._wire_overlay.get_height()
+        if cw < 1 or ch < 1:
+            return
+        mwx, mwy, mx, my = self._get_world_bounds()
+        z = self._zoom
+        vw = cw / z
+        vh = ch / z
+        if mx - mwx < vw:
+            cx = (mwx + mx) / 2
+            self._pan_x = -cx * z + cw / 2
+        else:
+            self._pan_x = max(-(mx - vw) * z, min(-mwx * z, self._pan_x))
+        if my - mwy < vh:
+            cy = (mwy + my) / 2
+            self._pan_y = -cy * z + ch / 2
+        else:
+            self._pan_y = max(-(my - vh) * z, min(-mwy * z, self._pan_y))
+
+    def _on_pan_begin(self, gesture, start_x, start_y):
+        self._pan_start_x, self._pan_start_y = self._pan_x, self._pan_y
+
+    def _on_pan_update(self, gesture, offset_x, offset_y):
+        self._pan_x = self._pan_start_x + offset_x
+        self._pan_y = self._pan_start_y + offset_y
+        self._clamp_pan()
+        self._update_all_positions()
+
+    def _on_pan_end(self, gesture, offset_x, offset_y):
+        pass
+
+    def _on_canvas_click(self, gesture, n_press, x, y):
+        self._clear_selected_port()
+        child = self._fixed.pick(x, y, Gtk.PickFlags.DEFAULT)
+        if child is not None:
+            p = child
+            while p and p is not self._fixed:
+                if isinstance(p, NodeWidget):
+                    return
+                p = p.get_parent()
+        self.select_node(None)
+        self.grab_focus()
+        self.queue_gl_render()
+
+    def _on_canvas_right_click(self, gesture, n_press, x, y):
+        edge = self._find_edge_at(x, y)
+        if edge:
+            self._graph.remove_edge(edge.id)
+            self._update_all_port_colors()
+            self.queue_gl_render()
+            self.emit("graph-changed")
+
+    def set_extended_zoom(self, enabled: bool):
+        self._extended_zoom = enabled
+
+    def set_grid_brightness(self, value: float):
+        self._grid_brightness = max(0.0, min(0.5, value))
+        self.queue_gl_render()
+
+    def toggle_minimap(self):
+        v = not self._minimap.get_visible()
+        self._minimap.set_visible(v)
+
+    def _on_key_pressed(self, controller, keyval, keycode, state):
+        if keyval in (Gdk.KEY_M, Gdk.KEY_m):
+            self.toggle_minimap()
+            return True
+        if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
+            if self._selected_port:
+                pw = self._selected_port
+                node_id = pw.port.node_id
+                port_name = pw.port.name
+                direction = pw.port.direction
+                if direction == PortDirection.INPUT:
+                    edge = self._graph.get_connected_input(node_id, port_name)
+                    if edge:
+                        self._graph.remove_edge(edge.id)
+                else:
+                    self._graph.remove_edges_for_port(node_id, port_name, PortDirection.OUTPUT)
+                self._clear_selected_port()
+                self._update_all_port_colors()
+                self.queue_gl_render()
+                self.emit("graph-changed")
+                return True
+            if self._selected_widget:
+                self.remove_node(self._selected_widget.graph_node.id)
+                self._selected_widget = None
+                return True
+        return False
+
+    def _find_edge_at(self, x, y, threshold=15.0):
+        closest = None
+        closest_dist = threshold
+        for edge in self._graph.edges:
+            src_n = self._graph.get_node(edge.src_node)
+            dst_n = self._graph.get_node(edge.dst_node)
+            if not src_n or not dst_n:
+                continue
+            sw = self._node_widgets.get(edge.src_node)
+            dw = self._node_widgets.get(edge.dst_node)
+            if not sw or not dw:
+                continue
+            spw = sw.get_output_port_widget(edge.src_port)
+            dpw = dw.get_input_port_widget(edge.dst_port)
+            if not spw or not dpw:
+                continue
+            x1, y1 = spw.center_x, spw.center_y
+            x2, y2 = dpw.center_x, dpw.center_y
+            pts = _compute_bezier_segments(x1, y1, x2, y2, 20)
+            for i in range(0, len(pts) - 2, 2):
+                ex, ey = pts[i], pts[i + 1]
+                d = math.hypot(x - ex, y - ey)
+                if d < closest_dist:
+                    closest_dist = d
+                    closest = edge
+        return closest
+
+    def _on_scroll(self, controller, dx, dy) -> bool:
+        alloc = self._wire_overlay.get_allocation()
+        mx, my = alloc.x + alloc.width / 2, alloc.y + alloc.height / 2
+
+        old_zoom = self._zoom
+        step = 0.25 if dy < 0 else -0.25
+        if self._extended_zoom:
+            new_zoom = max(0.25, min(10.0, old_zoom + step))
+        else:
+            new_zoom = max(0.75, min(5.0, old_zoom + step))
+        if new_zoom == old_zoom:
+            return False
+
+        self._pan_x = mx - new_zoom * (mx - self._pan_x) / old_zoom
+        self._pan_y = my - new_zoom * (my - self._pan_y) / old_zoom
+        self._zoom = new_zoom
+        self._clamp_pan()
+        self._update_zoom_label()
+        self._update_all_positions()
+        return True
+
+    # ─── OpenGL rendering ──────────────────────────────────────────────────────
+
+    @property
+    def _gl_ok(self):
+        return GL is not None
+
+    def _compile_shader(self, shader_type, source) -> int:
+        shader = GL.glCreateShader(shader_type)
+        GL.glShaderSource(shader, source)
+        GL.glCompileShader(shader)
+        status = GL.glGetShaderiv(shader, GL.GL_COMPILE_STATUS)
+        if not status:
+            log = GL.glGetShaderInfoLog(shader)
+            print(f"Shader compile error: {log}")
+        return shader
+
+    def _on_gl_realize(self, gl_area):
+        if not self._gl_ok:
+            return
+        gl_area.make_current()
+        err = gl_area.get_error()
+        if err:
+            return
+        vs = self._compile_shader(GL.GL_VERTEX_SHADER, VERTEX_SHADER_SRC)
+        fs = self._compile_shader(GL.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_SRC)
+        prog = GL.glCreateProgram()
+        GL.glAttachShader(prog, vs)
+        GL.glAttachShader(prog, fs)
+        GL.glLinkProgram(prog)
+        status = GL.glGetProgramiv(prog, GL.GL_LINK_STATUS)
+        if status:
+            self._gl_program = prog
+            self._gl_vao = GL.glGenVertexArrays(1)
+            self._gl_vbo = GL.glGenBuffers(1)
+            GL.glEnable(GL.GL_BLEND)
+            GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+            GL.glEnable(GL.GL_LINE_SMOOTH)
+        else:
+            log = GL.glGetProgramInfoLog(prog)
+            print(f"Program link error: {log}")
+        GL.glDeleteShader(vs)
+        GL.glDeleteShader(fs)
+
+    def _on_gl_render(self, gl_area, context) -> bool:
+        if not self._gl_ok or not self._gl_program:
+            return False
+        alloc = gl_area.get_allocation()
+        w, h = alloc.width, alloc.height
+        GL.glViewport(0, 0, w, h)
+        GL.glClearColor(0.14, 0.14, 0.145, 1.0)
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+
+        GL.glUseProgram(self._gl_program)
+        GL.glUniform2f(GL.glGetUniformLocation(self._gl_program, "screen_size"), float(w), float(h))
+
+        self._draw_grid(w, h)
+        self._draw_wires(w, h)
+        self._draw_drag_wire(w, h)
+        return True
+
+    def _draw_grid(self, w, h):
+        GL.glBindVertexArray(self._gl_vao)
+        GL.glUseProgram(self._gl_program)
+        color_loc = GL.glGetUniformLocation(self._gl_program, "color")
+
+        spacing = max(40 * self._zoom, 10)
+        ox = self._pan_x % spacing
+        oy = self._pan_y % spacing
+
+        GL.glUniform4f(color_loc, 0.22, 0.22, 0.23, 1.0)
+        lines = []
+        x = ox
+        while x < w:
+            lines.extend([x, 0.0, x, float(h)])
+            x += spacing
+        y = oy
+        while y < h:
+            lines.extend([0.0, y, float(w), y])
+            y += spacing
+
+        if lines:
+            pts = (GL.GLfloat * len(lines))(*lines)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._gl_vbo)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, pts, GL.GL_DYNAMIC_DRAW)
+            GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+            GL.glEnableVertexAttribArray(0)
+            GL.glDrawArrays(GL.GL_LINES, 0, len(lines) // 2)
+
+    def _draw_wires(self, w, h):
+        if not self._graph.edges:
+            return
+        GL.glUseProgram(self._gl_program)
+        GL.glBindVertexArray(self._gl_vao)
+        color_loc = GL.glGetUniformLocation(self._gl_program, "color")
+
+        for edge in self._graph.edges:
+            src_n = self._graph.get_node(edge.src_node)
+            dst_n = self._graph.get_node(edge.dst_node)
+            if not src_n or not dst_n:
+                continue
+            src_p = src_n.get_output_port(edge.src_port)
+            dst_p = dst_n.get_input_port(edge.dst_port)
+            if not src_p or not dst_p:
+                continue
+            sw = self._node_widgets.get(edge.src_node)
+            dw = self._node_widgets.get(edge.dst_node)
+            if not sw or not dw:
+                continue
+            spw = sw.get_output_port_widget(edge.src_port)
+            dpw = dw.get_input_port_widget(edge.dst_port)
+            if not spw or not dpw:
+                continue
+            x1, y1 = spw.center_x, spw.center_y
+            x2, y2 = dpw.center_x, dpw.center_y
+            pts = _compute_bezier_segments(x1, y1, x2, y2)
+            if pts:
+                GL.glUniform4f(color_loc, 0.5, 0.5, 0.5, 0.8)
+                data = (GL.GLfloat * len(pts))(*pts)
+                GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._gl_vbo)
+                GL.glBufferData(GL.GL_ARRAY_BUFFER, data, GL.GL_DYNAMIC_DRAW)
+                GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+                GL.glEnableVertexAttribArray(0)
+                GL.glDrawArrays(GL.GL_LINE_STRIP, 0, len(pts) // 2)
+
+    def _draw_drag_wire(self, w, h):
+        if not self._drag_port:
+            return
+        x1, y1 = self._drag_port_start
+        x2, y2 = self._drag_port_current
+        GL.glUseProgram(self._gl_program)
+        GL.glBindVertexArray(self._gl_vao)
+        color_loc = GL.glGetUniformLocation(self._gl_program, "color")
+        if self._drag_valid_target:
+            GL.glUniform4f(color_loc, 0.3, 0.9, 0.3, 0.9)
+        else:
+            GL.glUniform4f(color_loc, 0.7, 0.7, 0.7, 0.5)
+        pts = _compute_bezier_segments(x1, y1, x2, y2)
+        if pts:
+            data = (GL.GLfloat * len(pts))(*pts)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._gl_vbo)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, data, GL.GL_DYNAMIC_DRAW)
+            GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+            GL.glEnableVertexAttribArray(0)
+            GL.glDrawArrays(GL.GL_LINE_STRIP, 0, len(pts) // 2)

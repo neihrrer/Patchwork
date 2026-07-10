@@ -1,0 +1,120 @@
+using Gtk 4.0;
+using Adw 1;
+
+Adw.Window window_root {
+  title: _("Q'MIC");
+  default-width: 1100;
+  default-height: 750;
+}
+
+Adw.Breakpoint bp {
+  condition ("max-width: 700sp")
+  setters {
+    split_view.collapsed: true;
+  }
+}
+
+Adw.NavigationSplitView split_view {
+  sidebar: sidebar_page;
+  content: content_page;
+}
+
+Adw.NavigationPage sidebar_page {
+  title: _("Nodes");
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      styles ["sidebar-filter-headerbar"]
+      [start]
+      Button open_button {
+        icon-name: "document-open-symbolic";
+        tooltip-text: _("Open Image");
+      }
+      [end]
+      ToggleButton search_toggle {
+        icon-name: "system-search-symbolic";
+        tooltip-text: _("Search Filters");
+      }
+    }
+    content: Box {
+      orientation: vertical;
+      Revealer search_revealer {
+        reveal-child: false;
+        transition-type: slide_down;
+        child: SearchEntry search_entry {
+          placeholder-text: _("Search filters...");
+          margin-start: 6;
+          margin-end: 6;
+          margin-top: 6;
+          margin-bottom: 6;
+        };
+      }
+      ScrolledWindow {
+        vexpand: true;
+        hexpand: true;
+        child: ListView filter_list {
+          vexpand: true;
+          hexpand: true;
+          show-separators: false;
+          styles ["filter-list"]
+        };
+      };
+    };
+  };
+}
+
+Adw.NavigationPage content_page {
+  title: _("Node Editor");
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      title-widget: Adw.WindowTitle content_title {
+        title: _("Node Editor");
+      };
+      [start]
+      Button render_button {
+        label: _("Render");
+        sensitive: false;
+      }
+      [end]
+      Button export_button {
+        icon-name: "document-save-symbolic";
+        tooltip-text: _("Export Result");
+        sensitive: false;
+      }
+    }
+    content: Box {
+      orientation: vertical;
+      Revealer progress_revealer {
+        reveal-child: false;
+        transition-type: slide_down;
+        child: ProgressBar progress_bar {
+          show-text: false;
+          styles ["osd"]
+        };
+      }
+      Box canvas_container {
+        orientation: vertical;
+        hexpand: true;
+        vexpand: true;
+      }
+      Box status_box {
+        orientation: horizontal;
+        spacing: 6;
+        margin-start: 8;
+        margin-end: 8;
+        margin-top: 2;
+        margin-bottom: 2;
+        Label status_label {
+          label: _("No image loaded");
+          hexpand: true;
+          halign: start;
+          selectable: true;
+        }
+        Spinner status_spinner {
+          spinning: false;
+        }
+      }
+    };
+  };
+}

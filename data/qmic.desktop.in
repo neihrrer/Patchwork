@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Q'MIC
+Summary=GTK4 frontend for G'MIC image processing
+Exec=qmic
+Icon=@APP_ID@
+Type=Application
+Categories=Graphics;Photography;
+StartupNotify=true
+X-GNOME-UsesNotifications=true
