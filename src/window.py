@@ -37,7 +37,7 @@ def _find_ui_file(name: str) -> str:
     paths = [
         Path(__file__).parent.parent / "build" / "resources" / name,
         Path(__file__).parent / "resources" / name,
-        Path("/app/share/qmic") / name,
+        Path("/app/share/ring") / name,
     ]
     for p in paths:
         if p.exists():
@@ -50,7 +50,7 @@ def _generate_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
-class QmicWindow(Adw.ApplicationWindow):
+class RingWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 

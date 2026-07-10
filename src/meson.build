@@ -31,7 +31,7 @@ python_sources = [
 foreach src : python_sources
   python3.install_sources(
     src,
-    subdir: 'qmic',
+    subdir: 'ring',
   )
 endforeach
 
@@ -44,6 +44,6 @@ subdir('widgets')
 subdir('processing')
 
 # Install UI files
-ui_dir = join_paths(get_option('datadir'), 'qmic')
+ui_dir = join_paths(get_option('datadir'), 'ring')
 install_data(window_ui, install_dir: ui_dir)
 install_data(shortcuts_ui, install_dir: ui_dir)

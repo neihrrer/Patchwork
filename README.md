@@ -35,8 +35,8 @@
 
 ```bash
 # Once published on Flathub:
-flatpak install flathub org.qmic.app
-flatpak run org.qmic.app
+flatpak install flathub io.github.neihrrer.Ring
+flatpak run io.github.neihrrer.Ring
 ```
 
 ### From source (Meson)
@@ -123,7 +123,7 @@ Ring/
 │   ├── imagemagick/    # ImageMagick CLI integration, built-in filters
 │   ├── resources/      # Blueprint UI files
 │   └── style.css       # Application stylesheet
-├── flatpak/            # Flatpak build manifest
+├── flatpak/            # Flatpak build manifest (Flathub-ready)
 ├── .github/            # CI workflows
 ├── meson.build         # Top-level build definition
 ├── Makefile            # Developer convenience wrappers

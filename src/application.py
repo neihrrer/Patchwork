@@ -7,13 +7,13 @@ gi.require_version("Gio", "2.0")
 
 from gi.repository import GLib, Gio, Gtk, Adw, Gdk
 from pathlib import Path
-from window import QmicWindow, _find_ui_file
+from window import RingWindow, _find_ui_file
 
 
-class QmicApplication(Adw.Application):
+class RingApplication(Adw.Application):
     def __init__(self):
         super().__init__(
-            application_id="org.qmic.app",
+            application_id="io.github.neihrrer.Ring",
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
         self._window = None
@@ -21,7 +21,7 @@ class QmicApplication(Adw.Application):
         GLib.set_application_name("Ring")
         GLib.set_prgname("ring")
 
-        self.set_resource_base_path("/org/qmic/app")
+        self.set_resource_base_path("/io/github/neihrrer/Ring")
 
         self._setup_actions()
 
@@ -29,7 +29,7 @@ class QmicApplication(Adw.Application):
         css_paths = [
             Path(__file__).parent / "style.css",
             Path(__file__).parent.parent / "build" / "resources" / "style.css",
-            Path("/app/share/qmic") / "style.css",
+            Path("/app/share/ring") / "style.css",
         ]
         provider = Gtk.CssProvider()
         for p in css_paths:
@@ -52,7 +52,7 @@ class QmicApplication(Adw.Application):
         css_paths = [
             Path(__file__).parent / "style.css",
             Path(__file__).parent.parent / "build" / "resources" / "style.css",
-            Path("/app/share/qmic") / "style.css",
+            Path("/app/share/ring") / "style.css",
         ]
         provider = Gtk.CssProvider()
         for p in css_paths:
@@ -82,7 +82,7 @@ class QmicApplication(Adw.Application):
     def _show_about(self):
         about = Adw.AboutDialog(
             application_name="Ring",
-            application_icon="org.qmic.app",
+            application_icon="io.github.neihrrer.Ring",
             developer_name="Ring Team",
             version="0.1.0",
             license_type=Gtk.License.MIT_X11,
@@ -97,7 +97,7 @@ class QmicApplication(Adw.Application):
         if ui_path:
             builder = Gtk.Builder.new_from_file(ui_path)
         else:
-            builder = Gtk.Builder.new_from_resource("/org/qmic/app/shortcuts.ui")
+            builder = Gtk.Builder.new_from_resource("/io/github/neihrrer/Ring/shortcuts.ui")
         dialog = None
         for obj in builder.get_objects():
             if isinstance(obj, Adw.ShortcutsDialog):
@@ -108,7 +108,7 @@ class QmicApplication(Adw.Application):
 
     def do_activate(self):
         if not self._window:
-            self._window = QmicWindow(application=self)
+            self._window = RingWindow(application=self)
             self._window.connect("close-request", lambda *_: self._cleanup())
         self._window.present()
 

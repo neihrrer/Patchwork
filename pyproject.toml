@@ -1,5 +1,5 @@
 [project]
-name = "qmic"
+name = "ring"
 version = "0.1.0"
 description = "Node-based image processing environment with a modern GTK4 interface"
 requires-python = ">=3.10"

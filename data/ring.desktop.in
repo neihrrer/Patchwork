@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=Q'MIC
-Summary=GTK4 frontend for G'MIC image processing
-Exec=qmic
+Name=Ring
+Summary=Node-based image editor with G'MIC and ImageMagick
+Exec=ring
 Icon=@APP_ID@
 Type=Application
 Categories=Graphics;Photography;
