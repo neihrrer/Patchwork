@@ -182,7 +182,7 @@ class QmicWindow(Adw.ApplicationWindow):
         zoom_group = Adw.PreferencesGroup(title=_("Zoom"))
         zoom_row = Adw.SwitchRow(
             title=_("Extended Zoom Range (Unstable)"),
-            subtitle=_("Allow zooming from 10% to 1000%"),
+            subtitle=_("Allow zooming from 25% to 1000%"),
         )
         if self._canvas:
             zoom_row.set_active(self._canvas._extended_zoom)
