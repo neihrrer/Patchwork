@@ -13,7 +13,7 @@ def _serialize_param(val: ParamValue, param_def: Optional[ParamDef] = None) -> s
         return str(val)
     if isinstance(val, list):
         return ",".join(str(v) for v in val)
-    return str(val)
+    return str(val).strip()
 
 
 class PipelineBuilder:

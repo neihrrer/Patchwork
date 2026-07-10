@@ -6,6 +6,7 @@ from typing import Optional, Callable
 from nodes import NodeGraph, InputNode, OutputNode, FilterNode, BlendNode, ColorNode, OpacityNode, ColoringNode, MaskNode
 from models.filter import ENGINE_GMIC
 from gmic.cli import GmicCLI
+from gmic.pipeline import _serialize_param
 from imagemagick.cli import ImageMagickCLI
 from processing.runner import ProcessResult
 
@@ -139,7 +140,7 @@ class GraphExecutor:
         commands = [input_path, node.filter_def.gmic_command]
         for p in node.filter_def.parameters:
             val = node.param_values.get(p.name, p.default)
-            commands[-1] += f",{val}"
+            commands[-1] += f",{_serialize_param(val, p)}"
 
         if node.filter_def.engine == ENGINE_GMIC:
             result = self._gmic.run_pipeline(input_path, commands[1:], out_path)
