@@ -1,7 +1,7 @@
 [project]
 name = "qmic"
 version = "0.1.0"
-description = "GTK4/Libadwaita frontend for the G'MIC image processing framework"
+description = "Node-based image processing environment with a modern GTK4 interface"
 requires-python = ">=3.10"
 dependencies = [
     "PyGObject>=3.50",
