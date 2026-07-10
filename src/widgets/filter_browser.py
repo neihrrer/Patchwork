@@ -123,10 +123,7 @@ class FilterBrowser(GObject.Object):
                      or any(lower in c.lower() for c in f.category))
             ]
             for f in matching:
-                cat_str = _format_category(f.category)
-                engine_str = _engine_label(f.engine)
-                label = f"{f.display_name}  —  {engine_str} / {cat_str}" if cat_str else f"{f.display_name}  —  {engine_str}"
-                node = TreeItemNode(display_name=label, node_type="filter", filter_def=f)
+                node = TreeItemNode(display_name=f.display_name, node_type="filter", filter_def=f)
                 root_store.append(node)
         else:
             root_store.append(TreeItemNode(display_name=_ROOT_BASIC, node_type="root"))
@@ -267,9 +264,8 @@ class FilterBrowser(GObject.Object):
         elif node.node_type == "filter" and node.filter_def:
             name_label.set_margin_top(3)
             name_label.set_margin_bottom(2)
-            cat_str = _format_category(node.filter_def.category)
-            cat_label.set_label(cat_str if cat_str else "")
-            cat_label.show()
+            cat_label.set_label("")
+            cat_label.hide()
         else:
             name_label.set_margin_top(4)
             name_label.set_margin_bottom(2)
