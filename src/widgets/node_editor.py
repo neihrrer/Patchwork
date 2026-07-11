@@ -874,6 +874,7 @@ class NodeCanvas(Gtk.Overlay):
         self._gl_ok_local = False
         self.set_focusable(True)
         self._extended_zoom: bool = False
+        self._initial_fit_done: bool = False
 
         self._wire_overlay = WireOverlay(self)
         self._wire_overlay.set_hexpand(True)
@@ -989,6 +990,8 @@ class NodeCanvas(Gtk.Overlay):
     def add_node(self, node: Node):
         self._graph.add_node(node)
         self._add_node_widget(node)
+        if not self._initial_fit_done:
+            GLib.idle_add(self._fit_content)
         self.emit("graph-changed")
 
     def _add_node_widget(self, node: Node):
@@ -1000,6 +1003,7 @@ class NodeCanvas(Gtk.Overlay):
         self._fixed.put(w, int(sx), int(sy))
         w.apply_zoom(self._zoom)
         self._update_node_port_colors(node)
+
         def defer():
             alloc = w.get_allocation()
             if alloc.width > 0 and alloc.height > 0:
@@ -1026,6 +1030,7 @@ class NodeCanvas(Gtk.Overlay):
         self._selected_port = None
         self._drag_port = None
         self._graph.clear()
+        self._initial_fit_done = False
         self.queue_gl_render()
         self.emit("graph-changed")
 
@@ -1378,6 +1383,29 @@ class NodeCanvas(Gtk.Overlay):
         my = max(n.y + (n.height or 100) + pad for n in nodes)
         return mwx, mwy, mx, my
 
+    def _fit_content(self):
+        if self._initial_fit_done:
+            return
+        nodes = list(self._graph.nodes.values())
+        if not nodes:
+            return
+        # Use actual node bounds without padding for initial centering
+        mwx = min(n.x for n in nodes)
+        mwy = min(n.y for n in nodes)
+        mx = max(n.x + (n.width or 180) for n in nodes)
+        my = max(n.y + (n.height or 100) for n in nodes)
+        cw = self._wire_overlay.get_width()
+        ch = self._wire_overlay.get_height()
+        if cw < 1 or ch < 1:
+            return
+        z = self._zoom
+        cx = (mwx + mx) / 2
+        cy = (mwy + my) / 2
+        self._pan_x = -cx * z + cw / 2
+        self._pan_y = -cy * z + ch / 2
+        self._initial_fit_done = True
+        self._update_all_positions()
+
     def _on_overlay_resize(self):
         self._clamp_pan()
         self._update_all_positions()
@@ -1391,15 +1419,9 @@ class NodeCanvas(Gtk.Overlay):
         z = self._zoom
         vw = cw / z
         vh = ch / z
-        if mx - mwx < vw:
-            cx = (mwx + mx) / 2
-            self._pan_x = -cx * z + cw / 2
-        else:
+        if mx - mwx >= vw:
             self._pan_x = max(-(mx - vw) * z, min(-mwx * z, self._pan_x))
-        if my - mwy < vh:
-            cy = (mwy + my) / 2
-            self._pan_y = -cy * z + ch / 2
-        else:
+        if my - mwy >= vh:
             self._pan_y = max(-(my - vh) * z, min(-mwy * z, self._pan_y))
 
     def _on_pan_begin(self, gesture, start_x, start_y):
