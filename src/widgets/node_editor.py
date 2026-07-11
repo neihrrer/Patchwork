@@ -467,6 +467,8 @@ class NodeWidget(Gtk.Box):
             if cur_w < 0 or cur_h < 0:
                 self._logical_w = 240
                 self._logical_h = max(160, int(240 / self._image_aspect))
+            self._node.width = self._logical_w
+            self._node.height = self._logical_h
             self.apply_zoom(self._canvas._zoom)
 
     def clear_thumbnail(self):
@@ -478,6 +480,8 @@ class NodeWidget(Gtk.Box):
             self._resize_handle.set_visible(False)
             self._logical_w = int(self._node.width or 240)
             self._logical_h = int(self._node.height or 200)
+            self._node.width = self._logical_w
+            self._node.height = self._logical_h
             self.set_size_request(-1, -1)
 
     # ─── Zoom scaling ─────────────────────────────────────────────────
@@ -543,6 +547,7 @@ class NodeWidget(Gtk.Box):
     def _end_resize(self):
         self._canvas._update_port_centers(self._node)
         self._canvas.queue_gl_render()
+        self._canvas._clamp_pan()
 
     def _on_drag_begin(self, gesture, start_x, start_y):
         child = self.pick(start_x, start_y, Gtk.PickFlags.DEFAULT)
@@ -984,7 +989,6 @@ class NodeCanvas(Gtk.Overlay):
     def add_node(self, node: Node):
         self._graph.add_node(node)
         self._add_node_widget(node)
-        self._clamp_pan()
         self.emit("graph-changed")
 
     def _add_node_widget(self, node: Node):
@@ -997,9 +1001,19 @@ class NodeCanvas(Gtk.Overlay):
         w.apply_zoom(self._zoom)
         self._update_node_port_colors(node)
         def defer():
-            self._update_port_centers(node)
-            self.queue_gl_render()
-            return False
+            alloc = w.get_allocation()
+            if alloc.width > 0 and alloc.height > 0:
+                logical_w = int(alloc.width / self._zoom)
+                logical_h = int(alloc.height / self._zoom)
+                if logical_w != w._logical_w or logical_h != w._logical_h:
+                    w._logical_w = logical_w
+                    w._logical_h = logical_h
+                    node.width = logical_w
+                    node.height = logical_h
+                self._update_port_centers(node)
+                self.queue_gl_render()
+                return False
+            return True
         GLib.idle_add(defer)
         if isinstance(node, InputNode) and node.file_path:
             GLib.idle_add(lambda: self.update_node_display(node.id) or False)
@@ -1159,6 +1173,8 @@ class NodeCanvas(Gtk.Overlay):
         elif isinstance(node, OutputNode):
             pass
 
+        self._clamp_pan()
+
     def set_output_thumbnail(self, node_id: str, pixbuf: GdkPixbuf.Pixbuf):
         node = self._graph.get_node(node_id)
         if not node or not self._graph.get_connected_input(node_id, "image"):
@@ -1172,6 +1188,7 @@ class NodeCanvas(Gtk.Overlay):
                 scale = max_w / wgt
                 pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.BILINEAR)
             w.set_thumbnail(pixbuf)
+            self._clamp_pan()
 
     def set_filter_defs(self, defs: list["FilterDef"]):
         self._filter_def_map.clear()
