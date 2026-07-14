@@ -113,8 +113,6 @@
           <object class="GtkBox">
             <property name="orientation">1</property>
             <child>
-
-
               <object class="GtkRevealer" id="progress_revealer">
                 <property name="reveal-child">false</property>
                 <property name="transition-type">5</property>
@@ -129,10 +127,52 @@
               </object>
             </child>
             <child>
-              <object class="GtkBox" id="canvas_container">
+              <object class="GtkPaned" id="output_paned">
                 <property name="orientation">1</property>
                 <property name="hexpand">true</property>
                 <property name="vexpand">true</property>
+                <property name="resize-start-child">true</property>
+                <property name="resize-end-child">false</property>
+                <property name="shrink-start-child">false</property>
+                <property name="shrink-end-child">false</property>
+                <child>
+                  <object class="GtkBox" id="canvas_container">
+                    <property name="orientation">1</property>
+                    <property name="hexpand">true</property>
+                    <property name="vexpand">true</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox" id="output_box">
+                    <property name="orientation">1</property>
+                    <property name="hexpand">true</property>
+                    <style>
+                      <class name="output-panel"/>
+                    </style>
+                    <child>
+                      <object class="GtkScrolledWindow" id="output_scrolled">
+                        <property name="hexpand">true</property>
+                        <property name="vexpand">true</property>
+                        <child>
+                          <object class="GtkTextView" id="output_text">
+                            <property name="editable">false</property>
+                            <property name="cursor-visible">false</property>
+                            <property name="wrap-mode">3</property>
+                            <property name="hexpand">true</property>
+                            <property name="vexpand">true</property>
+                            <property name="margin-start">8</property>
+                            <property name="margin-end">8</property>
+                            <property name="margin-top">4</property>
+                            <property name="margin-bottom">4</property>
+                            <style>
+                              <class name="output-text"/>
+                            </style>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
               </object>
             </child>
             <child>
