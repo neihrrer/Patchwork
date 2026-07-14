@@ -58,7 +58,7 @@ Adw.NavigationPage sidebar_page {
           show-separators: false;
           styles ["filter-list"]
         };
-      };
+      }
     };
   };
 }
@@ -106,7 +106,7 @@ Adw.NavigationPage content_page {
           orientation: vertical;
           hexpand: true;
           vexpand: true;
-        };
+        }
 
         Box output_box {
           orientation: vertical;
@@ -116,12 +116,11 @@ Adw.NavigationPage content_page {
           ScrolledWindow output_scrolled {
             hexpand: true;
             vexpand: true;
-            min-height: 60;
 
             child: TextView output_text {
               editable: false;
               cursor-visible: false;
-              wrap-mode: word-char;
+              wrap-mode: word_char;
               hexpand: true;
               vexpand: true;
               margin-start: 8;
@@ -130,9 +129,9 @@ Adw.NavigationPage content_page {
               margin-bottom: 4;
               styles ["output-text"]
             };
-          };
-        };
-      };
+          }
+        }
+      }
       Box status_box {
         orientation: horizontal;
         spacing: 6;
