@@ -79,16 +79,16 @@ Adw.NavigationPage content_page {
         icon-name: "document-open-symbolic";
         tooltip-text: _("Open Image");
       }
-      Button render_button {
-        label: _("Render");
-        sensitive: false;
-        tooltip-text: _("Render the node graph");
-      }
       [end]
       Button export_button {
         icon-name: "document-save-symbolic";
         tooltip-text: _("Export Result");
         sensitive: false;
+      }
+      Button render_button {
+        icon-name: "media-playback-start-symbolic";
+        sensitive: false;
+        tooltip-text: _("Render the node graph");
       }
     }
     content: Box {

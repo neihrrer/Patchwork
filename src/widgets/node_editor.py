@@ -983,6 +983,7 @@ class NodeCanvas(Gtk.Overlay):
         self._pan_y = 0.0
         self._grid_brightness: float = 0.22
         self._grid_visible: bool = True
+        self._snap_to_grid: bool = False
         self._update_grid_brightness_for_theme()
         style_mgr = Adw.StyleManager.get_default()
         style_mgr.connect("notify::dark", self._on_color_scheme_changed)
@@ -1137,8 +1138,16 @@ class NodeCanvas(Gtk.Overlay):
         self.queue_gl_render()
         self.emit("graph-changed")
 
+    SNAP_INCREMENT = 20
+
+    def _snap(self, value: float) -> float:
+        return round(value / self.SNAP_INCREMENT) * self.SNAP_INCREMENT
+
     def update_node_position(self, widget: NodeWidget):
         node = widget.graph_node
+        if self._snap_to_grid:
+            node.x = self._snap(node.x)
+            node.y = self._snap(node.y)
         sx, sy = self._graph_to_screen(node.x, node.y)
         widget._screen_x = sx
         widget._screen_y = sy
@@ -1620,6 +1629,9 @@ class NodeCanvas(Gtk.Overlay):
     def set_grid_visible(self, visible: bool):
         self._grid_visible = visible
         self.queue_gl_render()
+
+    def set_snap_to_grid(self, enabled: bool):
+        self._snap_to_grid = enabled
 
     def _update_grid_brightness_for_theme(self):
         dark = Adw.StyleManager.get_default().get_dark()

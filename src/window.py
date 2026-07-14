@@ -14,6 +14,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import GLib, Gio, Gtk, Gdk, Adw, GdkPixbuf
 from threading import Thread
 
+from config import AppConfig
 from models.app_state import VALID_OUTPUT_FORMATS
 from models.filter import FilterDef
 from gmic.cli import GmicCLI
@@ -66,13 +67,15 @@ class RingWindow(Adw.ApplicationWindow):
         self._all_filter_defs: list[FilterDef] = []
         self._filter_def_map: dict[str, FilterDef] = {}
 
+        self._config = AppConfig()
+        self._output_format: str = self._config.output_format
         self._canvas: Optional[NodeCanvas] = None
         self._filter_browser: Optional[FilterBrowser] = None
         self._current_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
         self._result_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
         self._result_pixbufs: dict[str, GdkPixbuf.Pixbuf] = {}
-        self._output_format: str = "png"
         self._minimap_switch: Optional[Adw.SwitchRow] = None
+        self._auto_save_id: Optional[int] = None
 
         self._light_header_css = Gtk.CssProvider()
         self._light_header_css.load_from_data(b"""
@@ -150,6 +153,11 @@ class RingWindow(Adw.ApplicationWindow):
             self._canvas = NodeCanvas(self._graph)
             canvas_container.append(self._canvas)
             self._canvas._minimap.connect("notify::visible", self._on_minimap_visibility_changed)
+            self._canvas._grid_visible = self._config.grid_visible
+            self._canvas._snap_to_grid = self._config.snap_to_grid
+            self._canvas._extended_zoom = self._config.extended_zoom
+            self._canvas._minimap.set_visible(self._config.minimap_visible)
+            self._canvas.queue_gl_render()
 
         bp = builder.get_object("bp")
         if bp:
@@ -238,6 +246,22 @@ class RingWindow(Adw.ApplicationWindow):
         group.add(row)
         page.add(group)
 
+        proc_group = Adw.PreferencesGroup(
+            title=_("Processing"),
+            description=_("Configure processing limits"),
+        )
+        timeout_row = Adw.SpinRow(
+            title=_("Timeout"),
+            subtitle=_("Maximum seconds before rendering is aborted"),
+            adjustment=Gtk.Adjustment(
+                lower=10, upper=600, step_increment=10, page_increment=30,
+            ),
+            value=self._config.processing_timeout,
+        )
+        timeout_row.connect("notify::value", self._on_timeout_changed)
+        proc_group.add(timeout_row)
+        page.add(proc_group)
+
         display_group = Adw.PreferencesGroup(title=_("Display"))
         grid_visible_row = Adw.SwitchRow(
             title=_("Disable Grid"),
@@ -247,9 +271,17 @@ class RingWindow(Adw.ApplicationWindow):
             grid_visible_row.set_active(not self._canvas._grid_visible)
             grid_visible_row.connect("notify::active", self._on_grid_visible_changed)
         display_group.add(grid_visible_row)
+        snap_row = Adw.SwitchRow(
+            title=_("Snap to Grid"),
+            subtitle=_("Snap nodes to grid positions when moving"),
+        )
+        if self._canvas:
+            snap_row.set_active(self._canvas._snap_to_grid)
+            snap_row.connect("notify::active", self._on_snap_to_grid_changed)
+        display_group.add(snap_row)
         zoom_row = Adw.SwitchRow(
             title=_("Extended Zoom Range"),
-            subtitle=_("Allows zooming from 25% to 1000% at the cost of performance"),
+            subtitle=_("Allows zooming from 25% to 1000%, may cause visual artifacts"),
         )
         if self._canvas:
             zoom_row.set_active(self._canvas._extended_zoom)
@@ -266,20 +298,39 @@ class RingWindow(Adw.ApplicationWindow):
         self._minimap_switch = minimap_row
         page.add(display_group)
 
+        general_group = Adw.PreferencesGroup(
+            title=_("General"),
+            description=_("Application-wide preferences"),
+        )
+        auto_save_row = Adw.SpinRow(
+            title=_("Auto-save Interval"),
+            subtitle=_("Automatically save project every N minutes (0 = off)"),
+            adjustment=Gtk.Adjustment(
+                lower=0, upper=60, step_increment=1, page_increment=5,
+            ),
+            value=self._config.auto_save_interval,
+        )
+        auto_save_row.connect("notify::value", self._on_auto_save_changed)
+        general_group.add(auto_save_row)
+        page.add(general_group)
+
         dialog.add(page)
         dialog.present(self)
 
     def _on_extended_zoom_changed(self, row, pspec):
         if self._canvas:
             self._canvas.set_extended_zoom(row.get_active())
+        self._config.extended_zoom = row.get_active()
 
     def _on_grid_visible_changed(self, row, pspec):
         if self._canvas:
             self._canvas.set_grid_visible(not row.get_active())
+        self._config.grid_visible = self._canvas._grid_visible if self._canvas else True
 
     def _on_minimap_switch_changed(self, row, pspec):
         if self._canvas:
             self._canvas.set_minimap_visible(row.get_active())
+        self._config.minimap_visible = row.get_active()
 
     def _on_minimap_visibility_changed(self, minimap, pspec):
         if self._minimap_switch:
@@ -287,6 +338,46 @@ class RingWindow(Adw.ApplicationWindow):
 
     def _on_output_format_changed(self, row, pspec):
         self._output_format = VALID_OUTPUT_FORMATS[row.get_selected()]
+        self._config.output_format = self._output_format
+
+    def _on_timeout_changed(self, row, pspec):
+        self._config.processing_timeout = int(row.get_value())
+
+    def _on_snap_to_grid_changed(self, row, pspec):
+        enabled = row.get_active()
+        self._config.snap_to_grid = enabled
+        if self._canvas:
+            self._canvas.set_snap_to_grid(enabled)
+
+    def _on_auto_save_changed(self, row, pspec):
+        interval = int(row.get_value())
+        self._config.auto_save_interval = interval
+        self._setup_auto_save()
+
+    def _setup_auto_save(self):
+        if self._auto_save_id is not None:
+            GLib.source_remove(self._auto_save_id)
+            self._auto_save_id = None
+        interval = self._config.auto_save_interval
+        if interval > 0 and self._graph.nodes:
+            self._auto_save_id = GLib.timeout_add_seconds(
+                interval * 60, self._do_auto_save
+            )
+
+    def _do_auto_save(self) -> bool:
+        import json
+        auto_path = Path.home() / ".cache" / "ring" / "autosave.ring"
+        try:
+            auto_path.parent.mkdir(parents=True, exist_ok=True)
+            data = self._graph.to_dict()
+            with open(auto_path, "w") as f:
+                json.dump(data, f, indent=2)
+        except OSError:
+            pass
+        self._auto_save_id = GLib.timeout_add_seconds(
+            self._config.auto_save_interval * 60, self._do_auto_save
+        )
+        return False
 
     # ─── Filter browser ──────────────────────────────────────────────────────
 
@@ -316,6 +407,7 @@ class RingWindow(Adw.ApplicationWindow):
 
     def _on_graph_changed(self, canvas):
         self._update_render_button()
+        self._setup_auto_save()
 
     def _update_render_button(self):
         order = self._graph.topological_sort()
@@ -566,10 +658,12 @@ class RingWindow(Adw.ApplicationWindow):
         graph = self._graph
         fmt = self._output_format
 
+        timeout = self._config.processing_timeout
+
         def work():
             def progress(msg):
                 GLib.idle_add(self._set_status, msg)
-            result = self._executor.execute(graph, fmt, progress)
+            result = self._executor.execute(graph, fmt, progress, timeout=timeout)
             GLib.idle_add(self._finish_render, result)
 
         Thread(target=work, daemon=True).start()

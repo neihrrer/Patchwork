@@ -22,7 +22,9 @@ class GraphExecutor:
         self._output_paths: dict[str, str] = {}
 
     def execute(self, graph: NodeGraph, output_format: str = "png",
-                progress_callback: Optional[Callable[[str], None]] = None) -> ProcessResult:
+                progress_callback: Optional[Callable[[str], None]] = None,
+                timeout: int = 120) -> ProcessResult:
+        self._timeout = timeout
         self._output_paths = {}
         order = graph.topological_sort()
         if not order:
@@ -48,7 +50,7 @@ class GraphExecutor:
                     inp = self._first_input(node, graph, node_outputs)
                     if not inp:
                         return ProcessResult(error=f"Filter '{node.label}' has no input connected")
-                    result = self._run_filter(node, inp, output_format, graph, numeric_outputs)
+                    result = self._run_filter(node, inp, output_format, graph, numeric_outputs, self._timeout)
                     if not result.success:
                         return result
                     node.cached_output_path = result.output_path
@@ -59,7 +61,7 @@ class GraphExecutor:
                 inputs = self._ordered_inputs(node, graph, node_outputs)
                 if len(inputs) < 2:
                     return ProcessResult(error=f"Blend '{node.label}' needs 2 inputs, got {len(inputs)}")
-                result = self._run_blend(inputs, node.mode, output_format)
+                result = self._run_blend(inputs, node.mode, output_format, self._timeout)
                 if not result.success:
                     return result
                 node_outputs[node.id] = result.output_path
@@ -75,7 +77,7 @@ class GraphExecutor:
                 black_point = self._get_numeric_input(node, "black_point", graph, numeric_outputs) or node.black_point
                 white_point = self._get_numeric_input(node, "white_point", graph, numeric_outputs) or node.white_point
                 gamma = self._get_numeric_input(node, "gamma", graph, numeric_outputs) or node.gamma
-                result = self._run_color_params(inp, node.operation, brightness, contrast, saturation, hue, black_point, white_point, gamma, output_format)
+                result = self._run_color_params(inp, node.operation, brightness, contrast, saturation, hue, black_point, white_point, gamma, output_format, self._timeout)
                 if not result.success:
                     return result
                 node_outputs[node.id] = result.output_path
@@ -85,7 +87,7 @@ class GraphExecutor:
                 if not inp:
                     return ProcessResult(error=f"Opacity node '{node.label}' has no input")
                 opacity = self._get_numeric_input(node, "opacity", graph, numeric_outputs) or node.opacity
-                result = self._run_opacity(inp, opacity, output_format)
+                result = self._run_opacity(inp, opacity, output_format, self._timeout)
                 if not result.success:
                     return result
                 node_outputs[node.id] = result.output_path
@@ -97,7 +99,7 @@ class GraphExecutor:
                 hue = self._get_numeric_input(node, "hue", graph, numeric_outputs) or node.hue
                 saturation = self._get_numeric_input(node, "saturation", graph, numeric_outputs) or node.saturation
                 lightness = self._get_numeric_input(node, "lightness", graph, numeric_outputs) or node.lightness
-                result = self._run_coloring(inp, hue, saturation, lightness, output_format)
+                result = self._run_coloring(inp, hue, saturation, lightness, output_format, self._timeout)
                 if not result.success:
                     return result
                 node_outputs[node.id] = result.output_path
@@ -107,7 +109,7 @@ class GraphExecutor:
                 if len(inputs) < 2:
                     return ProcessResult(error=f"Mask '{node.label}' needs 2 inputs, got {len(inputs)}")
                 threshold = self._get_numeric_input(node, "threshold", graph, numeric_outputs) or node.threshold
-                result = self._run_mask(inputs[0], inputs[1], node.invert, threshold, output_format)
+                result = self._run_mask(inputs[0], inputs[1], node.invert, threshold, output_format, self._timeout)
                 if not result.success:
                     return result
                 node_outputs[node.id] = result.output_path
@@ -195,7 +197,8 @@ class GraphExecutor:
 
     def _run_filter(self, node: FilterNode, input_path: str, output_fmt: str,
                      graph: Optional[NodeGraph] = None,
-                     numeric_outputs: Optional[dict[str, float]] = None) -> ProcessResult:
+                     numeric_outputs: Optional[dict[str, float]] = None,
+                     timeout: int = 120) -> ProcessResult:
         fd, out_path = tempfile.mkstemp(suffix="." + output_fmt)
         os.close(fd)
 
@@ -209,15 +212,15 @@ class GraphExecutor:
             commands[-1] += f",{_serialize_param(val, p)}"
 
         if node.filter_def.engine == ENGINE_GMIC:
-            result = self._gmic.run_pipeline(input_path, commands[1:], out_path)
+            result = self._gmic.run_pipeline(input_path, commands[1:], out_path, timeout=timeout)
         else:
-            result = self._imagemagick.run_pipeline(input_path, commands[1:], out_path)
+            result = self._imagemagick.run_pipeline(input_path, commands[1:], out_path, timeout=timeout)
 
         if result.success:
             return ProcessResult(output_path=result.output_path)
         return ProcessResult(error=result.error, stdout=result.stdout, stderr=result.stderr)
 
-    def _run_blend(self, inputs: list[str], mode: str, fmt: str) -> ProcessResult:
+    def _run_blend(self, inputs: list[str], mode: str, fmt: str, timeout: int = 120) -> ProcessResult:
         if not self._imagemagick.available:
             return ProcessResult(error="ImageMagick required for blend operations")
         if len(inputs) < 2:
@@ -229,7 +232,7 @@ class GraphExecutor:
             try:
                 args = [self._imagemagick.magick_path, current, blend_img]
                 args += ["-compose", mode, "-composite", out_path]
-                r = subprocess.run(args, capture_output=True, timeout=60, text=True)
+                r = subprocess.run(args, capture_output=True, timeout=timeout, text=True)
                 if r.returncode != 0 or not os.path.isfile(out_path):
                     return ProcessResult(error=r.stderr)
                 current = out_path
@@ -237,7 +240,7 @@ class GraphExecutor:
                 return ProcessResult(error=str(e))
         return ProcessResult(output_path=current)
 
-    def _run_color_params(self, input_path: str, operation: str, brightness: float, contrast: float, saturation: float, hue: float, black_point: float, white_point: float, gamma: float, fmt: str) -> ProcessResult:
+    def _run_color_params(self, input_path: str, operation: str, brightness: float, contrast: float, saturation: float, hue: float, black_point: float, white_point: float, gamma: float, fmt: str, timeout: int = 120) -> ProcessResult:
         if not self._imagemagick.available:
             return ProcessResult(error="ImageMagick required for color adjustments")
         fd, out_path = tempfile.mkstemp(suffix="." + fmt)
@@ -254,14 +257,14 @@ class GraphExecutor:
             else:
                 args += ["-level", "0%,100%,1.0"]
             args.append(out_path)
-            r = subprocess.run(args, capture_output=True, timeout=60, text=True)
+            r = subprocess.run(args, capture_output=True, timeout=timeout, text=True)
             if r.returncode == 0 and os.path.isfile(out_path):
                 return ProcessResult(output_path=out_path)
             return ProcessResult(error=r.stderr)
         except Exception as e:
             return ProcessResult(error=str(e))
 
-    def _run_opacity(self, input_path: str, opacity: float, fmt: str) -> ProcessResult:
+    def _run_opacity(self, input_path: str, opacity: float, fmt: str, timeout: int = 120) -> ProcessResult:
         if not self._imagemagick.available:
             return ProcessResult(error="ImageMagick required for opacity")
         fd, out_path = tempfile.mkstemp(suffix="." + fmt)
@@ -271,14 +274,14 @@ class GraphExecutor:
             if opacity < 1.0:
                 args += ["-alpha", "on", "-channel", "A", "-evaluate", "multiply", str(opacity), "+channel"]
             args.append(out_path)
-            r = subprocess.run(args, capture_output=True, timeout=60, text=True)
+            r = subprocess.run(args, capture_output=True, timeout=timeout, text=True)
             if r.returncode == 0 and os.path.isfile(out_path):
                 return ProcessResult(output_path=out_path)
             return ProcessResult(error=r.stderr)
         except Exception as e:
             return ProcessResult(error=str(e))
 
-    def _run_coloring(self, input_path: str, hue: float, saturation: float, lightness: float, fmt: str) -> ProcessResult:
+    def _run_coloring(self, input_path: str, hue: float, saturation: float, lightness: float, fmt: str, timeout: int = 120) -> ProcessResult:
         if not self._imagemagick.available:
             return ProcessResult(error="ImageMagick required for coloring")
         fd, out_path = tempfile.mkstemp(suffix="." + fmt)
@@ -288,14 +291,14 @@ class GraphExecutor:
             hue_val = 100 + hue * 100.0 / 180.0
             args += ["-modulate", f"{100 + lightness},{100 + saturation},{hue_val}"]
             args.append(out_path)
-            r = subprocess.run(args, capture_output=True, timeout=60, text=True)
+            r = subprocess.run(args, capture_output=True, timeout=timeout, text=True)
             if r.returncode == 0 and os.path.isfile(out_path):
                 return ProcessResult(output_path=out_path)
             return ProcessResult(error=r.stderr)
         except Exception as e:
             return ProcessResult(error=str(e))
 
-    def _run_mask(self, base: str, mask: str, invert: bool, threshold: float, fmt: str) -> ProcessResult:
+    def _run_mask(self, base: str, mask: str, invert: bool, threshold: float, fmt: str, timeout: int = 120) -> ProcessResult:
         if not self._imagemagick.available:
             return ProcessResult(error="ImageMagick required for mask operations")
         fd, out_path = tempfile.mkstemp(suffix="." + fmt)
@@ -311,7 +314,7 @@ class GraphExecutor:
                 if invert:
                     mask_cmd += ["-negate"]
                 mask_cmd += [mask_path]
-                r = subprocess.run(mask_cmd, capture_output=True, timeout=60, text=True)
+                r = subprocess.run(mask_cmd, capture_output=True, timeout=timeout, text=True)
                 if r.returncode != 0 or not os.path.isfile(mask_path):
                     return ProcessResult(error="Mask processing failed: " + r.stderr)
                 used_mask = mask_path
@@ -320,7 +323,7 @@ class GraphExecutor:
 
             args = [self._imagemagick.magick_path, base, used_mask,
                     "-compose", "CopyOpacity", "-composite", out_path]
-            r = subprocess.run(args, capture_output=True, timeout=60, text=True)
+            r = subprocess.run(args, capture_output=True, timeout=timeout, text=True)
             if r.returncode == 0 and os.path.isfile(out_path):
                 return ProcessResult(output_path=out_path)
             return ProcessResult(error=r.stderr)
