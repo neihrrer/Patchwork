@@ -1013,6 +1013,7 @@ class NodeCanvas(Gtk.Overlay):
         self._minimap.set_valign(Gtk.Align.END)
         self._minimap.set_margin_start(8)
         self._minimap.set_margin_bottom(8)
+        self._minimap.set_visible(False)
         self.add_overlay(self._minimap)
 
         self._zoom_label = Gtk.Label(label="100%")
@@ -1628,9 +1629,11 @@ class NodeCanvas(Gtk.Overlay):
         self._update_grid_brightness_for_theme()
         self.queue_gl_render()
 
+    def set_minimap_visible(self, visible: bool):
+        self._minimap.set_visible(visible)
+
     def toggle_minimap(self):
-        v = not self._minimap.get_visible()
-        self._minimap.set_visible(v)
+        self.set_minimap_visible(not self._minimap.get_visible())
 
     def _on_key_pressed(self, controller, keyval, keycode, state):
         if keyval in (Gdk.KEY_M, Gdk.KEY_m):

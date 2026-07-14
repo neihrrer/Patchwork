@@ -72,6 +72,7 @@ class RingWindow(Adw.ApplicationWindow):
         self._result_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
         self._result_pixbufs: dict[str, GdkPixbuf.Pixbuf] = {}
         self._output_format: str = "png"
+        self._minimap_switch: Optional[Adw.SwitchRow] = None
 
         self._light_header_css = Gtk.CssProvider()
         self._light_header_css.load_from_data(b"""
@@ -148,6 +149,7 @@ class RingWindow(Adw.ApplicationWindow):
         if canvas_container:
             self._canvas = NodeCanvas(self._graph)
             canvas_container.append(self._canvas)
+            self._canvas._minimap.connect("notify::visible", self._on_minimap_visibility_changed)
 
         bp = builder.get_object("bp")
         if bp:
@@ -253,6 +255,15 @@ class RingWindow(Adw.ApplicationWindow):
             zoom_row.set_active(self._canvas._extended_zoom)
             zoom_row.connect("notify::active", self._on_extended_zoom_changed)
         display_group.add(zoom_row)
+        minimap_row = Adw.SwitchRow(
+            title=_("Show Minimap"),
+            subtitle=_("Display the minimap overlay in the node editor"),
+        )
+        if self._canvas:
+            minimap_row.set_active(self._canvas._minimap.get_visible())
+            minimap_row.connect("notify::active", self._on_minimap_switch_changed)
+        display_group.add(minimap_row)
+        self._minimap_switch = minimap_row
         page.add(display_group)
 
         dialog.add(page)
@@ -265,6 +276,14 @@ class RingWindow(Adw.ApplicationWindow):
     def _on_grid_visible_changed(self, row, pspec):
         if self._canvas:
             self._canvas.set_grid_visible(not row.get_active())
+
+    def _on_minimap_switch_changed(self, row, pspec):
+        if self._canvas:
+            self._canvas.set_minimap_visible(row.get_active())
+
+    def _on_minimap_visibility_changed(self, minimap, pspec):
+        if self._minimap_switch:
+            self._minimap_switch.set_active(minimap.get_visible())
 
     def _on_output_format_changed(self, row, pspec):
         self._output_format = VALID_OUTPUT_FORMATS[row.get_selected()]
