@@ -21,7 +21,7 @@ except ImportError:
 
 from nodes import (
     Node, NodeGraph, Port, PortDirection, FilterNode, InputNode, OutputNode, BlendNode,
-    OpacityNode, ColoringNode, ColorNode, MaskNode,
+    OpacityNode, ColoringNode, MaskNode,
 )
 from models.filter import FilterDef, ParamKind
 from .filter_browser import get_pending_drag_text
@@ -340,8 +340,6 @@ class NodeWidget(Gtk.Box):
             self._build_opacity_params()
         elif isinstance(self._node, ColoringNode):
             self._build_coloring_params()
-        elif isinstance(self._node, ColorNode):
-            self._build_color_params()
         elif isinstance(self._node, MaskNode):
             self._build_mask_params()
 
@@ -412,49 +410,6 @@ class NodeWidget(Gtk.Box):
             row.append(lbl)
             adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=1)
             spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
-            spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
-            spin.set_css_classes(["node-param-control"])
-            self._ctrl_widgets.append(spin)
-            row.append(spin)
-            self.append(row)
-            self._param_controls.append(row)
-
-    def _build_color_params(self):
-        node: ColorNode = self._node
-
-        op_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-        op_row.set_css_classes(["node-param-row"])
-        olbl = Gtk.Label(label="Operation", xalign=0)
-        olbl.set_css_classes(["node-param-label"])
-        op_row.append(olbl)
-        op_dd = Gtk.DropDown()
-        op_dd.set_model(Gtk.StringList.new(["Brightness/Contrast", "Hue/Saturation", "Levels"]))
-        idx = node.COLOR_OPS.index(node.operation) if node.operation in node.COLOR_OPS else 0
-        op_dd.set_selected(idx)
-        op_dd.set_halign(Gtk.Align.START)
-        op_dd.connect("notify::selected", lambda d, ps: setattr(node, "operation", node.COLOR_OPS[d.get_selected()]))
-        op_dd.set_css_classes(["node-param-control"])
-        self._ctrl_widgets.append(op_dd)
-        op_row.append(op_dd)
-        self.append(op_row)
-        self._param_controls.append(op_row)
-
-        for label, attr, lo, hi, step in [
-            ("Brightness", "brightness", -100.0, 100.0, 1),
-            ("Contrast", "contrast", -100.0, 100.0, 1),
-            ("Saturation", "saturation", -100.0, 100.0, 1),
-            ("Hue", "hue", -180.0, 180.0, 1),
-            ("Black Point %", "black_point", 0.0, 100.0, 0.5),
-            ("White Point %", "white_point", 0.0, 100.0, 0.5),
-            ("Gamma", "gamma", 0.1, 10.0, 0.1),
-        ]:
-            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-            row.set_css_classes(["node-param-row"])
-            lbl = Gtk.Label(label=label, xalign=0)
-            lbl.set_css_classes(["node-param-label"])
-            row.append(lbl)
-            adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=step)
-            spin = Gtk.SpinButton(adjustment=adj, climb_rate=step, digits=1)
             spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
             spin.set_css_classes(["node-param-control"])
             self._ctrl_widgets.append(spin)
@@ -1349,16 +1304,6 @@ class NodeCanvas(Gtk.Overlay):
             gy = (y - self._pan_y) / self._zoom
             nid = "output_" + str(GLib.get_monotonic_time())
             node = OutputNode(nid, gx, gy)
-            self.add_node(node)
-            w = self.get_node_widget(nid)
-            if w:
-                self.select_node(w)
-            return True
-        elif text and text.startswith("color:"):
-            gx = (x - self._pan_x) / self._zoom
-            gy = (y - self._pan_y) / self._zoom
-            nid = "color_" + str(GLib.get_monotonic_time())
-            node = ColorNode(nid, gx, gy)
             self.add_node(node)
             w = self.get_node_widget(nid)
             if w:
