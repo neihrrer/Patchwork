@@ -2,7 +2,7 @@ import os
 import gettext
 from typing import Optional
 
-from models.filter import FilterDef, ParamValue, ENGINE_GMIC
+from models.filter import FilterDef, ParamValue, ParamKind, ENGINE_GMIC
 from nodes.graph import Node, Port, PortDirection, PortType
 
 try:
@@ -48,6 +48,9 @@ class FilterNode(Node):
         inputs = [
             Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
         ]
+        for p in filter_def.parameters:
+            if p.kind in (ParamKind.INT, ParamKind.FLOAT) and not p.is_hidden:
+                inputs.append(Port(id, p.name, p.label, PortDirection.INPUT, PortType.NUMERIC))
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
