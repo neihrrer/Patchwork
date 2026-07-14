@@ -30,6 +30,7 @@ from models.filter import FilterDef, ENGINE_GMIC, ENGINE_IMAGEMAGICK
 _ROOT_GMIC = "G'mic"
 _ROOT_IMAGEMAGICK = "ImageMagick"
 _ROOT_BASIC = "Basic"
+_ROOT_MATH = "Math"
 
 _BASIC_ITEMS = [
     ("blending", "Blending", "blend"),
@@ -38,6 +39,14 @@ _BASIC_ITEMS = [
     ("mask", "Mask", "mask"),
     ("input", "Input", "input"),
     ("output", "Output", "output"),
+]
+
+_MATH_ITEMS = [
+    ("constant", "Constant", "constant"),
+    ("add", "Add", "add"),
+    ("subtract", "Subtract", "subtract"),
+    ("multiply", "Multiply", "multiply"),
+    ("divide", "Divide", "divide"),
 ]
 
 
@@ -128,6 +137,7 @@ class FilterBrowser(GObject.Object):
                 root_store.append(node)
         else:
             root_store.append(TreeItemNode(display_name=_ROOT_BASIC, node_type="root"))
+            root_store.append(TreeItemNode(display_name=_ROOT_MATH, node_type="root"))
             root_store.append(TreeItemNode(display_name=_ROOT_GMIC, node_type="root"))
             root_store.append(TreeItemNode(display_name=_ROOT_IMAGEMAGICK, node_type="root"))
 
@@ -167,6 +177,13 @@ class FilterBrowser(GObject.Object):
                     node = TreeItemNode(display_name=label, node_type=ntype)
                     if ntype == "blend":
                         node._blend_mode = "over"
+                    store.append(node)
+                return store
+
+            if item.display_name == _ROOT_MATH:
+                store = Gio.ListStore.new(TreeItemNode)
+                for _key, label, ntype in _MATH_ITEMS:
+                    node = TreeItemNode(display_name=label, node_type=ntype)
                     store.append(node)
                 return store
 
@@ -311,6 +328,11 @@ class FilterBrowser(GObject.Object):
                 return Gdk.ContentProvider.new_for_bytes("text/plain", data)
             elif node.node_type == "output":
                 text = "output:"
+                _pending_drag_text = text
+                data = GLib.Bytes.new(text.encode("utf-8"))
+                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
+            elif node.node_type in ("constant", "add", "subtract", "multiply", "divide"):
+                text = f"{node.node_type}:"
                 _pending_drag_text = text
                 data = GLib.Bytes.new(text.encode("utf-8"))
                 return Gdk.ContentProvider.new_for_bytes("text/plain", data)
