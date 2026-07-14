@@ -1078,6 +1078,9 @@ class NodeCanvas(Gtk.Overlay):
         self.emit("graph-changed")
 
     def _add_node_widget(self, node: Node):
+        existing = self._node_widgets.pop(node.id, None)
+        if existing:
+            self._fixed.remove(existing)
         w = NodeWidget(node, self)
         self._node_widgets[node.id] = w
         sx, sy = self._graph_to_screen(node.x, node.y)
@@ -1120,6 +1123,12 @@ class NodeCanvas(Gtk.Overlay):
         w = self._node_widgets.pop(node_id, None)
         if w:
             self._fixed.remove(w)
+            if self._selected_widget is w:
+                self._selected_widget = None
+            if self._dragging_node is w.graph_node:
+                self._dragging_node = None
+            if self._resizing_node is w.graph_node:
+                self._resizing_node = None
         self._graph.remove_node(node_id)
         self._update_all_port_colors()
         self.queue_gl_render()
@@ -1135,6 +1144,7 @@ class NodeCanvas(Gtk.Overlay):
         self.queue_gl_render()
 
     def _update_all_positions(self):
+        orphans = []
         for nid, w in self._node_widgets.items():
             node = self._graph.get_node(nid)
             if node:
@@ -1144,6 +1154,10 @@ class NodeCanvas(Gtk.Overlay):
                 self._fixed.move(w, int(sx), int(sy))
                 w.apply_zoom(self._zoom)
                 self._quick_port_centers(node)
+            else:
+                orphans.append(nid)
+        for nid in orphans:
+            self._fixed.remove(self._node_widgets.pop(nid))
         self._apply_zoom_css(self._zoom)
         self.queue_gl_render()
         self.queue_resize()
