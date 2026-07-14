@@ -161,7 +161,7 @@ class GraphExecutor:
             fd, out_path = tempfile.mkstemp(suffix="." + fmt)
             os.close(fd)
             try:
-                args = [self._imagemagick._magick_path, current, blend_img]
+                args = [self._imagemagick.magick_path, current, blend_img]
                 args += ["-compose", mode, "-composite", out_path]
                 r = subprocess.run(args, capture_output=True, timeout=60, text=True)
                 if r.returncode != 0 or not os.path.isfile(out_path):
@@ -177,11 +177,14 @@ class GraphExecutor:
         fd, out_path = tempfile.mkstemp(suffix="." + fmt)
         os.close(fd)
         try:
-            args = [self._imagemagick._magick_path, input_path]
+            args = [self._imagemagick.magick_path, input_path]
             if node.operation == "brightness_contrast":
                 args += ["-brightness-contrast", f"{node.brightness}x{node.contrast}"]
             elif node.operation == "hue_saturation":
-                args += ["-modulate", f"100,{100 + node.saturation},{100 + node.hue}"]
+                hue_val = 100 + node.hue * 100.0 / 180.0
+                args += ["-modulate", f"100,{100 + node.saturation},{hue_val}"]
+            elif node.operation == "levels":
+                args += ["-level", f"{node.black_point}%,{node.white_point}%,{node.gamma}"]
             else:
                 args += ["-level", "0%,100%,1.0"]
             args.append(out_path)
@@ -198,7 +201,7 @@ class GraphExecutor:
         fd, out_path = tempfile.mkstemp(suffix="." + fmt)
         os.close(fd)
         try:
-            args = [self._imagemagick._magick_path, input_path]
+            args = [self._imagemagick.magick_path, input_path]
             if opacity < 1.0:
                 args += ["-alpha", "on", "-channel", "A", "-evaluate", "multiply", str(opacity), "+channel"]
             args.append(out_path)
@@ -215,8 +218,9 @@ class GraphExecutor:
         fd, out_path = tempfile.mkstemp(suffix="." + fmt)
         os.close(fd)
         try:
-            args = [self._imagemagick._magick_path, input_path]
-            args += ["-modulate", f"{100 + lightness},{100 + saturation},{100 + hue}"]
+            args = [self._imagemagick.magick_path, input_path]
+            hue_val = 100 + hue * 100.0 / 180.0
+            args += ["-modulate", f"{100 + lightness},{100 + saturation},{hue_val}"]
             args.append(out_path)
             r = subprocess.run(args, capture_output=True, timeout=60, text=True)
             if r.returncode == 0 and os.path.isfile(out_path):
@@ -231,11 +235,12 @@ class GraphExecutor:
         fd, out_path = tempfile.mkstemp(suffix="." + fmt)
         os.close(fd)
         try:
-            args = [self._imagemagick._magick_path, base, mask, "-alpha", "off"]
-            args += ["-compose", "CopyOpacity", "-composite"]
             if invert:
-                args.insert(-1, "-negate")
-            args.append(out_path)
+                args = [self._imagemagick.magick_path, base, "(", mask, "-negate", ")",
+                        "-compose", "CopyOpacity", "-composite", out_path]
+            else:
+                args = [self._imagemagick.magick_path, base, mask,
+                        "-compose", "CopyOpacity", "-composite", out_path]
             r = subprocess.run(args, capture_output=True, timeout=60, text=True)
             if r.returncode == 0 and os.path.isfile(out_path):
                 return ProcessResult(output_path=out_path)
