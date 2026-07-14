@@ -22,6 +22,7 @@ except ImportError:
 from nodes import (
     Node, NodeGraph, Port, PortDirection, FilterNode, InputNode, OutputNode, BlendNode,
     OpacityNode, ColoringNode, MaskNode,
+    ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
 )
 from models.filter import FilterDef, ParamKind
 from .filter_browser import get_pending_drag_text
@@ -342,6 +343,8 @@ class NodeWidget(Gtk.Box):
             self._build_coloring_params()
         elif isinstance(self._node, MaskNode):
             self._build_mask_params()
+        elif isinstance(self._node, ConstantNode):
+            self._build_constant_params()
 
     def _build_filter_params(self):
         fd = self._node.filter_def
@@ -448,6 +451,22 @@ class NodeWidget(Gtk.Box):
         th_row.append(spin)
         self.append(th_row)
         self._param_controls.append(th_row)
+
+    def _build_constant_params(self):
+        node: ConstantNode = self._node
+        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        row.set_css_classes(["node-param-row"])
+        lbl = Gtk.Label(label="Value", xalign=0)
+        lbl.set_css_classes(["node-param-label"])
+        row.append(lbl)
+        adj = Gtk.Adjustment(value=node.value, lower=-999999, upper=999999, step_increment=1)
+        spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=2)
+        spin.connect("value-changed", lambda s: setattr(node, "value", s.get_value()))
+        spin.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin)
+        row.append(spin)
+        self.append(row)
+        self._param_controls.append(row)
 
     def _make_control(self, p) -> Optional[Gtk.Widget]:
         node = self._node
@@ -763,6 +782,11 @@ class Minimap(Gtk.Widget):
         "color": Gdk.RGBA(0.23, 0.42, 0.48, 1.0),
         "opacity": Gdk.RGBA(0.35, 0.23, 0.48, 1.0),
         "coloring": Gdk.RGBA(0.23, 0.42, 0.48, 1.0),
+        "constant": Gdk.RGBA(0.70, 0.50, 0.15, 1.0),
+        "add": Gdk.RGBA(0.30, 0.60, 0.20, 1.0),
+        "subtract": Gdk.RGBA(0.60, 0.20, 0.35, 1.0),
+        "multiply": Gdk.RGBA(0.15, 0.40, 0.65, 1.0),
+        "divide": Gdk.RGBA(0.65, 0.15, 0.15, 1.0),
     }
 
     SIZE = (180, 130)
@@ -1314,6 +1338,56 @@ class NodeCanvas(Gtk.Overlay):
             gy = (y - self._pan_y) / self._zoom
             nid = "mask_" + str(GLib.get_monotonic_time())
             node = MaskNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("constant:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "constant_" + str(GLib.get_monotonic_time())
+            node = ConstantNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("add:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "add_" + str(GLib.get_monotonic_time())
+            node = AddNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("subtract:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "subtract_" + str(GLib.get_monotonic_time())
+            node = SubtractNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("multiply:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "multiply_" + str(GLib.get_monotonic_time())
+            node = MultiplyNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("divide:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "divide_" + str(GLib.get_monotonic_time())
+            node = DivideNode(nid, gx, gy)
             self.add_node(node)
             w = self.get_node_widget(nid)
             if w:
