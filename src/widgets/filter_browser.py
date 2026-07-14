@@ -267,6 +267,7 @@ class FilterBrowser(GObject.Object):
         cat_label = name_label.get_next_sibling()
 
         name_label.set_label(node.display_name)
+        name_label.set_tooltip_text(node.display_name)
         name_label.get_style_context().remove_class("heading")
 
         if node.node_type == "category":

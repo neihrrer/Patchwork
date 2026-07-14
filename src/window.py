@@ -120,6 +120,12 @@ class RingWindow(Adw.ApplicationWindow):
         if filter_list:
             self._filter_browser = FilterBrowser(filter_list, [])
             self._filter_browser.connect("filter-selected", self._on_filter_selected)
+            w = filter_list.get_parent()
+            while w is not None:
+                w.add_css_class("sidebar-bg")
+                if isinstance(w, Adw.NavigationPage):
+                    break
+                w = w.get_parent()
 
         canvas_container = builder.get_object("canvas_container")
         if canvas_container:
@@ -164,14 +170,17 @@ class RingWindow(Adw.ApplicationWindow):
         if self._menu_button:
             self._menu_button.set_menu_model(menu)
 
-        for name, handler in [
-            ("open-project", self._on_open_project),
-            ("save-project", self._on_save_project),
-            ("preferences", self._on_preferences),
+        for name, handler, accel in [
+            ("open-project", self._on_open_project, "<primary>o"),
+            ("save-project", self._on_save_project, "<primary>s"),
+            ("preferences", self._on_preferences, "<primary>comma"),
         ]:
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", handler)
             self.add_action(action)
+            app = self.get_application()
+            if app:
+                app.set_accels_for_action(f"win.{name}", [accel])
 
 
 
@@ -203,22 +212,14 @@ class RingWindow(Adw.ApplicationWindow):
             grid_visible_row.connect("notify::active", self._on_grid_visible_changed)
         display_group.add(grid_visible_row)
         zoom_row = Adw.SwitchRow(
-            title=_("Extended Zoom Range (Unstable)"),
-            subtitle=_("Allow zooming from 25% to 1000%"),
+            title=_("Extended Zoom Range"),
+            subtitle=_("Allows zooming from 25% to 1000% at the cost of performance"),
         )
         if self._canvas:
             zoom_row.set_active(self._canvas._extended_zoom)
             zoom_row.connect("notify::active", self._on_extended_zoom_changed)
         display_group.add(zoom_row)
         page.add(display_group)
-
-        close_group = Adw.PreferencesGroup()
-        close_btn = Gtk.Button(label=_("Close"))
-        close_btn.add_css_class("suggested-action")
-        close_btn.set_halign(Gtk.Align.CENTER)
-        close_btn.connect("clicked", lambda b: dialog.close())
-        close_group.add(close_btn)
-        page.add(close_group)
 
         dialog.add(page)
         dialog.present(self)

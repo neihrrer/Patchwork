@@ -720,6 +720,7 @@ class WireOverlay(Gtk.Widget):
         self._canvas = canvas
         self.set_hexpand(True)
         self.set_vexpand(True)
+        self.set_css_classes(["wire-overlay"])
 
     def do_snapshot(self, snapshot):
         canvas = self._canvas
@@ -728,9 +729,6 @@ class WireOverlay(Gtk.Widget):
         h = self.get_height()
         if w < 1 or h < 1:
             return
-
-        # background
-        snapshot.append_color(Gdk.RGBA(0.14, 0.14, 0.145, 1.0), Graphene.Rect().init(0, 0, w, h))
 
         zoom = canvas._zoom
         pan_x = canvas._pan_x

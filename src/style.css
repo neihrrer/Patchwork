@@ -1,13 +1,14 @@
 .filter-list row {
   min-height: 26px;
+  background: @sidebar_bg_color;
 }
 
 .filter-list row:selected {
-  background: shade(@theme_base_color, 1.15);
+  background: alpha(@accent_bg_color, 0.15);
 }
 
 .filter-list row.category-row {
-  background: @headerbar_bg_color;
+  background: @sidebar_bg_color;
   border-bottom: 1px solid @borders;
   margin-top: 3px;
 }
@@ -18,12 +19,25 @@
 }
 
 .sidebar-filter-headerbar {
+  background: @sidebar_bg_color;
   border-bottom: none;
   box-shadow: none;
 }
 
+.sidebar-bg {
+  background: @sidebar_bg_color;
+}
+
+.sidebar-bg toolbarview header {
+  border-bottom: none;
+}
+
+.filter-list {
+  background: @sidebar_bg_color;
+}
+
 .filter-list row.category-row:selected {
-  background: shade(@theme_base_color, 1.15);
+  background: alpha(@accent_bg_color, 0.15);
 }
 
 .filter-list .category-icon {
@@ -57,7 +71,7 @@
 }
 
 .content-pane {
-  background-color: @sidebar_bg_color;
+  background-color: @theme_base_color;
 }
 
 .content-pane toolbarview content {
@@ -65,28 +79,35 @@
 }
 
 .content-headerbar {
-  background: #1d1d20;
+  background: @theme_base_color;
   border-bottom: none;
   box-shadow: none;
 }
 
+navigation-split-view > separator {
+  background: transparent;
+  min-width: 0;
+}
+
+.wire-overlay {
+  background: @theme_base_color;
+}
+
 .node-widget {
-  background: #2d2d30;
-  border: 1px solid #555;
+  background: @theme_base_color;
+  border: 1px solid @borders;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 
 .node-widget.selected {
-  border-color: #3584e4;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 0 1px #3584e4;
+  border-color: @accent_bg_color;
 }
 
 .node-header {
   padding: 6px 12px;
   border-radius: 7px 7px 0 0;
   font-weight: bold;
-  color: white;
+  color: @theme_fg_color;
 }
 
 .node-header.input { background: #2d6a2d; }
@@ -109,7 +130,7 @@
 
 .port-label {
   font-size: 0.85em;
-  color: #ccc;
+  color: alpha(@theme_fg_color, 0.75);
 }
 
 .node-param-row {
@@ -122,7 +143,7 @@
 
 .node-param-label {
   font-size: 0.80em;
-  color: #999;
+  color: alpha(@theme_fg_color, 0.6);
 }
 
 .node-param-control {
@@ -130,20 +151,20 @@
 }
 
 .resize-handle {
-  background: #555;
-  border: 1px solid #888;
+  background: @borders;
+  border: 1px solid alpha(@theme_fg_color, 0.2);
   border-top-left-radius: 4px;
   border-bottom-right-radius: 7px;
 }
 
 .resize-handle:hover {
-  background: #3584e4;
-  border-color: #5a9cf0;
+  background: @accent_bg_color;
+  border-color: @accent_bg_color;
 }
 
 .zoom-label {
-  background: rgba(0, 0, 0, 0.55);
-  color: #ccc;
+  background: alpha(@theme_fg_color, 0.12);
+  color: @theme_fg_color;
   font-size: 11px;
   padding: 3px 8px;
   border-radius: 4px;
