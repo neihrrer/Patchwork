@@ -282,11 +282,13 @@ class NodeWidget(Gtk.Box):
         self._left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self._left_box.set_hexpand(True)
         self._left_box.set_halign(Gtk.Align.START)
-        self._left_box.set_margin_top(8)
-        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        right_box.set_hexpand(True)
-        right_box.set_halign(Gtk.Align.END)
-        right_box.set_margin_top(8)
+        self._left_box.set_margin_top(5)
+        self._left_box.set_margin_bottom(5)
+        self._right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self._right_box.set_hexpand(True)
+        self._right_box.set_halign(Gtk.Align.END)
+        self._right_box.set_margin_top(5)
+        self._right_box.set_margin_bottom(5)
 
         for inp in self._node.inputs:
             if inp.port_type == PortType.NUMERIC:
@@ -316,13 +318,13 @@ class NodeWidget(Gtk.Box):
             click = Gtk.GestureClick(button=1)
             click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
             row.add_controller(click)
-            right_box.append(row)
+            self._right_box.append(row)
 
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
         ports_box.append(self._left_box)
         ports_box.append(spacer)
-        ports_box.append(right_box)
+        ports_box.append(self._right_box)
         self.append(ports_box)
 
         self._thumb_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -592,6 +594,11 @@ class NodeWidget(Gtk.Box):
             pw.set_size_request(max(1, int(14 * zoom)), max(1, int(14 * zoom)))
         hs = max(1, int(12 * zoom))
         self._resize_handle.set_size_request(hs, hs)
+        margin = max(1, int(5 * zoom))
+        self._left_box.set_margin_top(margin)
+        self._left_box.set_margin_bottom(margin)
+        self._right_box.set_margin_top(margin)
+        self._right_box.set_margin_bottom(margin)
         for ctrl in self._ctrl_widgets:
             if isinstance(ctrl, Gtk.SpinButton):
                 ctrl.set_size_request(max(40, int(80 * zoom)), max(20, int(28 * zoom)))
