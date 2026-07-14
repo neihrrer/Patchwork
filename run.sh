@@ -23,10 +23,6 @@ if [ -n "$BLUEPRINT_COMPILER" ]; then
     "$BLUEPRINT_COMPILER" compile \
       "$SCRIPT_DIR/src/resources/window.blp" \
       --output "$BUILD_DIR/window.ui" 2>&1 || echo "Warning: window.blp compilation failed"
-
-    "$BLUEPRINT_COMPILER" compile \
-      "$SCRIPT_DIR/src/resources/shortcuts.blp" \
-      --output "$BUILD_DIR/shortcuts.ui" 2>&1 || echo "Warning: shortcuts.blp compilation failed"
 else
     echo "Warning: blueprint-compiler not found. Using existing UI files if present."
     if [ ! -f "$BUILD_DIR/window.ui" ]; then

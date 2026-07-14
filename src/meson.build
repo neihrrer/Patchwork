@@ -12,16 +12,6 @@ window_ui = custom_target(
   build_by_default: true,
 )
 
-shortcuts_ui = custom_target(
-  'compile-shortcuts-ui',
-  input: 'resources/shortcuts.blp',
-  output: 'shortcuts.ui',
-  command: [blueprint_compiler, 'compile', '@INPUT@', '--output', '@OUTPUT@'],
-  install: true,
-  install_dir: ui_dir,
-  build_by_default: true,
-)
-
 # Install Python package
 python3 = import('python').find_installation('python3')
 
