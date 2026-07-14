@@ -40,11 +40,15 @@ def fetch_community_files() -> Optional[str]:
         parts = []
         for entry in entries:
             if entry["type"] == "file" and entry["name"].endswith(".gmic"):
-                file_url = entry["download_url"]
-                file_req = urlopen(file_url, timeout=30)
-                parts.append(file_req.read().decode("utf-8", errors="replace"))
+                try:
+                    file_url = entry["download_url"]
+                    file_req = urlopen(file_url, timeout=15)
+                    parts.append(file_req.read().decode("utf-8", errors="replace"))
+                except (URLError, OSError, ValueError):
+                    continue
         result = "\n".join(parts)
-        CACHE_COMMUNITY.write_text(result, encoding="utf-8")
+        if parts:
+            CACHE_COMMUNITY.write_text(result, encoding="utf-8")
         return result
     except (URLError, OSError, ValueError, json.JSONDecodeError):
         return None

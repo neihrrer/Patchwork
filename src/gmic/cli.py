@@ -111,38 +111,7 @@ class GmicCLI:
                         seen.add(f.name)
                         all_filters.append(f)
 
-        if all_filters:
-            return all_filters
-
-        try:
-            result = subprocess.run(
-                [self._gmic_path, "-help"],
-                capture_output=True,
-                timeout=30,
-                text=True,
-            )
-            if result.returncode == 0:
-                filters = self._parser.parse_help(result.stdout)
-                if filters:
-                    return filters
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-        try:
-            result = subprocess.run(
-                [self._gmic_path, "-h"],
-                capture_output=True,
-                timeout=30,
-                text=True,
-            )
-            if result.returncode == 0:
-                filters = self._parser.parse_help(result.stdout)
-                if filters:
-                    return filters
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-        return self._parser.get_builtin_filters()
+        return all_filters if all_filters else self._parser.get_builtin_filters()
 
     def get_version(self) -> str:
         try:
