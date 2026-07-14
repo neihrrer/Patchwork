@@ -126,6 +126,9 @@ class ColorNode(Node):
         self.contrast: float = 0.0
         self.saturation: float = 0.0
         self.hue: float = 0.0
+        self.black_point: float = 0.0
+        self.white_point: float = 100.0
+        self.gamma: float = 1.0
 
     COLOR_OPS = [
         "brightness_contrast",

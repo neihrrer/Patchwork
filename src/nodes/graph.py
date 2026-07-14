@@ -213,6 +213,9 @@ class NodeGraph:
                 nd["params"]["contrast"] = n.contrast
                 nd["params"]["saturation"] = n.saturation
                 nd["params"]["hue"] = n.hue
+                nd["params"]["black_point"] = n.black_point
+                nd["params"]["white_point"] = n.white_point
+                nd["params"]["gamma"] = n.gamma
             elif isinstance(n, OpacityNode):
                 nd["params"]["opacity"] = n.opacity
             elif isinstance(n, ColoringNode):
@@ -282,6 +285,9 @@ class NodeGraph:
                 node.contrast = params.get("contrast", 0.0)
                 node.saturation = params.get("saturation", 0.0)
                 node.hue = params.get("hue", 0.0)
+                node.black_point = params.get("black_point", 0.0)
+                node.white_point = params.get("white_point", 100.0)
+                node.gamma = params.get("gamma", 1.0)
             elif typ == "opacity":
                 node = OpacityNode(nid, x, y)
                 node.opacity = params.get("opacity", 1.0)
