@@ -35,6 +35,8 @@ _BASIC_ITEMS = [
     ("blending", "Blending", "blend"),
     ("opacity", "Opacity", "opacity"),
     ("coloring", "Coloring", "coloring"),
+    ("color_adjust", "Color Adjust", "color"),
+    ("mask", "Mask", "mask"),
     ("input", "Input", "input"),
     ("output", "Output", "output"),
 ]
@@ -290,6 +292,16 @@ class FilterBrowser(GObject.Object):
                 return Gdk.ContentProvider.new_for_bytes("text/plain", data)
             elif node.node_type == "opacity":
                 text = "opacity:"
+                _pending_drag_text = text
+                data = GLib.Bytes.new(text.encode("utf-8"))
+                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
+            elif node.node_type == "color":
+                text = "color:"
+                _pending_drag_text = text
+                data = GLib.Bytes.new(text.encode("utf-8"))
+                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
+            elif node.node_type == "mask":
+                text = "mask:"
                 _pending_drag_text = text
                 data = GLib.Bytes.new(text.encode("utf-8"))
                 return Gdk.ContentProvider.new_for_bytes("text/plain", data)
