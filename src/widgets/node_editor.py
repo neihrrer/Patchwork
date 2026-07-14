@@ -619,6 +619,7 @@ class NodeWidget(Gtk.Box):
         self._canvas._update_port_centers(self._node)
         self._canvas.queue_gl_render()
         self._canvas._clamp_pan()
+        self._canvas._update_all_positions()
 
     def _on_drag_begin(self, gesture, start_x, start_y):
         child = self.pick(start_x, start_y, Gtk.PickFlags.DEFAULT)
@@ -950,7 +951,7 @@ class NodeCanvas(Gtk.Overlay):
         self._gl_ok_local = False
         self.set_focusable(True)
         self._extended_zoom: bool = False
-        self._initial_fit_done: bool = False
+
 
         self._wire_overlay = WireOverlay(self)
         self._wire_overlay.set_hexpand(True)
@@ -1066,8 +1067,6 @@ class NodeCanvas(Gtk.Overlay):
     def add_node(self, node: Node):
         self._graph.add_node(node)
         self._add_node_widget(node)
-        if not self._initial_fit_done:
-            GLib.idle_add(self._fit_content)
         self.emit("graph-changed")
 
     def _add_node_widget(self, node: Node):
@@ -1106,7 +1105,6 @@ class NodeCanvas(Gtk.Overlay):
         self._selected_port = None
         self._drag_port = None
         self._graph.clear()
-        self._initial_fit_done = False
         self.queue_gl_render()
         self.emit("graph-changed")
 
@@ -1254,7 +1252,7 @@ class NodeCanvas(Gtk.Overlay):
         elif isinstance(node, OutputNode):
             pass
 
-        self._clamp_pan()
+        self.queue_gl_render()
 
     def set_output_thumbnail(self, node_id: str, pixbuf: GdkPixbuf.Pixbuf):
         node = self._graph.get_node(node_id)
@@ -1269,7 +1267,7 @@ class NodeCanvas(Gtk.Overlay):
                 scale = max_long / max(wgt, hgt)
                 pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.TILES)
             w.set_thumbnail(pixbuf)
-            self._clamp_pan()
+            self.queue_gl_render()
 
     def set_filter_defs(self, defs: list["FilterDef"]):
         self._filter_def_map.clear()
@@ -1520,8 +1518,6 @@ class NodeCanvas(Gtk.Overlay):
         return mwx, mwy, mx, my
 
     def _fit_content(self):
-        if self._initial_fit_done:
-            return
         nodes = list(self._graph.nodes.values())
         if not nodes:
             return
@@ -1539,7 +1535,6 @@ class NodeCanvas(Gtk.Overlay):
         cy = (mwy + my) / 2
         self._pan_x = -cx * z + cw / 2
         self._pan_y = -cy * z + ch / 2
-        self._initial_fit_done = True
         self._update_all_positions()
 
     def _on_overlay_resize(self):

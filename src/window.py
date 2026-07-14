@@ -328,25 +328,56 @@ class RingWindow(Adw.ApplicationWindow):
                 else:
                     self._open_dialog_result_path = path
                     nid = _generate_id()
-                    node = InputNode(nid, 100, 100)
+                    node = InputNode(nid, 0, 0)
                     node.file_path = path
-                    if self._canvas:
-                        self._canvas.add_node(node)
-                        self._canvas.update_node_display(nid)
+                    self._canvas.add_node(node)
+                    self._canvas.update_node_display(nid)
 
                     existing_out = None
                     for n in self._graph.nodes.values():
                         if isinstance(n, OutputNode):
                             existing_out = n
                             break
+
                     if existing_out is None:
                         out_id = _generate_id()
-                        out = OutputNode(out_id, 450, 100)
-                        if self._canvas:
-                            self._canvas.add_node(out)
+                        out = OutputNode(out_id, 0, 0)
+                        self._canvas.add_node(out)
                         out_id_to_use = out_id
+
+                        def center_pair():
+                            alloc = self._canvas.get_allocation()
+                            if alloc.width <= 1 or node.width <= 0 or out.width <= 0:
+                                return True
+                            cx, cy = self._canvas._screen_to_graph(
+                                alloc.width / 2, alloc.height / 2
+                            )
+                            dd = 80
+                            node.x = cx - dd / 2 - node.width
+                            node.y = cy - node.height / 2
+                            out.x = cx + dd / 2
+                            out.y = cy - out.height / 2
+                            self._canvas._update_all_positions()
+                            self._canvas.queue_gl_render()
+                            return False
+                        GLib.idle_add(center_pair)
                     else:
                         out_id_to_use = existing_out.id
+
+                        def center_single():
+                            alloc = self._canvas.get_allocation()
+                            if alloc.width <= 1 or node.width <= 0:
+                                return True
+                            cx, cy = self._canvas._screen_to_graph(
+                                alloc.width / 2, alloc.height / 2
+                            )
+                            node.x = cx - node.width / 2
+                            node.y = cy - node.height / 2
+                            self._canvas._update_all_positions()
+                            self._canvas.queue_gl_render()
+                            return False
+                        GLib.idle_add(center_single)
+
                     if self._canvas:
                         edge = self._graph.add_edge(nid, "image", out_id_to_use, "image")
                         if edge:
@@ -431,6 +462,7 @@ class RingWindow(Adw.ApplicationWindow):
                     self._canvas._graph._edges.append(e)
                     if hasattr(self._canvas, "_update_all_port_colors"):
                         self._canvas._update_all_port_colors()
+                self._canvas._fit_content()
                 self._canvas.queue_gl_render()
                 self._canvas.emit("graph-changed")
             self._set_status(_("Project loaded"))
