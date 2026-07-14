@@ -83,6 +83,9 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
   </object>
   <object class="AdwNavigationPage" id="content_page">
     <property name="title" translatable="yes">Node Editor</property>
+    <style>
+      <class name="content-pane"/>
+    </style>
     <property name="child">
       <object class="AdwToolbarView">
         <child type="top">
@@ -116,9 +119,6 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
         <property name="content">
           <object class="GtkBox">
             <property name="orientation">1</property>
-            <style>
-              <class name="content-pane"/>
-            </style>
             <child>
               <object class="GtkRevealer" id="progress_revealer">
                 <property name="reveal-child">false</property>

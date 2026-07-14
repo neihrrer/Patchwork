@@ -60,6 +60,10 @@
   background-color: @sidebar_bg_color;
 }
 
+.content-pane toolbarview content {
+  background-color: transparent;
+}
+
 .node-widget {
   background: #2d2d30;
   border: 1px solid #555;

@@ -65,6 +65,7 @@ Adw.NavigationPage sidebar_page {
 
 Adw.NavigationPage content_page {
   title: _("Node Editor");
+  styles ["content-pane"]
   child: Adw.ToolbarView {
     [top]
     Adw.HeaderBar {
@@ -90,7 +91,6 @@ Adw.NavigationPage content_page {
     }
     content: Box {
       orientation: vertical;
-      styles ["content-pane"]
       Revealer progress_revealer {
         reveal-child: false;
         transition-type: slide_down;
