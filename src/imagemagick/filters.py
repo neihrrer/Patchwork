@@ -161,7 +161,7 @@ BUILTIN_FILTERS: list[FilterDef] = [
         category=["Colors"],
         engine=ENGINE_IMAGEMAGICK,
         parameters=[
-            ParamDef(name="sharpen", label="Sharpen", kind=ParamKind.BOOL, default=True),
+            ParamDef(name="enhance", label="Enhance", kind=ParamKind.BOOL, default=True),
         ],
         gmic_command="contrast",
     ),

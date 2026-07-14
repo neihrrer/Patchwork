@@ -161,6 +161,10 @@ class ImageMagickCLI:
     def available(self) -> bool:
         return shutil.which(self._magick_path) is not None
 
+    @property
+    def magick_path(self) -> str:
+        return self._magick_path
+
     def run_pipeline(
         self,
         input_path: str,
