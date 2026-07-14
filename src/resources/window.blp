@@ -21,20 +21,20 @@ Adw.NavigationSplitView split_view {
 
 Adw.NavigationPage sidebar_page {
   styles ["sidebar-page"]
-  title: _("Nodes");
+  title: _("Ring");
   child: Adw.ToolbarView {
     [top]
     Adw.HeaderBar {
       styles ["sidebar-filter-headerbar"]
       [start]
-      Button open_button {
-        icon-name: "document-open-symbolic";
-        tooltip-text: _("Open Image");
-      }
-      [end]
       ToggleButton search_toggle {
         icon-name: "system-search-symbolic";
         tooltip-text: _("Search Filters");
+      }
+      [end]
+      MenuButton menu_button {
+        icon-name: "open-menu-symbolic";
+        tooltip-text: _("Menu");
       }
     }
     content: Box {
@@ -75,15 +75,14 @@ Adw.NavigationPage content_page {
         title: _("Node Editor");
       };
       [start]
+      Button open_button {
+        icon-name: "document-open-symbolic";
+        tooltip-text: _("Open Image");
+      }
       Button render_button {
         label: _("Render");
         sensitive: false;
         tooltip-text: _("Render the node graph");
-      }
-      [end]
-      MenuButton menu_button {
-        icon-name: "open-menu-symbolic";
-        tooltip-text: _("Menu");
       }
       [end]
       Button export_button {

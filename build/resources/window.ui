@@ -23,7 +23,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
     <style>
       <class name="sidebar-page"/>
     </style>
-    <property name="title" translatable="yes">Nodes</property>
+    <property name="title" translatable="yes">Ring</property>
     <property name="child">
       <object class="AdwToolbarView">
         <child type="top">
@@ -32,15 +32,15 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
               <class name="sidebar-filter-headerbar"/>
             </style>
             <child type="start">
-              <object class="GtkButton" id="open_button">
-                <property name="icon-name">document-open-symbolic</property>
-                <property name="tooltip-text" translatable="yes">Open Image</property>
-              </object>
-            </child>
-            <child type="end">
               <object class="GtkToggleButton" id="search_toggle">
                 <property name="icon-name">system-search-symbolic</property>
                 <property name="tooltip-text" translatable="yes">Search Filters</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkMenuButton" id="menu_button">
+                <property name="icon-name">open-menu-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Menu</property>
               </object>
             </child>
           </object>
@@ -102,16 +102,16 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
               </object>
             </property>
             <child type="start">
+              <object class="GtkButton" id="open_button">
+                <property name="icon-name">document-open-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Open Image</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkButton" id="render_button">
                 <property name="label" translatable="yes">Render</property>
                 <property name="sensitive">false</property>
                 <property name="tooltip-text" translatable="yes">Render the node graph</property>
-              </object>
-            </child>
-            <child type="end">
-              <object class="GtkMenuButton" id="menu_button">
-                <property name="icon-name">open-menu-symbolic</property>
-                <property name="tooltip-text" translatable="yes">Menu</property>
               </object>
             </child>
             <child type="end">

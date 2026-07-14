@@ -271,18 +271,18 @@ class FilterBrowser(GObject.Object):
         name_label.get_style_context().remove_class("heading")
 
         if node.node_type == "category":
-            name_label.set_margin_top(6)
-            name_label.set_margin_bottom(2)
+            name_label.set_margin_top(8)
+            name_label.set_margin_bottom(4)
             cat_label.set_label("")
             cat_label.hide()
         elif node.node_type == "filter" and node.filter_def:
-            name_label.set_margin_top(3)
-            name_label.set_margin_bottom(2)
+            name_label.set_margin_top(5)
+            name_label.set_margin_bottom(4)
             cat_label.set_label("")
             cat_label.hide()
         else:
-            name_label.set_margin_top(4)
-            name_label.set_margin_bottom(2)
+            name_label.set_margin_top(6)
+            name_label.set_margin_bottom(4)
             cat_label.set_label("")
             cat_label.hide()
 

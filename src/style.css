@@ -1,5 +1,5 @@
 .filter-list row {
-  min-height: 26px;
+  min-height: 30px;
   background: @sidebar_bg_color;
 }
 
