@@ -191,7 +191,15 @@ class RingWindow(Adw.ApplicationWindow):
         group.add(row)
         page.add(group)
 
-        zoom_group = Adw.PreferencesGroup(title=_("Zoom"))
+        display_group = Adw.PreferencesGroup(title=_("Display"))
+        grid_visible_row = Adw.SwitchRow(
+            title=_("Disable Grid"),
+            subtitle=_("Hide the background grid"),
+        )
+        if self._canvas:
+            grid_visible_row.set_active(not self._canvas._grid_visible)
+            grid_visible_row.connect("notify::active", self._on_grid_visible_changed)
+        display_group.add(grid_visible_row)
         zoom_row = Adw.SwitchRow(
             title=_("Extended Zoom Range (Unstable)"),
             subtitle=_("Allow zooming from 25% to 1000%"),
@@ -199,21 +207,7 @@ class RingWindow(Adw.ApplicationWindow):
         if self._canvas:
             zoom_row.set_active(self._canvas._extended_zoom)
             zoom_row.connect("notify::active", self._on_extended_zoom_changed)
-        zoom_group.add(zoom_row)
-        page.add(zoom_group)
-
-        display_group = Adw.PreferencesGroup(title=_("Display"))
-        grid_row = Adw.SpinRow(
-            title=_("Grid Brightness"),
-            subtitle=_("0.0 = dark, 0.5 = light"),
-            adjustment=Gtk.Adjustment(
-                value=self._canvas._grid_brightness if self._canvas else 0.22,
-                lower=0.0, upper=0.5, step_increment=0.01, page_increment=0.05,
-            ),
-            digits=2,
-        )
-        grid_row.connect("notify::value", self._on_grid_brightness_changed)
-        display_group.add(grid_row)
+        display_group.add(zoom_row)
         page.add(display_group)
 
         close_group = Adw.PreferencesGroup()
@@ -231,9 +225,9 @@ class RingWindow(Adw.ApplicationWindow):
         if self._canvas:
             self._canvas.set_extended_zoom(row.get_active())
 
-    def _on_grid_brightness_changed(self, row, pspec):
+    def _on_grid_visible_changed(self, row, pspec):
         if self._canvas:
-            self._canvas.set_grid_brightness(row.get_value())
+            self._canvas.set_grid_visible(not row.get_active())
 
     def _on_output_format_changed(self, row, pspec):
         self._output_format = VALID_OUTPUT_FORMATS[row.get_selected()]

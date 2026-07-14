@@ -740,6 +740,8 @@ class WireOverlay(Gtk.Widget):
         ox = pan_x % spacing
         oy = pan_y % spacing
 
+        if not canvas._grid_visible:
+            return
         b = canvas._grid_brightness
         grid_color = Gdk.RGBA(b, b, b + 0.01, 1.0)
         x = ox
@@ -981,6 +983,7 @@ class NodeCanvas(Gtk.Overlay):
         self._pan_x = 0.0
         self._pan_y = 0.0
         self._grid_brightness: float = 0.22
+        self._grid_visible: bool = True
         self._node_widgets: dict[str, NodeWidget] = {}
         self._selected_widget: Optional[NodeWidget] = None
         self._dragging_node: Optional[Node] = None
@@ -1594,7 +1597,11 @@ class NodeCanvas(Gtk.Overlay):
         self._extended_zoom = enabled
 
     def set_grid_brightness(self, value: float):
-        self._grid_brightness = max(0.0, min(0.5, value))
+        self._grid_brightness = max(0.0, min(1.0, value))
+        self.queue_gl_render()
+
+    def set_grid_visible(self, visible: bool):
+        self._grid_visible = visible
         self.queue_gl_render()
 
     def toggle_minimap(self):
@@ -1676,4 +1683,4 @@ class NodeCanvas(Gtk.Overlay):
         self._update_all_positions()
         return True
 
-    
+
