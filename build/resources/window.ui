@@ -20,6 +20,9 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
     <property name="content">content_page</property>
   </object>
   <object class="AdwNavigationPage" id="sidebar_page">
+    <style>
+      <class name="sidebar-pane"/>
+    </style>
     <property name="title" translatable="yes">Nodes</property>
     <property name="child">
       <object class="AdwToolbarView">
@@ -90,6 +93,9 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
       <object class="AdwToolbarView">
         <child type="top">
           <object class="AdwHeaderBar">
+            <style>
+              <class name="content-headerbar"/>
+            </style>
             <property name="title-widget">
               <object class="AdwWindowTitle" id="content_title">
                 <property name="title" translatable="yes">Node Editor</property>

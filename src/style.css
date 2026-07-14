@@ -64,6 +64,12 @@
   background-color: transparent;
 }
 
+.content-headerbar {
+  background: #1d1d20;
+  border-bottom: none;
+  box-shadow: none;
+}
+
 .node-widget {
   background: #2d2d30;
   border: 1px solid #555;
