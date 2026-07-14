@@ -1,4 +1,5 @@
 import gettext
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -24,7 +25,6 @@ from nodes import (
 )
 from widgets.node_editor import NodeCanvas
 from widgets.filter_browser import FilterBrowser
-from widgets.comparison_widget import ComparisonWidget
 from processing.graph_executor import GraphExecutor
 from processing.runner import ProcessResult
 
@@ -69,9 +69,9 @@ class RingWindow(Adw.ApplicationWindow):
 
         self._canvas: Optional[NodeCanvas] = None
         self._filter_browser: Optional[FilterBrowser] = None
-        self._compare_widget: Optional[ComparisonWidget] = None
         self._current_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
         self._result_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
+        self._result_pixbufs: dict[str, GdkPixbuf.Pixbuf] = {}
         self._output_format: str = "png"
 
         self._setup_ui()
@@ -123,14 +123,7 @@ class RingWindow(Adw.ApplicationWindow):
         canvas_container = builder.get_object("canvas_container")
         if canvas_container:
             self._canvas = NodeCanvas(self._graph)
-            self._compare_widget = ComparisonWidget()
-            self._compare_widget.set_visible(False)
-            self._view_stack = Gtk.Stack()
-            self._view_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-            self._view_stack.add_named(self._canvas, "editor")
-            self._view_stack.add_named(self._compare_widget, "compare")
-            self._view_stack.set_visible_child_name("editor")
-            canvas_container.append(self._view_stack)
+            canvas_container.append(self._canvas)
 
         bp = builder.get_object("bp")
         if bp:
@@ -179,10 +172,7 @@ class RingWindow(Adw.ApplicationWindow):
             action.connect("activate", handler)
             self.add_action(action)
 
-        toggle_cmp = Gio.SimpleAction.new("toggle-comparison", None)
-        toggle_cmp.connect("activate", lambda *_: self._on_toggle_comparison())
-        self.add_action(toggle_cmp)
-        self.get_application().set_accels_for_action("win.toggle-comparison", ["<primary>t"])
+
 
     def _on_preferences(self, action, param):
         dialog = Adw.PreferencesDialog()
@@ -318,10 +308,6 @@ class RingWindow(Adw.ApplicationWindow):
 
                 self._current_pixbuf = pixbuf
 
-                if self._compare_widget:
-                    self._compare_widget.set_original(pixbuf)
-                    self._compare_widget.set_result(None)
-
                 if self._export_button:
                     self._export_button.set_sensitive(False)
 
@@ -401,9 +387,6 @@ class RingWindow(Adw.ApplicationWindow):
                     self._show_error(str(e))
                     return
                 self._current_pixbuf = pixbuf
-                if self._compare_widget:
-                    self._compare_widget.set_original(pixbuf)
-                    self._compare_widget.set_result(None)
                 if self._export_button:
                     self._export_button.set_sensitive(False)
                 node.file_path = path
@@ -529,36 +512,41 @@ class RingWindow(Adw.ApplicationWindow):
             return
 
         try:
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file(result.output_path)
+            self._result_pixbufs = {}
+            first_path = result.output_path
+            pixbuf = None
+
+            if result.output_paths:
+                for node_id, path in result.output_paths.items():
+                    try:
+                        p = GdkPixbuf.Pixbuf.new_from_file(path)
+                        self._result_pixbufs[node_id] = p
+                        if self._canvas:
+                            self._canvas.set_output_thumbnail(node_id, p)
+                        if pixbuf is None:
+                            pixbuf = p
+                            first_path = path
+                    except Exception:
+                        continue
+                if pixbuf is None:
+                    raise Exception("No valid output images")
+            else:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(first_path)
+                for n in self._graph.nodes.values():
+                    if isinstance(n, OutputNode) and self._canvas:
+                        self._canvas.set_output_thumbnail(n.id, pixbuf)
+                        self._result_pixbufs[n.id] = pixbuf
+                        break
+
             self._result_pixbuf = pixbuf
-            if self._compare_widget:
-                self._compare_widget.set_result(pixbuf)
-                self._compare_widget.set_mode(ComparisonWidget.MODE_RESULT)
             if self._export_button:
                 self._export_button.set_sensitive(True)
-            # Show thumbnail on output node
-            for n in self._graph.nodes.values():
-                if isinstance(n, OutputNode):
-                    if self._canvas:
-                        self._canvas.set_output_thumbnail(n.id, pixbuf)
-                    break
             self._set_status(_("Render complete"))
             toast = Adw.Toast(title=_("Render complete"), timeout=2)
             if self._toast_overlay:
                 self._toast_overlay.add_toast(toast)
         except Exception as e:
             self._show_error(str(e))
-
-    def _on_toggle_comparison(self):
-        if not self._compare_widget or not self._view_stack:
-            return
-        current = self._view_stack.get_visible_child_name()
-        if current == "editor":
-            if self._result_pixbuf and self._current_pixbuf:
-                self._compare_widget.set_mode(ComparisonWidget.MODE_COMPARE)
-            self._view_stack.set_visible_child_name("compare")
-        else:
-            self._view_stack.set_visible_child_name("editor")
 
     # ─── Export ───────────────────────────────────────────────────────────────
 
@@ -593,10 +581,25 @@ class RingWindow(Adw.ApplicationWindow):
     def _on_export_response(self, dialog, result):
         try:
             file = dialog.save_finish(result)
-            if file and self._result_pixbuf:
-                fmt = self._output_format
-                self._result_pixbuf.savev(file.get_path(), fmt)
-                self._set_status(_("Saved to {}").format(file.get_path()))
+            if not file:
+                return
+            fmt = self._output_format
+            path = file.get_path()
+
+            if len(self._result_pixbufs) > 1:
+                base, ext = os.path.splitext(path)
+                if not ext:
+                    ext = f".{fmt}"
+                saved = []
+                for i, (node_id, pixbuf) in enumerate(self._result_pixbufs.items()):
+                    fname = f"{base}{ext}" if i == 0 else f"{base}_{i+1}{ext}"
+                    pixbuf.savev(fname, fmt)
+                    saved.append(fname)
+                self._set_status(_("Saved {} files").format(len(saved)))
+            else:
+                if self._result_pixbuf:
+                    self._result_pixbuf.savev(path, fmt)
+                    self._set_status(_("Saved to {}").format(path))
         except GLib.Error as e:
             if e.domain != "gtk-dialog-error-quark":
                 self._show_error(str(e))
