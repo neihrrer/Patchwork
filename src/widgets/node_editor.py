@@ -20,7 +20,7 @@ except ImportError:
     GL = None
 
 from nodes import (
-    Node, NodeGraph, Port, PortDirection, FilterNode, InputNode, OutputNode, BlendNode,
+    Node, NodeGraph, Port, PortDirection, PortType, FilterNode, InputNode, OutputNode, BlendNode,
     OpacityNode, ColoringNode, MaskNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
 )
@@ -175,6 +175,7 @@ class NodeWidget(Gtk.Box):
         self._output_port_widgets: dict[str, PortWidget] = {}
         self._param_controls: list[Gtk.Widget] = []
         self._ctrl_widgets: list[Gtk.Widget] = []
+        self._inline_numeric_ports: set[str] = set()
         self._thumb_box: Optional[Gtk.Box] = None
         self._thumb_picture: Optional[Gtk.Picture] = None
         self._image_aspect: Optional[float] = None
@@ -268,6 +269,8 @@ class NodeWidget(Gtk.Box):
         right_box.set_halign(Gtk.Align.END)
 
         for inp in self._node.inputs:
+            if inp.port_type == PortType.NUMERIC:
+                continue
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
             pw = PortWidget(inp, self)
             self._input_port_widgets[inp.name] = pw
@@ -332,6 +335,21 @@ class NodeWidget(Gtk.Box):
 
         self._build_params()
 
+        for inp in self._node.inputs:
+            if inp.port_type == PortType.NUMERIC and inp.name not in self._inline_numeric_ports:
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                pw = PortWidget(inp, self)
+                self._input_port_widgets[inp.name] = pw
+                lbl = Gtk.Label(label=inp.label, xalign=0)
+                lbl.set_css_classes(["port-label"])
+                row.append(pw)
+                row.append(lbl)
+                row._row_port = pw
+                click = Gtk.GestureClick(button=1)
+                click.connect("pressed", lambda g, n, x, y, pw=pw: pw._on_click(g, n, x, y))
+                row.add_controller(click)
+                self._left_box.append(row)
+
     def _build_params(self):
         if isinstance(self._node, FilterNode):
             self._build_filter_params()
@@ -351,17 +369,20 @@ class NodeWidget(Gtk.Box):
         for p in fd.parameters:
             if p.is_hidden:
                 continue
-            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-            row.set_css_classes(["node-param-row"])
-            lbl = Gtk.Label(label=p.label, xalign=0)
-            lbl.set_css_classes(["node-param-label"])
-            row.append(lbl)
             ctrl = self._make_control(p)
             if ctrl:
                 ctrl.set_css_classes(["node-param-control"])
-                row.append(ctrl)
-            self.append(row)
-            self._param_controls.append(row)
+                if p.kind in (ParamKind.INT, ParamKind.FLOAT):
+                    self._make_control_row(p.label, p.name, ctrl)
+                else:
+                    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                    row.set_css_classes(["node-param-row"])
+                    lbl = Gtk.Label(label=p.label, xalign=0)
+                    lbl.set_css_classes(["node-param-label"])
+                    row.append(lbl)
+                    row.append(ctrl)
+                    self.append(row)
+                    self._param_controls.append(row)
 
     def _build_blend_params(self):
         node: BlendNode = self._node
@@ -385,19 +406,12 @@ class NodeWidget(Gtk.Box):
 
     def _build_opacity_params(self):
         node: OpacityNode = self._node
-        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-        row.set_css_classes(["node-param-row"])
-        lbl = Gtk.Label(label="Opacity", xalign=0)
-        lbl.set_css_classes(["node-param-label"])
-        row.append(lbl)
         adj = Gtk.Adjustment(value=node.opacity, lower=0.0, upper=1.0, step_increment=0.05)
         spin = Gtk.SpinButton(adjustment=adj, climb_rate=0.05, digits=2)
         spin.connect("value-changed", lambda s: setattr(node, "opacity", s.get_value()))
         spin.set_css_classes(["node-param-control"])
         self._ctrl_widgets.append(spin)
-        row.append(spin)
-        self.append(row)
-        self._param_controls.append(row)
+        self._make_control_row("Opacity", "opacity", spin)
 
     def _build_coloring_params(self):
         node: ColoringNode = self._node
@@ -406,24 +420,17 @@ class NodeWidget(Gtk.Box):
             ("Saturation", "saturation", -100.0, 100.0),
             ("Lightness", "lightness", -100.0, 100.0),
         ]:
-            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-            row.set_css_classes(["node-param-row"])
-            lbl = Gtk.Label(label=label, xalign=0)
-            lbl.set_css_classes(["node-param-label"])
-            row.append(lbl)
             adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=1)
             spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
             spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
             spin.set_css_classes(["node-param-control"])
             self._ctrl_widgets.append(spin)
-            row.append(spin)
-            self.append(row)
-            self._param_controls.append(row)
+            self._make_control_row(label, attr, spin)
 
     def _build_mask_params(self):
         node: MaskNode = self._node
 
-        inv_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        inv_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         inv_row.set_css_classes(["node-param-row"])
         ilbl = Gtk.Label(label="Invert", xalign=0)
         ilbl.set_css_classes(["node-param-label"])
@@ -438,35 +445,46 @@ class NodeWidget(Gtk.Box):
         self.append(inv_row)
         self._param_controls.append(inv_row)
 
-        th_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-        th_row.set_css_classes(["node-param-row"])
-        tlbl = Gtk.Label(label="Threshold", xalign=0)
-        tlbl.set_css_classes(["node-param-label"])
-        th_row.append(tlbl)
         adj = Gtk.Adjustment(value=node.threshold, lower=0.0, upper=1.0, step_increment=0.05)
         spin = Gtk.SpinButton(adjustment=adj, climb_rate=0.05, digits=2)
         spin.connect("value-changed", lambda s: setattr(node, "threshold", s.get_value()))
         spin.set_css_classes(["node-param-control"])
         self._ctrl_widgets.append(spin)
-        th_row.append(spin)
-        self.append(th_row)
-        self._param_controls.append(th_row)
+        self._make_control_row("Threshold", "threshold", spin)
+
+    def _get_numeric_port_widget(self, port_name: str) -> Optional[PortWidget]:
+        if port_name in self._input_port_widgets:
+            return self._input_port_widgets[port_name]
+        for inp in self._node.inputs:
+            if inp.name == port_name and inp.port_type == PortType.NUMERIC:
+                pw = PortWidget(inp, self)
+                self._input_port_widgets[port_name] = pw
+                self._inline_numeric_ports.add(port_name)
+                return pw
+        return None
+
+    def _make_control_row(self, label: str, port_name: str, control: Gtk.Widget) -> Gtk.Box:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        row.set_css_classes(["node-param-row"])
+        pw = self._get_numeric_port_widget(port_name)
+        if pw:
+            row.append(pw)
+        lbl = Gtk.Label(label=label, xalign=0)
+        lbl.set_css_classes(["node-param-label"])
+        row.append(lbl)
+        row.append(control)
+        self.append(row)
+        self._param_controls.append(row)
+        return row
 
     def _build_constant_params(self):
         node: ConstantNode = self._node
-        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-        row.set_css_classes(["node-param-row"])
-        lbl = Gtk.Label(label="Value", xalign=0)
-        lbl.set_css_classes(["node-param-label"])
-        row.append(lbl)
         adj = Gtk.Adjustment(value=node.value, lower=-999999, upper=999999, step_increment=1)
         spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=2)
         spin.connect("value-changed", lambda s: setattr(node, "value", s.get_value()))
         spin.set_css_classes(["node-param-control"])
         self._ctrl_widgets.append(spin)
-        row.append(spin)
-        self.append(row)
-        self._param_controls.append(row)
+        self._make_control_row("Value", "value", spin)
 
     def _make_control(self, p) -> Optional[Gtk.Widget]:
         node = self._node
