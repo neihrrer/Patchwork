@@ -6,8 +6,9 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
+gi.require_version("Adw", "1")
 
-from gi.repository import GObject, Gtk, Gdk, GdkPixbuf, GLib, Gsk, Graphene
+from gi.repository import GObject, Gtk, Gdk, GdkPixbuf, GLib, Gsk, Graphene, Adw
 
 try:
     _ = gettext.gettext
@@ -982,6 +983,9 @@ class NodeCanvas(Gtk.Overlay):
         self._pan_y = 0.0
         self._grid_brightness: float = 0.22
         self._grid_visible: bool = True
+        self._update_grid_brightness_for_theme()
+        style_mgr = Adw.StyleManager.get_default()
+        style_mgr.connect("notify::dark", self._on_color_scheme_changed)
         self._node_widgets: dict[str, NodeWidget] = {}
         self._selected_widget: Optional[NodeWidget] = None
         self._dragging_node: Optional[Node] = None
@@ -1614,6 +1618,14 @@ class NodeCanvas(Gtk.Overlay):
 
     def set_grid_visible(self, visible: bool):
         self._grid_visible = visible
+        self.queue_gl_render()
+
+    def _update_grid_brightness_for_theme(self):
+        dark = Adw.StyleManager.get_default().get_dark()
+        self._grid_brightness = 0.22 if dark else 0.78
+
+    def _on_color_scheme_changed(self, manager, pspec):
+        self._update_grid_brightness_for_theme()
         self.queue_gl_render()
 
     def toggle_minimap(self):

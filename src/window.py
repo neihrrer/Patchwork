@@ -11,7 +11,7 @@ gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 
-from gi.repository import GLib, Gio, Gtk, Adw, GdkPixbuf
+from gi.repository import GLib, Gio, Gtk, Gdk, Adw, GdkPixbuf
 from threading import Thread
 
 from models.app_state import VALID_OUTPUT_FORMATS
@@ -72,6 +72,23 @@ class RingWindow(Adw.ApplicationWindow):
         self._result_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
         self._result_pixbufs: dict[str, GdkPixbuf.Pixbuf] = {}
         self._output_format: str = "png"
+
+        self._light_header_css = Gtk.CssProvider()
+        self._light_header_css.load_from_data(b"""
+            .node-header.input { background: #4CAF50; }
+            .node-header.output { background: #EF5350; }
+            .node-header.filter { background: #2196F3; }
+            .node-header.blend { background: #FF9800; }
+            .node-header.mask { background: #26A69A; }
+            .node-header.opacity { background: #AB47BC; }
+            .node-header.color { background: #00BCD4; }
+            .node-header.coloring { background: #29B6F6; }
+            .node-header.constant { background: #FFC107; }
+            .node-header.add { background: #66BB6A; }
+            .node-header.subtract { background: #E91E63; }
+            .node-header.multiply { background: #1E88E5; }
+            .node-header.divide { background: #F44336; }
+        """)
 
         self._setup_ui()
         self._connect_signals()
@@ -143,6 +160,23 @@ class RingWindow(Adw.ApplicationWindow):
             self.set_content(self._toast_overlay)
 
         self._setup_menu()
+        self._setup_node_header_theme()
+
+    def _setup_node_header_theme(self):
+        style_mgr = Adw.StyleManager.get_default()
+        self._update_node_header_theme(style_mgr)
+        style_mgr.connect("notify::dark", self._update_node_header_theme)
+
+    def _update_node_header_theme(self, manager, pspec=None):
+        display = Gdk.Display.get_default()
+        if not display:
+            return
+        if manager.get_dark():
+            Gtk.StyleContext.remove_provider_for_display(display, self._light_header_css)
+        else:
+            Gtk.StyleContext.add_provider_for_display(
+                display, self._light_header_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
 
     def _connect_signals(self):
         if self._open_button:
