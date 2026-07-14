@@ -113,6 +113,8 @@ class RingWindow(Adw.ApplicationWindow):
 
         if self._output_paned:
             self._output_paned.set_position(100000)
+        if self._output_box:
+            self._output_box.set_visible(False)
 
         filter_list = builder.get_object("filter_list")
         if filter_list:
@@ -677,6 +679,12 @@ class RingWindow(Adw.ApplicationWindow):
         toast = Adw.Toast(title=message, timeout=3)
         if self._toast_overlay:
             self._toast_overlay.add_toast(toast)
+        if self._output_box:
+            self._output_box.set_visible(True)
+        if self._output_paned:
+            alloc = self._output_paned.get_allocation()
+            if alloc and alloc.height > 100:
+                self._output_paned.set_position(max(100, alloc.height - 250))
 
     def _show_output(self, text: str):
         cleaned = _strip_ansi(text)
@@ -684,6 +692,8 @@ class RingWindow(Adw.ApplicationWindow):
             buf = self._output_text.get_buffer()
             buf.set_text(cleaned)
             buf.move_mark_by_name("insert", buf.get_start_iter())
+        if self._output_box:
+            self._output_box.set_visible(True)
         if self._output_paned:
             alloc = self._output_paned.get_allocation()
             if alloc and alloc.height > 100:
