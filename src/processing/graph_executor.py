@@ -15,7 +15,7 @@ class GraphExecutor:
     def __init__(self, gmic: GmicCLI, imagemagick: ImageMagickCLI):
         self._gmic = gmic
         self._imagemagick = imagemagick
-        self._output_path: Optional[str] = None
+        self._output_paths: dict[str, str] = {}
 
     def execute(self, graph: NodeGraph, output_format: str = "png",
                 progress_callback: Optional[Callable[[str], None]] = None) -> ProcessResult:
@@ -98,11 +98,20 @@ class GraphExecutor:
                 inp = self._first_input(node, graph, node_outputs)
                 if inp:
                     node_outputs[node.id] = inp
-                    self._output_path = inp
+                    self._output_paths[node.id] = inp
 
-        out = self._output_path or (list(node_outputs.values())[-1] if node_outputs else None)
-        if out and os.path.isfile(out):
-            return ProcessResult(output_path=out)
+        has_output_nodes = any(isinstance(n, OutputNode) for n in graph.nodes.values())
+
+        if self._output_paths:
+            first = list(self._output_paths.values())[0]
+            return ProcessResult(output_path=first, output_paths=self._output_paths.copy())
+
+        if has_output_nodes:
+            return ProcessResult(error="No output node has a connected input")
+
+        if node_outputs:
+            return ProcessResult(error="Graph has no output node")
+
         return ProcessResult(error="No output produced")
 
     def _first_input(self, node, graph: NodeGraph, outputs: dict[str, str]) -> Optional[str]:
@@ -248,6 +257,4 @@ class GraphExecutor:
         except Exception as e:
             return ProcessResult(error=str(e))
 
-    @property
-    def output_path(self) -> Optional[str]:
-        return self._output_path
+
