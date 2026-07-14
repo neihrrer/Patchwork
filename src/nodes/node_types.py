@@ -114,13 +114,20 @@ class ColorNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
         inputs = [
             Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "brightness", "Brightness", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "contrast", "Contrast", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "saturation", "Saturation", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "hue", "Hue", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "black_point", "Black Point", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "white_point", "White Point", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "gamma", "Gamma", PortDirection.INPUT, PortType.NUMERIC),
         ]
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
         super().__init__(id, "Color Adjust", "color", inputs, outputs, x, y)
         self.width = 200
-        self.height = 100
+        self.height = 200
         self.operation: str = "brightness_contrast"
         self.brightness: float = 0.0
         self.contrast: float = 0.0
@@ -141,13 +148,14 @@ class OpacityNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
         inputs = [
             Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "opacity", "Opacity", PortDirection.INPUT, PortType.NUMERIC),
         ]
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
         super().__init__(id, "Opacity", "opacity", inputs, outputs, x, y)
         self.width = 180
-        self.height = 100
+        self.height = 120
         self.opacity: float = 1.0
 
 
@@ -155,13 +163,16 @@ class ColoringNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
         inputs = [
             Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "hue", "Hue", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "saturation", "Saturation", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "lightness", "Lightness", PortDirection.INPUT, PortType.NUMERIC),
         ]
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
         super().__init__(id, "Coloring", "coloring", inputs, outputs, x, y)
         self.width = 200
-        self.height = 140
+        self.height = 180
         self.hue: float = 0.0
         self.saturation: float = 0.0
         self.lightness: float = 0.0
@@ -172,12 +183,80 @@ class MaskNode(Node):
         inputs = [
             Port(id, "base", "Base", PortDirection.INPUT, PortType.IMAGE),
             Port(id, "mask", "Mask", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "threshold", "Threshold", PortDirection.INPUT, PortType.NUMERIC),
         ]
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
         super().__init__(id, "Mask", "mask", inputs, outputs, x, y)
         self.width = 180
-        self.height = 100
+        self.height = 120
         self.invert: bool = False
         self.threshold: float = 0.5
+
+
+class ConstantNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        outputs = [
+            Port(id, "value", "Value", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Constant", "constant", [], outputs, x, y)
+        self.width = 160
+        self.height = 80
+        self.value: float = 0.0
+
+
+class AddNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Add", "add", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class SubtractNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Subtract", "subtract", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class MultiplyNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Multiply", "multiply", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class DivideNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Divide", "divide", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
