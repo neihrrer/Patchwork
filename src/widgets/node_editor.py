@@ -1200,7 +1200,7 @@ class NodeCanvas(Gtk.Overlay):
             f".node-param-row.indented {{ padding-left: {ip}px; min-width: 0; min-height: 0; }}\n"
             f".node-param-label {{ font-size: {lfs}px; min-width: 0; min-height: 0; }}\n"
             f".node-param-control {{ margin-bottom: {cm}px; min-width: 0; min-height: 0; }}\n"
-            f".resize-handle {{ border-top-left-radius: {max(1, int(4 * zoom))}px; }}\n"
+            f".resize-handle {{ border-top-left-radius: {max(1, int(4 * zoom))}px; border-bottom-right-radius: {max(1, int(7 * zoom))}px; }}\n"
         )
         self._zoom_css.load_from_data(css.encode())
 

@@ -119,6 +119,7 @@
   background: #555;
   border: 1px solid #888;
   border-top-left-radius: 4px;
+  border-bottom-right-radius: 7px;
 }
 
 .resize-handle:hover {
