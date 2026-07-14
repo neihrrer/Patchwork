@@ -1,8 +1,14 @@
 import os
+import gettext
 from typing import Optional
 
 from models.filter import FilterDef, ParamValue, ENGINE_GMIC
 from nodes.graph import Node, Port, PortDirection, PortType
+
+try:
+    _ = gettext.gettext
+except Exception:
+    _ = lambda s: s
 
 
 class InputNode(Node):
@@ -47,7 +53,7 @@ class FilterNode(Node):
         ]
         super().__init__(id, filter_def.display_name, "filter", inputs, outputs, x, y)
         self.width = 220
-        self.height = 80
+        self.height = 100
         self._filter_def = filter_def
         self._param_values: dict[str, ParamValue] = {
             p.name: p.default for p in filter_def.parameters

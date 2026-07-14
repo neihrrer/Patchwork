@@ -277,9 +277,18 @@ def _join_continuations(lines: list[str]) -> list[str]:
 
 def _munge_gui_command(command: str) -> str:
     command = command.strip()
-    if "," in command and "(" not in command.split(",")[0]:
-        command = command.split(",")[0]
-    command = command.split("(")[0].strip()
+    # Find the part with parentheses — that is the filter command with defaults
+    main_part = None
+    for p in command.split(","):
+        if "(" in p:
+            main_part = p.strip()
+            break
+    if main_part is not None:
+        command = main_part.split("(")[0].strip()
+    else:
+        if "," in command:
+            command = command.split(",")[0]
+        command = command.split("(")[0].strip()
     if command.endswith(":*"):
         command = command[:-2]
     return command

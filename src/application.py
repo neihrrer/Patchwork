@@ -25,6 +25,10 @@ class RingApplication(Adw.Application):
 
         self._setup_actions()
 
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        self._load_css()
+
     def _load_css(self):
         css_paths = [
             Path(__file__).parent / "style.css",
@@ -43,27 +47,6 @@ class RingApplication(Adw.Application):
                 provider,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
             )
-
-    def do_startup(self):
-        Adw.Application.do_startup(self)
-        self._load_css()
-
-    def _load_css(self):
-        css_paths = [
-            Path(__file__).parent / "style.css",
-            Path(__file__).parent.parent / "build" / "resources" / "style.css",
-            Path("/app/share/ring") / "style.css",
-        ]
-        provider = Gtk.CssProvider()
-        for p in css_paths:
-            if p.exists():
-                provider.load_from_file(Gio.File.new_for_path(str(p)))
-                break
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(),
-            provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
 
     def _setup_actions(self):
         quit_action = Gio.SimpleAction.new("quit", None)

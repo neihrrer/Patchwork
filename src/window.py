@@ -123,13 +123,18 @@ class RingWindow(Adw.ApplicationWindow):
         canvas_container = builder.get_object("canvas_container")
         if canvas_container:
             self._canvas = NodeCanvas(self._graph)
-            canvas_container.append(self._canvas)
+            self._compare_widget = ComparisonWidget()
+            self._compare_widget.set_visible(False)
+            self._view_stack = Gtk.Stack()
+            self._view_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+            self._view_stack.add_named(self._canvas, "editor")
+            self._view_stack.add_named(self._compare_widget, "compare")
+            self._view_stack.set_visible_child_name("editor")
+            canvas_container.append(self._view_stack)
 
         bp = builder.get_object("bp")
         if bp:
             self.add_breakpoint(bp)
-
-        self._compare_widget = ComparisonWidget()
 
         self._toast_overlay = Adw.ToastOverlay()
         split_view = builder.get_object("split_view")
@@ -173,6 +178,11 @@ class RingWindow(Adw.ApplicationWindow):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", handler)
             self.add_action(action)
+
+        toggle_cmp = Gio.SimpleAction.new("toggle-comparison", None)
+        toggle_cmp.connect("activate", lambda *_: self._on_toggle_comparison())
+        self.add_action(toggle_cmp)
+        self.get_application().set_accels_for_action("win.toggle-comparison", ["<primary>t"])
 
     def _on_preferences(self, action, param):
         dialog = Adw.PreferencesDialog()
@@ -242,7 +252,12 @@ class RingWindow(Adw.ApplicationWindow):
     # ─── Filter browser ──────────────────────────────────────────────────────
 
     def _on_filter_selected(self, browser, filter_def: Optional[FilterDef]):
-        pass
+        if not filter_def or not self._canvas:
+            return
+        if self._canvas._drop_target:
+            alloc = self._canvas.get_allocation()
+            x, y = alloc.width / 2, alloc.height / 2
+            self._canvas._on_drop(self._canvas._drop_target, f"filter:{filter_def.engine}:{filter_def.name}", x, y)
 
     def _on_search_changed(self, entry):
         if self._filter_browser:
@@ -255,7 +270,10 @@ class RingWindow(Adw.ApplicationWindow):
     # ─── Node graph management ────────────────────────────────────────────────
 
     def _on_node_selected(self, canvas, node: Optional[Node]):
-        pass
+        if node:
+            self._set_status(f"{node.label} ({node.node_type})")
+        else:
+            self._set_status("")
 
     def _on_graph_changed(self, canvas):
         self._update_render_button()
@@ -330,17 +348,24 @@ class RingWindow(Adw.ApplicationWindow):
                         self._canvas.add_node(node)
                         self._canvas.update_node_display(nid)
 
-                    has_out = any(isinstance(n, OutputNode) for n in self._graph.nodes.values())
-                    if not has_out:
+                    existing_out = None
+                    for n in self._graph.nodes.values():
+                        if isinstance(n, OutputNode):
+                            existing_out = n
+                            break
+                    if existing_out is None:
                         out_id = _generate_id()
                         out = OutputNode(out_id, 450, 100)
                         if self._canvas:
                             self._canvas.add_node(out)
-                        if self._canvas:
-                            edge = self._graph.add_edge(nid, "image", out_id, "image")
-                            if edge:
-                                self._canvas._update_all_port_colors()
-                                self._canvas.queue_gl_render()
+                        out_id_to_use = out_id
+                    else:
+                        out_id_to_use = existing_out.id
+                    if self._canvas:
+                        edge = self._graph.add_edge(nid, "image", out_id_to_use, "image")
+                        if edge:
+                            self._canvas._update_all_port_colors()
+                            self._canvas.queue_gl_render()
 
                 self._update_render_button()
         except GLib.Error as e:
@@ -382,8 +407,9 @@ class RingWindow(Adw.ApplicationWindow):
                 if self._export_button:
                     self._export_button.set_sensitive(False)
                 node.file_path = path
-                self._canvas.update_node_display(node.id)
-                self._canvas.queue_gl_render()
+                if self._canvas:
+                    self._canvas.update_node_display(node.id)
+                    self._canvas.queue_gl_render()
                 self._set_status(f"{Path(path).name} loaded")
         except GLib.Error as e:
             if e.domain != "gtk-dialog-error-quark":
@@ -522,6 +548,17 @@ class RingWindow(Adw.ApplicationWindow):
                 self._toast_overlay.add_toast(toast)
         except Exception as e:
             self._show_error(str(e))
+
+    def _on_toggle_comparison(self):
+        if not self._compare_widget or not self._view_stack:
+            return
+        current = self._view_stack.get_visible_child_name()
+        if current == "editor":
+            if self._result_pixbuf and self._current_pixbuf:
+                self._compare_widget.set_mode(ComparisonWidget.MODE_COMPARE)
+            self._view_stack.set_visible_child_name("compare")
+        else:
+            self._view_stack.set_visible_child_name("editor")
 
     # ─── Export ───────────────────────────────────────────────────────────────
 
