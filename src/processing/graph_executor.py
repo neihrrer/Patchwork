@@ -23,6 +23,7 @@ class GraphExecutor:
 
     def execute(self, graph: NodeGraph, output_format: str = "png",
                 progress_callback: Optional[Callable[[str], None]] = None) -> ProcessResult:
+        self._output_paths = {}
         order = graph.topological_sort()
         if not order:
             return ProcessResult(error="Graph has no valid execution order (cycle or empty)")
