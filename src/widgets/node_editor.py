@@ -61,6 +61,8 @@ class PortWidget(Gtk.Widget):
         self._offset_x: float = 0.0
         self._offset_y: float = 0.0
         self.set_size_request(14, 14)
+        self.set_valign(Gtk.Align.CENTER)
+        self.set_overflow(Gtk.Overflow.HIDDEN)
         self.set_css_classes(["port-circle"])
 
         self._drag = Gtk.GestureDrag(button=1)
@@ -141,10 +143,12 @@ class PortWidget(Gtk.Widget):
 
     def do_snapshot(self, snapshot):
         w, h = self.get_width(), self.get_height()
-        cx, cy = w / 2, h / 2
-        r = min(w, h) / 2 - 1
-        if r < 1:
+        if w < 3 or h < 3:
             return
+        cr = max(1, int(min(w, h) / 3))
+        bw = max(1, int(min(w, h) / 14))
+        overhang = int(w * 0.4)
+        shift_x = -overhang if self._port.direction == PortDirection.INPUT else overhang
 
         if self._canvas and self._canvas._selected_port is self:
             color = Gdk.RGBA(0.9, 0.7, 0.1, 1.0)
@@ -155,12 +159,32 @@ class PortWidget(Gtk.Widget):
         else:
             color = Gdk.RGBA(0.53, 0.53, 0.53, 1.0)
 
-        rect = Graphene.Rect().init(cx - r, cy - r, r * 2, r * 2)
+        if self._node_widget and self._node_widget._selected:
+            border_color = Gdk.RGBA(0.208, 0.518, 0.894, 1.0)
+        else:
+            border_color = Gdk.RGBA(0.333, 0.333, 0.333, 1.0)
+
+        rect = Graphene.Rect().init(1, 1, w - 2, h - 2)
         rounded = Gsk.RoundedRect()
-        rounded.init_from_rect(rect, r)
+        rounded.init_from_rect(rect, cr)
+
+        snapshot.save()
+        snapshot.translate(Graphene.Point().init(shift_x, 0))
+
         snapshot.push_rounded_clip(rounded)
-        snapshot.append_color(color, rect)
+        snapshot.append_color(border_color, rect)
         snapshot.pop()
+
+        inner_rect = Graphene.Rect().init(
+            1 + bw, 1 + bw, w - 2 - 2 * bw, h - 2 - 2 * bw
+        )
+        inner_rounded = Gsk.RoundedRect()
+        inner_rounded.init_from_rect(inner_rect, max(1, cr - bw))
+        snapshot.push_rounded_clip(inner_rounded)
+        snapshot.append_color(color, inner_rect)
+        snapshot.pop()
+
+        snapshot.restore()
 
 
 class NodeWidget(Gtk.Box):
@@ -223,6 +247,10 @@ class NodeWidget(Gtk.Box):
         else:
             self.remove_css_class("selected")
         self.queue_draw()
+        for pw in self._input_port_widgets.values():
+            pw.queue_draw()
+        for pw in self._output_port_widgets.values():
+            pw.queue_draw()
 
     def get_input_port_widget(self, name: str) -> Optional[PortWidget]:
         return self._input_port_widgets.get(name)
@@ -264,9 +292,11 @@ class NodeWidget(Gtk.Box):
         self._left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self._left_box.set_hexpand(True)
         self._left_box.set_halign(Gtk.Align.START)
+        self._left_box.set_margin_top(8)
         right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         right_box.set_hexpand(True)
         right_box.set_halign(Gtk.Align.END)
+        right_box.set_margin_top(8)
 
         for inp in self._node.inputs:
             if inp.port_type == PortType.NUMERIC:
@@ -377,6 +407,7 @@ class NodeWidget(Gtk.Box):
                 else:
                     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
                     row.set_css_classes(["node-param-row"])
+                    row.add_css_class("indented")
                     lbl = Gtk.Label(label=p.label, xalign=0)
                     lbl.set_css_classes(["node-param-label"])
                     row.append(lbl)
@@ -389,6 +420,7 @@ class NodeWidget(Gtk.Box):
 
         mode_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         mode_row.set_css_classes(["node-param-row"])
+        mode_row.add_css_class("indented")
         mlbl = Gtk.Label(label="Mode", xalign=0)
         mlbl.set_css_classes(["node-param-label"])
         mode_row.append(mlbl)
@@ -432,6 +464,7 @@ class NodeWidget(Gtk.Box):
 
         inv_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         inv_row.set_css_classes(["node-param-row"])
+        inv_row.add_css_class("indented")
         ilbl = Gtk.Label(label="Invert", xalign=0)
         ilbl.set_css_classes(["node-param-label"])
         inv_row.append(ilbl)
@@ -467,6 +500,8 @@ class NodeWidget(Gtk.Box):
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         row.set_css_classes(["node-param-row"])
         pw = self._get_numeric_port_widget(port_name)
+        if pw is None:
+            row.add_css_class("indented")
         if pw:
             row.append(pw)
         lbl = Gtk.Label(label=label, xalign=0)
@@ -1175,7 +1210,7 @@ class NodeCanvas(Gtk.Overlay):
         hp = max(1, int(6 * zoom))
         hr = max(1, int(7 * zoom))
         rp = max(1, int(3 * zoom))
-        sp = max(1, int(10 * zoom))
+        ip = max(1, int(18 * zoom))
         cm = max(1, int(4 * zoom))
         fs = max(1, int(12 * zoom))
         pfs = max(1, int(0.85 * 12 * zoom))
@@ -1188,13 +1223,13 @@ class NodeCanvas(Gtk.Overlay):
             f".node-widget switch trough {{ min-width: 0; min-height: 0; }}\n"
             f".node-widget switch slider {{ min-width: 0; min-height: 0; }}\n"
             f".node-widget dropdown button {{ min-width: 0; min-height: 0; }}\n"
-            f".node-header {{ padding: {hp}px {sp}px; border-radius: {hr}px {hr}px 0 0; min-width: 0; min-height: 0; }}\n"
+            f".node-header {{ padding: {hp}px {max(1, int(10 * zoom))}px; border-radius: {hr}px {hr}px 0 0; min-width: 0; min-height: 0; }}\n"
             f".port-label {{ font-size: {pfs}px; min-width: 0; min-height: 0; }}\n"
             f".node-title {{ font-size: {tfs}px; min-width: 0; min-height: 0; }}\n"
-            f".node-param-row {{ padding: {rp}px {sp}px; min-width: 0; min-height: 0; }}\n"
+            f".node-param-row {{ padding: {rp}px 0px; min-width: 0; min-height: 0; }}\n"
+            f".node-param-row.indented {{ padding-left: {ip}px; min-width: 0; min-height: 0; }}\n"
             f".node-param-label {{ font-size: {lfs}px; min-width: 0; min-height: 0; }}\n"
             f".node-param-control {{ margin-bottom: {cm}px; min-width: 0; min-height: 0; }}\n"
-            f".port-circle {{ border-radius: {max(1, int(7 * zoom))}px; }}\n"
             f".resize-handle {{ border-top-left-radius: {max(1, int(4 * zoom))}px; }}\n"
         )
         self._zoom_css.load_from_data(css.encode())

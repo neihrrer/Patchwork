@@ -93,28 +93,17 @@
   font-weight: bold;
 }
 
-.port-circle {
-  border-radius: 6px;
-  background: #888;
-  border: 1px solid #aaa;
-}
-
-.port-circle:hover {
-  background: #ccc;
-}
-
-.port-circle.connected {
-  background: #5a9cf0;
-  border-color: #7ab4ff;
-}
-
 .port-label {
   font-size: 0.85em;
   color: #ccc;
 }
 
 .node-param-row {
-  padding: 3px 10px;
+  padding: 3px 0;
+}
+
+.node-param-row.indented {
+  padding-left: 18px;
 }
 
 .node-param-label {
