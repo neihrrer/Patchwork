@@ -56,6 +56,10 @@
   -gtk-icon-size: 64px;
 }
 
+.content-pane {
+  background-color: @sidebar_bg_color;
+}
+
 .node-widget {
   background: #2d2d30;
   border: 1px solid #555;
