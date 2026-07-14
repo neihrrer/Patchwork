@@ -9,6 +9,7 @@ class PortDirection(Enum):
 
 class PortType(Enum):
     IMAGE = auto()
+    NUMERIC = auto()
 
 
 class Port:
@@ -113,6 +114,16 @@ class NodeGraph:
         for e in self._edges:
             if e.dst_node == dst_node and e.dst_port == dst_port:
                 return None
+        src_n = self._nodes.get(src_node)
+        dst_n = self._nodes.get(dst_node)
+        if not src_n or not dst_n:
+            return None
+        src_p = src_n.get_output_port(src_port)
+        dst_p = dst_n.get_input_port(dst_port)
+        if not src_p or not dst_p:
+            return None
+        if src_p.port_type != dst_p.port_type:
+            return None
         self._edge_counter += 1
         edge = Edge(f"e{self._edge_counter}", src_node, src_port, dst_node, dst_port)
         self._edges.append(edge)
@@ -198,6 +209,7 @@ class NodeGraph:
             from nodes.node_types import (
                 InputNode, FilterNode, BlendNode, ColorNode,
                 OpacityNode, ColoringNode, MaskNode,
+                ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
             )
             if isinstance(n, InputNode):
                 nd["params"]["file_path"] = n.file_path
@@ -225,6 +237,8 @@ class NodeGraph:
             elif isinstance(n, MaskNode):
                 nd["params"]["invert"] = n.invert
                 nd["params"]["threshold"] = n.threshold
+            elif isinstance(n, ConstantNode):
+                nd["params"]["value"] = n.value
             nodes_data.append(nd)
 
         edges_data = []
@@ -248,6 +262,7 @@ class NodeGraph:
         from nodes.node_types import (
             InputNode, OutputNode, FilterNode, BlendNode, ColorNode,
             OpacityNode, ColoringNode, MaskNode,
+            ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
         )
         graph = NodeGraph()
         for nd in data.get("nodes", []):
@@ -300,6 +315,12 @@ class NodeGraph:
                 node = MaskNode(nid, x, y)
                 node.invert = params.get("invert", False)
                 node.threshold = params.get("threshold", 0.5)
+            elif typ == "constant":
+                node = ConstantNode(nid, x, y)
+                node.value = params.get("value", 0.0)
+            elif typ in ("add", "subtract", "multiply", "divide"):
+                cls = {"add": AddNode, "subtract": SubtractNode, "multiply": MultiplyNode, "divide": DivideNode}[typ]
+                node = cls(nid, x, y)
             if node:
                 node.width = nd.get("width", node.width)
                 node.height = nd.get("height", node.height)
