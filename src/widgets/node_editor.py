@@ -1166,10 +1166,10 @@ class NodeCanvas(Gtk.Overlay):
                     pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
                     wgt = pixbuf.get_width()
                     hgt = pixbuf.get_height()
-                    max_w = 320
-                    if wgt > max_w:
-                        scale = max_w / wgt
-                        pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.BILINEAR)
+                    max_long = 4096
+                    if max(wgt, hgt) > max_long:
+                        scale = max_long / max(wgt, hgt)
+                        pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.TILES)
                     w.set_thumbnail(pixbuf)
                 except Exception:
                     w.clear_thumbnail()
@@ -1188,10 +1188,10 @@ class NodeCanvas(Gtk.Overlay):
         if w:
             wgt = pixbuf.get_width()
             hgt = pixbuf.get_height()
-            max_w = 320
-            if wgt > max_w:
-                scale = max_w / wgt
-                pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.BILINEAR)
+            max_long = 4096
+            if max(wgt, hgt) > max_long:
+                scale = max_long / max(wgt, hgt)
+                pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.TILES)
             w.set_thumbnail(pixbuf)
             self._clamp_pan()
 
