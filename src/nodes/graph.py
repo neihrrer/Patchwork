@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import Any, Optional
+from typing import Optional
 
 
 class PortDirection(Enum):

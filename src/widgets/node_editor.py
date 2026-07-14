@@ -14,11 +14,6 @@ try:
 except Exception:
     _ = lambda s: s
 
-try:
-    from OpenGL import GL
-except ImportError:
-    GL = None
-
 from nodes import (
     Node, NodeGraph, Port, PortDirection, PortType, FilterNode, InputNode, OutputNode, BlendNode,
     OpacityNode, ColoringNode, MaskNode,
@@ -122,11 +117,6 @@ class PortWidget(Gtk.Widget):
     def _set_hover(self, hover: bool):
         self._hovered = hover
         self.queue_draw()
-
-    def _on_click(self, gesture, n_press, x, y):
-        if self._canvas:
-            self.update_center()
-            self._canvas.handle_port_click(self)
 
     def _on_drag_begin(self, gesture, start_x, start_y):
         if self._canvas:
@@ -270,7 +260,7 @@ class NodeWidget(Gtk.Box):
         row.append(lbl)
         row._row_port = pw
         click = Gtk.GestureClick(button=1)
-        click.connect("pressed", lambda g, n, x, y, pw=pw: pw._on_click(g, n, x, y))
+        click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
         row.add_controller(click)
         self._left_box.append(row)
 
@@ -310,7 +300,7 @@ class NodeWidget(Gtk.Box):
             row.append(lbl)
             row._row_port = pw
             click = Gtk.GestureClick(button=1)
-            click.connect("pressed", lambda g, n, x, y, pw=pw: pw._on_click(g, n, x, y))
+            click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
             row.add_controller(click)
             self._left_box.append(row)
 
@@ -324,7 +314,7 @@ class NodeWidget(Gtk.Box):
             row.append(pw)
             row._row_port = pw
             click = Gtk.GestureClick(button=1)
-            click.connect("pressed", lambda g, n, x, y, pw=pw: pw._on_click(g, n, x, y))
+            click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
             row.add_controller(click)
             right_box.append(row)
 
@@ -376,7 +366,7 @@ class NodeWidget(Gtk.Box):
                 row.append(lbl)
                 row._row_port = pw
                 click = Gtk.GestureClick(button=1)
-                click.connect("pressed", lambda g, n, x, y, pw=pw: pw._on_click(g, n, x, y))
+                click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
                 row.add_controller(click)
                 self._left_box.append(row)
 
@@ -715,27 +705,6 @@ class NodeWidget(Gtk.Box):
         self._canvas._on_canvas_right_click(gesture, n_press, a.x + x, a.y + y)
 
 
-VERTEX_SHADER_SRC = """
-#version 330 core
-layout(location = 0) in vec2 position;
-uniform vec2 screen_size;
-void main() {
-    vec2 ndc = position / screen_size * 2.0 - 1.0;
-    ndc.y = -ndc.y;
-    gl_Position = vec4(ndc, 0.0, 1.0);
-}
-"""
-
-FRAGMENT_SHADER_SRC = """
-#version 330 core
-uniform vec4 color;
-out vec4 frag_color;
-void main() {
-    frag_color = color;
-}
-"""
-
-
 class WireOverlay(Gtk.Widget):
     __gtype_name__ = "WireOverlay"
 
@@ -983,7 +952,6 @@ class NodeCanvas(Gtk.Overlay):
     def __init__(self, graph: NodeGraph):
         super().__init__()
         self._graph = graph
-        self._gl_ok_local = False
         self.set_focusable(True)
         self._extended_zoom: bool = False
 
@@ -1023,10 +991,6 @@ class NodeCanvas(Gtk.Overlay):
 
         self._filter_def_map: dict[str, FilterDef] = {}
 
-        self._gl_program = 0
-        self._gl_vao = 0
-        self._gl_vbo = 0
-
         self._zoom_css = Gtk.CssProvider()
         self._zoom_css.load_from_data(b"")
 
@@ -1054,7 +1018,6 @@ class NodeCanvas(Gtk.Overlay):
         self._pan_drag = Gtk.GestureDrag(button=2)
         self._pan_drag.connect("drag-begin", self._on_pan_begin)
         self._pan_drag.connect("drag-update", self._on_pan_update)
-        self._pan_drag.connect("drag-end", self._on_pan_end)
         self._fixed.add_controller(self._pan_drag)
 
         self._canvas_click = Gtk.GestureClick(button=1)
@@ -1599,9 +1562,6 @@ class NodeCanvas(Gtk.Overlay):
         self._clamp_pan()
         self._update_all_positions()
 
-    def _on_pan_end(self, gesture, offset_x, offset_y):
-        pass
-
     def _on_canvas_click(self, gesture, n_press, x, y):
         self._clear_selected_port()
         child = self._fixed.pick(x, y, Gtk.PickFlags.DEFAULT)
@@ -1709,147 +1669,4 @@ class NodeCanvas(Gtk.Overlay):
         self._update_all_positions()
         return True
 
-    # ─── OpenGL rendering ──────────────────────────────────────────────────────
-
-    @property
-    def _gl_ok(self):
-        return GL is not None
-
-    def _compile_shader(self, shader_type, source) -> int:
-        shader = GL.glCreateShader(shader_type)
-        GL.glShaderSource(shader, source)
-        GL.glCompileShader(shader)
-        status = GL.glGetShaderiv(shader, GL.GL_COMPILE_STATUS)
-        if not status:
-            log = GL.glGetShaderInfoLog(shader)
-            print(f"Shader compile error: {log}")
-        return shader
-
-    def _on_gl_realize(self, gl_area):
-        if not self._gl_ok:
-            return
-        gl_area.make_current()
-        err = gl_area.get_error()
-        if err:
-            return
-        vs = self._compile_shader(GL.GL_VERTEX_SHADER, VERTEX_SHADER_SRC)
-        fs = self._compile_shader(GL.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_SRC)
-        prog = GL.glCreateProgram()
-        GL.glAttachShader(prog, vs)
-        GL.glAttachShader(prog, fs)
-        GL.glLinkProgram(prog)
-        status = GL.glGetProgramiv(prog, GL.GL_LINK_STATUS)
-        if status:
-            self._gl_program = prog
-            self._gl_vao = GL.glGenVertexArrays(1)
-            self._gl_vbo = GL.glGenBuffers(1)
-            GL.glEnable(GL.GL_BLEND)
-            GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
-            GL.glEnable(GL.GL_LINE_SMOOTH)
-        else:
-            log = GL.glGetProgramInfoLog(prog)
-            print(f"Program link error: {log}")
-        GL.glDeleteShader(vs)
-        GL.glDeleteShader(fs)
-
-    def _on_gl_render(self, gl_area, context) -> bool:
-        if not self._gl_ok or not self._gl_program:
-            return False
-        alloc = gl_area.get_allocation()
-        w, h = alloc.width, alloc.height
-        GL.glViewport(0, 0, w, h)
-        GL.glClearColor(0.14, 0.14, 0.145, 1.0)
-        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
-
-        GL.glUseProgram(self._gl_program)
-        GL.glUniform2f(GL.glGetUniformLocation(self._gl_program, "screen_size"), float(w), float(h))
-
-        self._draw_grid(w, h)
-        self._draw_wires(w, h)
-        self._draw_drag_wire(w, h)
-        return True
-
-    def _draw_grid(self, w, h):
-        GL.glBindVertexArray(self._gl_vao)
-        GL.glUseProgram(self._gl_program)
-        color_loc = GL.glGetUniformLocation(self._gl_program, "color")
-
-        spacing = max(40 * self._zoom, 10)
-        ox = self._pan_x % spacing
-        oy = self._pan_y % spacing
-
-        GL.glUniform4f(color_loc, 0.22, 0.22, 0.23, 1.0)
-        lines = []
-        x = ox
-        while x < w:
-            lines.extend([x, 0.0, x, float(h)])
-            x += spacing
-        y = oy
-        while y < h:
-            lines.extend([0.0, y, float(w), y])
-            y += spacing
-
-        if lines:
-            pts = (GL.GLfloat * len(lines))(*lines)
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._gl_vbo)
-            GL.glBufferData(GL.GL_ARRAY_BUFFER, pts, GL.GL_DYNAMIC_DRAW)
-            GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-            GL.glEnableVertexAttribArray(0)
-            GL.glDrawArrays(GL.GL_LINES, 0, len(lines) // 2)
-
-    def _draw_wires(self, w, h):
-        if not self._graph.edges:
-            return
-        GL.glUseProgram(self._gl_program)
-        GL.glBindVertexArray(self._gl_vao)
-        color_loc = GL.glGetUniformLocation(self._gl_program, "color")
-
-        for edge in self._graph.edges:
-            src_n = self._graph.get_node(edge.src_node)
-            dst_n = self._graph.get_node(edge.dst_node)
-            if not src_n or not dst_n:
-                continue
-            src_p = src_n.get_output_port(edge.src_port)
-            dst_p = dst_n.get_input_port(edge.dst_port)
-            if not src_p or not dst_p:
-                continue
-            sw = self._node_widgets.get(edge.src_node)
-            dw = self._node_widgets.get(edge.dst_node)
-            if not sw or not dw:
-                continue
-            spw = sw.get_output_port_widget(edge.src_port)
-            dpw = dw.get_input_port_widget(edge.dst_port)
-            if not spw or not dpw:
-                continue
-            x1, y1 = spw.center_x, spw.center_y
-            x2, y2 = dpw.center_x, dpw.center_y
-            pts = _compute_bezier_segments(x1, y1, x2, y2)
-            if pts:
-                GL.glUniform4f(color_loc, 0.5, 0.5, 0.5, 0.8)
-                data = (GL.GLfloat * len(pts))(*pts)
-                GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._gl_vbo)
-                GL.glBufferData(GL.GL_ARRAY_BUFFER, data, GL.GL_DYNAMIC_DRAW)
-                GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-                GL.glEnableVertexAttribArray(0)
-                GL.glDrawArrays(GL.GL_LINE_STRIP, 0, len(pts) // 2)
-
-    def _draw_drag_wire(self, w, h):
-        if not self._drag_port:
-            return
-        x1, y1 = self._drag_port_start
-        x2, y2 = self._drag_port_current
-        GL.glUseProgram(self._gl_program)
-        GL.glBindVertexArray(self._gl_vao)
-        color_loc = GL.glGetUniformLocation(self._gl_program, "color")
-        if self._drag_valid_target:
-            GL.glUniform4f(color_loc, 0.3, 0.9, 0.3, 0.9)
-        else:
-            GL.glUniform4f(color_loc, 0.7, 0.7, 0.7, 0.5)
-        pts = _compute_bezier_segments(x1, y1, x2, y2)
-        if pts:
-            data = (GL.GLfloat * len(pts))(*pts)
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._gl_vbo)
-            GL.glBufferData(GL.GL_ARRAY_BUFFER, data, GL.GL_DYNAMIC_DRAW)
-            GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-            GL.glEnableVertexAttribArray(0)
-            GL.glDrawArrays(GL.GL_LINE_STRIP, 0, len(pts) // 2)
+    

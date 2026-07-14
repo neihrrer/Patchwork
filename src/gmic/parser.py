@@ -11,13 +11,6 @@ except Exception:
     _ = lambda s: s
 
 _HTML_RE = re.compile(r"<[^>]+>")
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
-_PARAM_SPLIT_RE = re.compile(r",(?=(?:[^\"']*[\"'][^\"']*[\"'])*[^\"']*$)")
-_PAREN_SPLIT_RE = re.compile(r",(?!(?:[^(]*\([^)]*\))*[^)]*$)")
-
-
-def _strip_ansi(text: str) -> str:
-    return _ANSI_RE.sub("", text)
 
 
 def _strip_html(text: str) -> str:
@@ -292,20 +285,6 @@ def _munge_gui_command(command: str) -> str:
     if command.endswith(":*"):
         command = command[:-2]
     return command
-
-
-def _parse_filter_header(header_text: str) -> tuple[str, str]:
-    parts = header_text.split(":", 1)
-    name_part = parts[0].strip() if parts else ""
-    rest = parts[1].strip() if len(parts) > 1 else ""
-
-    command = rest
-    if ":" in rest:
-        command = rest.split(":")[0].strip()
-    command = command.split(",")[0].strip()
-    command = command.split("(")[0].strip()
-
-    return name_part, command
 
 
 def _is_testing_category(category: list[str]) -> bool:

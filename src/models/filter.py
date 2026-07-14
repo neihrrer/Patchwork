@@ -5,7 +5,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gio", "2.0")
 
-from gi.repository import GObject, Gio
+from gi.repository import GObject
 
 
 class ParamKind:

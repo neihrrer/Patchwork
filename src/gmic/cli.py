@@ -3,7 +3,6 @@ import tempfile
 import os
 import shutil
 import gettext
-from pathlib import Path
 from typing import Optional
 
 from models.filter import FilterDef

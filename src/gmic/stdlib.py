@@ -1,4 +1,3 @@
-import os
 import json
 import gettext
 from pathlib import Path
@@ -12,7 +11,6 @@ except Exception:
     _ = lambda s: s
 
 STDLIB_URL = "https://raw.githubusercontent.com/GreycLab/gmic/master/src/gmic_stdlib.gmic"
-COMMUNITY_BASE = "https://raw.githubusercontent.com/GreycLab/gmic-community/master/include"
 COMMUNITY_API = "https://api.github.com/repos/GreycLab/gmic-community/contents/include"
 CACHE_DIR = Path.home() / ".cache" / "ring" / "stdlib"
 CACHE_MAIN = CACHE_DIR / "gmic_stdlib.gmic"

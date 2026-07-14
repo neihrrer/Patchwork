@@ -1,1 +1,1 @@
-from .runner import ProcessingRunner
+from .runner import ProcessResult

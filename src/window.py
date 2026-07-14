@@ -11,17 +11,16 @@ gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 
-from gi.repository import GLib, GObject, Gio, Gtk, Adw, Gdk, GdkPixbuf
+from gi.repository import GLib, Gio, Gtk, Adw, GdkPixbuf
 from threading import Thread
 
 from models.app_state import VALID_OUTPUT_FORMATS
 from models.filter import FilterDef
 from gmic.cli import GmicCLI
-from gmic.parser import GmicFilterParser
 from imagemagick.cli import ImageMagickCLI
 from imagemagick.filters import get_builtin_filters as get_im_filters
 from nodes import (
-    NodeGraph, InputNode, OutputNode, FilterNode, BlendNode, ColorNode, MaskNode, Node,
+    NodeGraph, InputNode, OutputNode, Node,
 )
 from widgets.node_editor import NodeCanvas
 from widgets.filter_browser import FilterBrowser

@@ -2,7 +2,7 @@ import os
 import gettext
 from typing import Optional
 
-from models.filter import FilterDef, ParamValue, ParamKind, ENGINE_GMIC
+from models.filter import FilterDef, ParamValue, ParamKind
 from nodes.graph import Node, Port, PortDirection, PortType
 
 try:

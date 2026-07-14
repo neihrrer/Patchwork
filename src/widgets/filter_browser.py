@@ -1,5 +1,4 @@
 import gettext
-from collections import defaultdict
 from typing import Optional
 
 import gi
@@ -90,10 +89,6 @@ def _format_category(cat: list[str]) -> str:
     if cat[0].lower() == "about":
         return ""
     return "/".join(cat)
-
-
-def _engine_label(engine: str) -> str:
-    return _ROOT_GMIC if engine == ENGINE_GMIC else _ROOT_IMAGEMAGICK
 
 
 class FilterBrowser(GObject.Object):
