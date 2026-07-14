@@ -81,13 +81,10 @@ class RingApplication(Adw.Application):
             builder = Gtk.Builder.new_from_file(ui_path)
         else:
             builder = Gtk.Builder.new_from_resource("/io/github/neihrrer/Ring/shortcuts.ui")
-        dialog = None
         for obj in builder.get_objects():
-            if isinstance(obj, Adw.ShortcutsDialog):
-                dialog = obj
-                break
-        if dialog:
-            dialog.present(self._window)
+            if isinstance(obj, Gtk.ShortcutsWindow):
+                obj.present(self._window)
+                return
 
     def do_activate(self):
         if not self._window:
