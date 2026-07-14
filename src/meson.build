@@ -1,4 +1,5 @@
 blueprint_compiler = find_program('blueprint-compiler', required: true)
+ui_dir = join_paths(get_option('datadir'), 'ring')
 
 # Compile blueprints to XML
 window_ui = custom_target(
@@ -6,6 +7,8 @@ window_ui = custom_target(
   input: 'resources/window.blp',
   output: 'window.ui',
   command: [blueprint_compiler, 'compile', '@INPUT@', '--output', '@OUTPUT@'],
+  install: true,
+  install_dir: ui_dir,
   build_by_default: true,
 )
 
@@ -14,6 +17,8 @@ shortcuts_ui = custom_target(
   input: 'resources/shortcuts.blp',
   output: 'shortcuts.ui',
   command: [blueprint_compiler, 'compile', '@INPUT@', '--output', '@OUTPUT@'],
+  install: true,
+  install_dir: ui_dir,
   build_by_default: true,
 )
 
@@ -42,8 +47,3 @@ subdir('imagemagick')
 subdir('nodes')
 subdir('widgets')
 subdir('processing')
-
-# Install UI files
-ui_dir = join_paths(get_option('datadir'), 'ring')
-install_data(window_ui, install_dir: ui_dir)
-install_data(shortcuts_ui, install_dir: ui_dir)
