@@ -1,6 +1,16 @@
 .filter-list row {
-  min-height: 30px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  overflow: visible;
   background: @sidebar_bg_color;
+}
+
+.filter-list .tree-gutter {
+  background: transparent;
+  overflow: visible;
+  min-height: 0;
 }
 
 .filter-list row:selected {
@@ -10,7 +20,7 @@
 .filter-list row.category-row {
   background: @sidebar_bg_color;
   border-bottom: 1px solid @borders;
-  margin-top: 3px;
+  margin-top: 2px;
 }
 
 .filter-list row.category-row:first-child {
@@ -34,6 +44,7 @@
 
 .filter-list {
   background: @sidebar_bg_color;
+  row-spacing: 0;
 }
 
 .filter-list row.category-row:selected {

@@ -1,6 +1,7 @@
 import gettext
 from typing import Optional
 
+import cairo
 import gi
 
 try:
@@ -25,6 +26,8 @@ from gi.repository import GObject, Gtk, Gio, GLib, Gdk
 
 from models.filter import FilterDef, ENGINE_GMIC, ENGINE_IMAGEMAGICK
 
+
+_GUTTER_INDENT = 22
 
 _ROOT_GMIC = "G'mic"
 _ROOT_IMAGEMAGICK = "ImageMagick"
@@ -57,6 +60,7 @@ class TreeItemNode(GObject.Object):
         self._display_name = display_name
         self._node_type = node_type
         self._filter_def = filter_def
+        self.is_last_child = False
 
     @GObject.Property(type=str)
     def display_name(self) -> str:
@@ -158,11 +162,18 @@ class FilterBrowser(GObject.Object):
         for i in range(n):
             try:
                 row = model.get_row(i)
-                if row and row.get_expandable():
+                if row and row.is_expandable():
                     row.set_expanded(True)
                     self._expand_recursive(row.get_model())
             except Exception:
                 pass
+
+    @staticmethod
+    def _mark_last_child(store):
+        n = store.get_n_items()
+        if n > 0:
+            store.get_item(n - 1).is_last_child = True
+        return store
 
     def _create_children_func(self, item: TreeItemNode):
         if item.node_type == "root":
@@ -173,14 +184,14 @@ class FilterBrowser(GObject.Object):
                     if ntype == "blend":
                         node._blend_mode = "over"
                     store.append(node)
-                return store
+                return self._mark_last_child(store)
 
             if item.display_name == _ROOT_MATH:
                 store = Gio.ListStore.new(TreeItemNode)
                 for _key, label, ntype in _MATH_ITEMS:
                     node = TreeItemNode(display_name=label, node_type=ntype)
                     store.append(node)
-                return store
+                return self._mark_last_child(store)
 
             if item.display_name == _ROOT_IMAGEMAGICK:
                 engine = ENGINE_IMAGEMAGICK
@@ -203,7 +214,7 @@ class FilterBrowser(GObject.Object):
             for cat in cats:
                 node = TreeItemNode(display_name=cat, node_type="category")
                 store.append(node)
-            return store
+            return self._mark_last_child(store)
         elif item.node_type == "category":
             cat_name = item.display_name
             store = Gio.ListStore.new(TreeItemNode)
@@ -213,27 +224,92 @@ class FilterBrowser(GObject.Object):
                 if _format_category(f.category) == cat_name:
                     node = TreeItemNode(display_name=f.display_name, node_type="filter", filter_def=f)
                     store.append(node)
-            return store
+            return self._mark_last_child(store)
         return None
 
     def set_filter(self, text: str):
         self._rebuild_model(text)
 
-    def _on_factory_setup(self, factory, list_item):
-        expander = Gtk.TreeExpander()
-        expander.set_indent_for_depth(True)
-        expander.set_indent_for_icon(True)
+    def _on_gutter_draw(self, area, cr, width, height, data):
+        depth = getattr(area, '_depth', 0)
+        is_last = getattr(area, '_is_last', False)
+        if depth <= 0:
+            return
 
-        vbox = Gtk.Box(orientation="vertical", spacing=2, margin_start=12, margin_end=12)
+        cr.set_line_cap(cairo.LineCap.ROUND)
+        cr.set_line_join(cairo.LineJoin.ROUND)
+        fg = area.get_color()
+        cr.set_source_rgba(fg.red, fg.green, fg.blue, 1.0)
+        cr.set_line_width(1.5)
+
+        for d in range(1, depth):
+            x = d * _GUTTER_INDENT - _GUTTER_INDENT // 2
+            cr.move_to(x, -3)
+            cr.line_to(x, height + 3)
+            cr.stroke()
+
+        stem_x = depth * _GUTTER_INDENT - _GUTTER_INDENT // 2
+        if depth > 1:
+            stem_x -= 0.25 * (depth - 1) * _GUTTER_INDENT // 2
+        y_mid = height / 2.0
+
+        if is_last:
+            cr.move_to(stem_x, -3)
+            cr.line_to(stem_x, height * 0.25)
+            cr.stroke()
+        else:
+            cr.move_to(stem_x, -3)
+            cr.line_to(stem_x, height + 3)
+            cr.stroke()
+
+        off = 6.0
+        cr.move_to(stem_x, off)
+        r = 8.0
+        k = 0.5522847498
+        cr.curve_to(
+            stem_x, off + r * k,
+            stem_x + r * (1.0 - k), off + r,
+            stem_x + r, off + r,
+        )
+        cr.stroke()
+
+        cr.move_to(stem_x + r, off + r)
+        cr.line_to(width, off + r)
+        cr.stroke()
+        cr.fill()
+
+    def _on_factory_setup(self, factory, list_item):
+        wrapper = Gtk.Box(orientation="horizontal", spacing=0)
+        wrapper.set_margin_top(0)
+        wrapper.set_margin_bottom(0)
+
+        gutter = Gtk.DrawingArea()
+        gutter.set_valign(Gtk.Align.FILL)
+        gutter.set_margin_top(0)
+        gutter.set_margin_bottom(0)
+        gutter.add_css_class("tree-gutter")
+        gutter.set_draw_func(self._on_gutter_draw, None)
+
+        expander = Gtk.TreeExpander()
+        expander.set_indent_for_depth(False)
+        expander.set_indent_for_icon(False)
+        expander.set_margin_top(0)
+        expander.set_margin_bottom(0)
+
+        hbox = Gtk.Box(orientation="horizontal", spacing=0)
+        vbox = Gtk.Box(orientation="vertical", spacing=1, margin_start=4, margin_end=8)
         name_label = Gtk.Label(xalign=0, hexpand=True)
         cat_label = Gtk.Label(xalign=0, hexpand=True)
         cat_label.add_css_class("caption")
         cat_label.add_css_class("dim-label")
-
         vbox.append(name_label)
         vbox.append(cat_label)
-        expander.set_child(vbox)
-        list_item.set_child(expander)
+        hbox.append(vbox)
+        expander.set_child(hbox)
+
+        wrapper.append(gutter)
+        wrapper.append(expander)
+        list_item.set_child(wrapper)
 
         drag_src = Gtk.DragSource()
         drag_src.set_actions(Gdk.DragAction.COPY)
@@ -241,7 +317,13 @@ class FilterBrowser(GObject.Object):
         expander.add_controller(drag_src)
 
     def _on_factory_bind(self, factory, list_item):
-        expander = list_item.get_child()
+        wrapper = list_item.get_child()
+        if not wrapper:
+            return
+        gutter = wrapper.get_first_child()
+        expander = gutter.get_next_sibling()
+        if not expander:
+            return
 
         try:
             pos = list_item.get_position()
@@ -255,14 +337,17 @@ class FilterBrowser(GObject.Object):
         item = list_item.get_item()
         if isinstance(item, Gtk.TreeListRow):
             node = item.get_item()
+            depth = item.get_depth()
         else:
             node = item
+            depth = 0
         if not node:
             return
 
         expander._tree_item_node = node
 
-        vbox = expander.get_child()
+        hbox = expander.get_child()
+        vbox = hbox.get_first_child()
         name_label = vbox.get_first_child()
         cat_label = name_label.get_next_sibling()
 
@@ -270,19 +355,24 @@ class FilterBrowser(GObject.Object):
         name_label.set_tooltip_text(node.display_name)
         name_label.get_style_context().remove_class("heading")
 
+        gutter.set_size_request(max(3, depth * _GUTTER_INDENT), -1)
+        gutter._depth = depth
+        gutter._is_last = getattr(node, 'is_last_child', False)
+        gutter.queue_draw()
+
         if node.node_type == "category":
             name_label.set_margin_top(8)
             name_label.set_margin_bottom(4)
             cat_label.set_label("")
             cat_label.hide()
         elif node.node_type == "filter" and node.filter_def:
-            name_label.set_margin_top(5)
+            name_label.set_margin_top(4)
             name_label.set_margin_bottom(4)
             cat_label.set_label("")
             cat_label.hide()
         else:
             name_label.set_margin_top(6)
-            name_label.set_margin_bottom(4)
+            name_label.set_margin_bottom(3)
             cat_label.set_label("")
             cat_label.hide()
 
