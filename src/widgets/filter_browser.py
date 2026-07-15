@@ -242,6 +242,8 @@ class FilterBrowser(GObject.Object):
         cr.set_source_rgba(fg.red, fg.green, fg.blue, 1.0)
         cr.set_line_width(1.5)
 
+        cr.push_group()
+
         for d in range(1, depth):
             x = d * _GUTTER_INDENT - _GUTTER_INDENT // 2
             cr.move_to(x, -3)
@@ -251,7 +253,6 @@ class FilterBrowser(GObject.Object):
         stem_x = depth * _GUTTER_INDENT - _GUTTER_INDENT // 2
         if depth > 1:
             stem_x -= 0.25 * (depth - 1) * _GUTTER_INDENT // 2
-        y_mid = height / 2.0
 
         if is_last:
             cr.move_to(stem_x, -3)
@@ -262,10 +263,10 @@ class FilterBrowser(GObject.Object):
             cr.line_to(stem_x, height + 3)
             cr.stroke()
 
-        off = 6.0
+        off = 8.0
         cr.move_to(stem_x, off)
         r = 8.0
-        k = 0.5522847498
+        k = 0.5
         cr.curve_to(
             stem_x, off + r * k,
             stem_x + r * (1.0 - k), off + r,
@@ -277,6 +278,9 @@ class FilterBrowser(GObject.Object):
         cr.line_to(width, off + r)
         cr.stroke()
         cr.fill()
+
+        cr.pop_group_to_source()
+        cr.paint_with_alpha(0.15)
 
     def _on_factory_setup(self, factory, list_item):
         wrapper = Gtk.Box(orientation="horizontal", spacing=0)
@@ -360,21 +364,10 @@ class FilterBrowser(GObject.Object):
         gutter._is_last = getattr(node, 'is_last_child', False)
         gutter.queue_draw()
 
-        if node.node_type == "category":
-            name_label.set_margin_top(8)
-            name_label.set_margin_bottom(4)
-            cat_label.set_label("")
-            cat_label.hide()
-        elif node.node_type == "filter" and node.filter_def:
-            name_label.set_margin_top(4)
-            name_label.set_margin_bottom(4)
-            cat_label.set_label("")
-            cat_label.hide()
-        else:
-            name_label.set_margin_top(6)
-            name_label.set_margin_bottom(3)
-            cat_label.set_label("")
-            cat_label.hide()
+        name_label.set_margin_top(8)
+        name_label.set_margin_bottom(8)
+        cat_label.set_label("")
+        cat_label.hide()
 
     def _on_drag_prepare(self, drag_source, x, y):
         global _pending_drag_text
