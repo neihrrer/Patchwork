@@ -80,6 +80,7 @@ _PARAM_TYPES = {
     "color": ParamKind.COLOR,
     "point": ParamKind.POINT,
     "text": ParamKind.TEXT,
+    "value": ParamKind.TEXT,
     "file_in": ParamKind.FILE,
     "file_out": ParamKind.FILE,
     "file": ParamKind.FILE,
@@ -133,6 +134,9 @@ def _parse_param_def(text: str) -> Optional[ParamDef]:
     kind = _PARAM_TYPES.get(type_name)
     if kind is None:
         return None
+
+    if type_name == "value":
+        is_hidden = True
 
     default = None
     min_val = None
@@ -269,19 +273,12 @@ def _join_continuations(lines: list[str]) -> list[str]:
 
 
 def _munge_gui_command(command: str) -> str:
+    # Format: "command, preview_command(zoom_factor)[*|+]" or just "command"
+    # Always pick the first (non-preview) command
     command = command.strip()
-    # Find the part with parentheses — that is the filter command with defaults
-    main_part = None
-    for p in command.split(","):
-        if "(" in p:
-            main_part = p.strip()
-            break
-    if main_part is not None:
-        command = main_part.split("(")[0].strip()
-    else:
-        if "," in command:
-            command = command.split(",")[0]
-        command = command.split("(")[0].strip()
+    if "," in command:
+        command = command.split(",")[0].strip()
+    command = command.split("(")[0].strip()
     if command.endswith(":*"):
         command = command[:-2]
     return command
@@ -341,6 +338,16 @@ class GmicFilterParser:
                         pass
                 continue
 
+            # Extract multi-input flags (*, +) from the right-hand side
+            # Format: "command, preview_command(zoom_factor) [: *|+]"
+            image_input_count = 1
+            if " : " in rhs:
+                cmd_part, flags_part = rhs.rsplit(" : ", 1)
+                flags = flags_part.strip()
+                if flags in ("*", "+"):
+                    image_input_count = 2
+                rhs = cmd_part.strip()
+
             display_name = _strip_name(lhs)
             command = _munge_gui_command(rhs)
 
@@ -365,6 +372,7 @@ class GmicFilterParser:
                 description="",
                 parameters=[],
                 gmic_command=command,
+                image_input_count=image_input_count,
             )
             filters.append(current_filter)
 

@@ -127,9 +127,17 @@ class NodeGraph:
         self._edge_counter += 1
         edge = Edge(f"e{self._edge_counter}", src_node, src_port, dst_node, dst_port)
         self._edges.append(edge)
+        if dst_n:
+            dst_n.cache_dirty = True
         return edge
 
     def remove_edge(self, edge_id: str):
+        for e in self._edges:
+            if e.id == edge_id:
+                dst = self._nodes.get(e.dst_node)
+                if dst:
+                    dst.cache_dirty = True
+                break
         self._edges = [e for e in self._edges if e.id != edge_id]
 
     def remove_edges_for_port(self, node_id: str, port_name: str, direction: PortDirection):

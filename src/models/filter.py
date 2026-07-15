@@ -70,6 +70,7 @@ class FilterDef(GObject.Object):
         parameters: Optional[list[ParamDef]] = None,
         gmic_command: str = "",
         engine: str = ENGINE_GMIC,
+        image_input_count: int = 1,
     ):
         super().__init__()
         self._name = name
@@ -79,6 +80,7 @@ class FilterDef(GObject.Object):
         self._parameters = parameters or []
         self._gmic_command = gmic_command or name
         self._engine = engine
+        self._image_input_count = image_input_count
 
     @GObject.Property(type=str)
     def name(self) -> str:
@@ -135,6 +137,14 @@ class FilterDef(GObject.Object):
     @engine.setter
     def engine(self, value: str):
         self._engine = value
+
+    @property
+    def image_input_count(self) -> int:
+        return self._image_input_count
+
+    @image_input_count.setter
+    def image_input_count(self, value: int):
+        self._image_input_count = value
 
     def __repr__(self):
         return f"FilterDef({self._name}, engine={self._engine}, cat={self._category})"

@@ -36,7 +36,7 @@ class GmicCLI:
 
     def run_pipeline(
         self,
-        input_path: str,
+        input_paths: list[str],
         commands: list[str],
         output_path: Optional[str] = None,
         timeout: int = 120,
@@ -44,14 +44,15 @@ class GmicCLI:
         if not self.available:
             return GmicResult(False, error=_("gmic not found on system. Install it with your package manager."))
 
-        if not os.path.isfile(input_path):
-            return GmicResult(False, error=_("Input file not found: {}").format(input_path))
+        for path in input_paths:
+            if not os.path.isfile(path):
+                return GmicResult(False, error=_("Input file not found: {}").format(path))
 
         if output_path is None:
             fd, output_path = tempfile.mkstemp(suffix=".png")
             os.close(fd)
 
-        args = [self._gmic_path, input_path]
+        args = [self._gmic_path] + input_paths
         for cmd in commands:
             if not cmd.strip():
                 continue

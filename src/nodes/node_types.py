@@ -45,9 +45,11 @@ class OutputNode(Node):
 
 class FilterNode(Node):
     def __init__(self, id: str, filter_def: FilterDef, x: float = 0, y: float = 0):
-        inputs = [
-            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
-        ]
+        inputs = []
+        for i in range(filter_def.image_input_count):
+            label = "Image" if i == 0 else f"Image {i + 1}"
+            name = "image" if i == 0 else f"image_{i + 1}"
+            inputs.append(Port(id, name, label, PortDirection.INPUT, PortType.IMAGE))
         for p in filter_def.parameters:
             if p.kind in (ParamKind.INT, ParamKind.FLOAT) and not p.is_hidden:
                 inputs.append(Port(id, p.name, p.label, PortDirection.INPUT, PortType.NUMERIC))
@@ -61,6 +63,11 @@ class FilterNode(Node):
         self._param_values: dict[str, ParamValue] = {
             p.name: p.default for p in filter_def.parameters
         }
+        if filter_def.name == "fx_drawn_montage":
+            for p in filter_def.parameters:
+                if p.name == "Layer":
+                    p.is_hidden = True
+            self._param_values["Layer"] = 1
 
     @property
     def filter_def(self) -> FilterDef:

@@ -37,6 +37,8 @@ class GraphExecutor:
             if progress_callback:
                 progress_callback(f"Processing: {node.label}")
 
+            was_processed = True
+
             if isinstance(node, InputNode):
                 if node.file_path and os.path.isfile(node.file_path):
                     node_outputs[node.id] = node.file_path
@@ -46,11 +48,14 @@ class GraphExecutor:
                     return ProcessResult(error=f"Input node '{node.label}' has no file set")
 
             elif isinstance(node, FilterNode):
-                if node.cache_dirty or not node.cached_output_path:
-                    inp = self._first_input(node, graph, node_outputs)
-                    if not inp:
+                was_processed = node.cache_dirty or not node.cached_output_path
+                if was_processed:
+                    inputs = self._ordered_inputs(node, graph, node_outputs)
+                    if not inputs:
                         return ProcessResult(error=f"Filter '{node.label}' has no input connected")
-                    result = self._run_filter(node, inp, output_format, graph, numeric_outputs, self._timeout)
+                    if len(inputs) < node.filter_def.image_input_count:
+                        return ProcessResult(error=f"Filter '{node.label}' needs {node.filter_def.image_input_count} images, got {len(inputs)}")
+                    result = self._run_filter(node, inputs, output_format, graph, numeric_outputs, self._timeout)
                     if not result.success:
                         return result
                     node.cached_output_path = result.output_path
@@ -145,6 +150,13 @@ class GraphExecutor:
                     return ProcessResult(error=f"Divide by zero in node '{node.label}'")
                 numeric_outputs[node.id] = a / b
 
+            if was_processed:
+                for e in graph.edges:
+                    if e.src_node == node.id:
+                        dst = graph.nodes.get(e.dst_node)
+                        if dst:
+                            dst.cache_dirty = True
+
         has_output_nodes = any(isinstance(n, OutputNode) for n in graph.nodes.values())
 
         if self._output_paths:
@@ -195,14 +207,14 @@ class GraphExecutor:
         pairs.sort(key=lambda x: x[0])
         return [p for _, p in pairs]
 
-    def _run_filter(self, node: FilterNode, input_path: str, output_fmt: str,
+    def _run_filter(self, node: FilterNode, input_paths: list[str], output_fmt: str,
                      graph: Optional[NodeGraph] = None,
                      numeric_outputs: Optional[dict[str, float]] = None,
                      timeout: int = 120) -> ProcessResult:
         fd, out_path = tempfile.mkstemp(suffix="." + output_fmt)
         os.close(fd)
 
-        commands = [input_path, node.filter_def.gmic_command]
+        commands = [input_paths[0], node.filter_def.gmic_command]
         for p in node.filter_def.parameters:
             val = node.param_values.get(p.name, p.default)
             if p.kind in (ParamKind.INT, ParamKind.FLOAT) and not p.is_hidden and graph and numeric_outputs:
@@ -212,9 +224,9 @@ class GraphExecutor:
             commands[-1] += f",{_serialize_param(val, p)}"
 
         if node.filter_def.engine == ENGINE_GMIC:
-            result = self._gmic.run_pipeline(input_path, commands[1:], out_path, timeout=timeout)
+            result = self._gmic.run_pipeline(input_paths, commands[1:], out_path, timeout=timeout)
         else:
-            result = self._imagemagick.run_pipeline(input_path, commands[1:], out_path, timeout=timeout)
+            result = self._imagemagick.run_pipeline(input_paths[0], commands[1:], out_path, timeout=timeout)
 
         if result.success:
             return ProcessResult(output_path=result.output_path)
