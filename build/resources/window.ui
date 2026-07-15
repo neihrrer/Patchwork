@@ -107,18 +107,18 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                 <property name="tooltip-text" translatable="yes">Open Image</property>
               </object>
             </child>
-            <child>
-              <object class="GtkButton" id="render_button">
-                <property name="label" translatable="yes">Render</property>
-                <property name="sensitive">false</property>
-                <property name="tooltip-text" translatable="yes">Render the node graph</property>
-              </object>
-            </child>
             <child type="end">
               <object class="GtkButton" id="export_button">
                 <property name="icon-name">document-save-symbolic</property>
                 <property name="tooltip-text" translatable="yes">Export Result</property>
                 <property name="sensitive">false</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkButton" id="render_button">
+                <property name="icon-name">media-playback-start-symbolic</property>
+                <property name="sensitive">false</property>
+                <property name="tooltip-text" translatable="yes">Render the node graph</property>
               </object>
             </child>
           </object>
