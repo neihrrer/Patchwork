@@ -1,5 +1,5 @@
 from typing import Optional
-from models.filter import ParamDef, ParamValue
+from models.filter import ParamDef, ParamValue, ParamKind
 
 
 def _serialize_param(val: ParamValue, param_def: Optional[ParamDef] = None) -> str:
@@ -13,4 +13,7 @@ def _serialize_param(val: ParamValue, param_def: Optional[ParamDef] = None) -> s
         return str(val)
     if isinstance(val, list):
         return ",".join(str(v) for v in val)
-    return str(val).strip()
+    result = str(val).strip()
+    if param_def is not None and param_def.kind == ParamKind.TEXT:
+        result = f'"{result}"'
+    return result
