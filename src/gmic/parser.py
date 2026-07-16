@@ -284,10 +284,6 @@ def _munge_gui_command(command: str) -> str:
     return command
 
 
-def _is_testing_category(category: list[str]) -> bool:
-    return any("testing" in c.lower() for c in category)
-
-
 class GmicFilterParser:
     def __init__(self):
         self._builtin_filters = self._create_builtin_filters()
@@ -352,10 +348,6 @@ class GmicFilterParser:
             command = _munge_gui_command(rhs)
 
             if not command or command.startswith("_"):
-                continue
-
-            if _is_testing_category(folder_stack):
-                current_filter = None
                 continue
 
             filter_name = command.split()[0].split(",")[0].strip()

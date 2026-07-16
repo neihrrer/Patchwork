@@ -205,25 +205,43 @@ class FilterBrowser(GObject.Object):
                     continue
                 if f.engine != engine:
                     continue
-                cat_str = _format_category(f.category)
-                if cat_str and cat_str not in seen:
-                    seen.add(cat_str)
-                    cats.append(cat_str)
+                first = f.category[0] if f.category else "Various"
+                if first not in seen:
+                    seen.add(first)
+                    cats.append(first)
             cats.sort(key=str.casefold)
             store = Gio.ListStore.new(TreeItemNode)
-            for cat in cats:
-                node = TreeItemNode(display_name=cat, node_type="category")
+            for first in cats:
+                node = TreeItemNode(display_name=first, node_type="category")
+                node._category_path = [first]
                 store.append(node)
             return self._mark_last_child(store)
         elif item.node_type == "category":
-            cat_name = item.display_name
-            store = Gio.ListStore.new(TreeItemNode)
+            path = getattr(item, "_category_path", None)
+            if path is None:
+                return None
+
+            depth = len(path)
+            next_levels = set()
+            same_level = []
             for f in self._all_filters:
                 if self._is_excluded(f):
                     continue
-                if _format_category(f.category) == cat_name:
-                    node = TreeItemNode(display_name=f.display_name, node_type="filter", filter_def=f)
-                    store.append(node)
+                cat = f.category if f.category else ["Various"]
+                if cat[:depth] == path:
+                    if len(cat) > depth:
+                        next_levels.add(cat[depth])
+                    elif len(cat) == depth:
+                        same_level.append(f)
+
+            store = Gio.ListStore.new(TreeItemNode)
+            for seg in sorted(next_levels, key=str.casefold):
+                node = TreeItemNode(display_name=seg, node_type="category")
+                node._category_path = path + [seg]
+                store.append(node)
+            for f in same_level:
+                node = TreeItemNode(display_name=f.display_name, node_type="filter", filter_def=f)
+                store.append(node)
             return self._mark_last_child(store)
         return None
 

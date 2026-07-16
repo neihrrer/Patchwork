@@ -44,7 +44,7 @@ def fetch_community_files() -> Optional[str]:
                     parts.append(file_req.read().decode("utf-8", errors="replace"))
                 except (URLError, OSError, ValueError):
                     continue
-        result = "\n".join(parts)
+        result = "\n#@gui _\n".join(parts)
         if parts:
             CACHE_COMMUNITY.write_text(result, encoding="utf-8")
         return result
