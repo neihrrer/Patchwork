@@ -1,5 +1,6 @@
 import math
 import os
+import re
 import gettext
 from typing import Optional
 
@@ -332,3 +333,66 @@ class ProductNode(Node):
         super().__init__(id, "Product", "product", inputs, outputs, x, y)
         self.width = 160
         self.height = 80
+
+
+LABEL_COLORS = [
+    ("None", None),
+    ("Blue", "#62a0ea"),
+    ("Green", "#2ec27e"),
+    ("Yellow", "#f6d32d"),
+    ("Orange", "#ffa348"),
+    ("Red", "#c01c28"),
+    ("Purple", "#9141ac"),
+    ("Brown", "#b5835a"),
+    ("Grey", "#5e5c64"),
+]
+
+
+class LabelNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        super().__init__(id, "Label", "label", [], [], x, y)
+        self.width = 220
+        self.height = 100
+        self._color = None
+        self._text = _("Label")
+
+    @property
+    def color(self):
+        return self._color
+
+    @color.setter
+    def color(self, value):
+        self._color = value
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, value):
+        self._text = value
+
+
+class CommentNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        super().__init__(id, "Comment", "comment", [], [], x, y)
+        self.width = 280
+        self.height = 120
+        self._color = None
+        self._text = _("Comment")
+
+    @property
+    def color(self):
+        return self._color
+
+    @color.setter
+    def color(self, value):
+        self._color = value
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, value):
+        self._text = value

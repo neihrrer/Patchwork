@@ -102,6 +102,20 @@ navigation-split-view > separator {
 .node-header.round { background: #b37d4d; }
 .node-header.sum { background: #33b3b3; }
 .node-header.product { background: #b34d7d; }
+.node-header.label { background: #b3a33a; }
+.node-header.comment { background: #5a9a5a; }
+
+.node-label-content {
+    font-size: 18pt;
+    font-weight: bold;
+    color: @theme_fg_color;
+}
+.node-comment-content {
+    font-size: 11pt;
+    color: @theme_fg_color;
+}
+
+
 
 .node-title {
   font-weight: bold;

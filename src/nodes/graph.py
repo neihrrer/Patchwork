@@ -1,5 +1,11 @@
+import gettext
 from enum import Enum, auto
 from typing import Optional
+
+try:
+    _ = gettext.gettext
+except Exception:
+    _ = lambda s: s
 
 
 class PortDirection(Enum):
@@ -248,6 +254,9 @@ class NodeGraph:
                 nd["params"]["threshold"] = n.threshold
             elif isinstance(n, ConstantNode):
                 nd["params"]["value"] = n.value
+            elif isinstance(n, (LabelNode, CommentNode)):
+                nd["params"]["text"] = n.text
+                nd["params"]["color"] = n.color
             nodes_data.append(nd)
 
         edges_data = []
@@ -273,6 +282,7 @@ class NodeGraph:
             OpacityNode, ColoringNode, MaskNode,
             ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
             CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+            LabelNode, CommentNode,
         )
         graph = NodeGraph()
         for nd in data.get("nodes", []):
@@ -334,6 +344,14 @@ class NodeGraph:
             elif typ in ("ceil", "floor", "round", "sum", "product"):
                 cls = {"ceil": CeilNode, "floor": FloorNode, "round": RoundNode, "sum": SumNode, "product": ProductNode}[typ]
                 node = cls(nid, x, y)
+            elif typ == "label":
+                node = LabelNode(nid, x, y)
+                node.text = params.get("text", _("Label"))
+                node.color = params.get("color")
+            elif typ == "comment":
+                node = CommentNode(nid, x, y)
+                node.text = params.get("text", _("Comment"))
+                node.color = params.get("color")
             if node:
                 node.width = nd.get("width", node.width)
                 node.height = nd.get("height", node.height)

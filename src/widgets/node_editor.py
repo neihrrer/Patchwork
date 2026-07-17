@@ -20,7 +20,9 @@ from nodes import (
     OpacityNode, ColoringNode, MaskNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+    LabelNode, CommentNode,
 )
+from nodes.node_types import LABEL_COLORS
 from models.filter import FilterDef, ParamKind
 from .filter_browser import get_pending_drag_text
 
@@ -286,6 +288,9 @@ class NodeWidget(Gtk.Box):
             self.add_css_class("selected")
         else:
             self.remove_css_class("selected")
+        if isinstance(self._node, (LabelNode, CommentNode)):
+            if hasattr(self, "_color_row"):
+                self._color_row.set_visible(sel)
         self.queue_draw()
         for pw in self._input_port_widgets.values():
             pw.queue_draw()
@@ -313,8 +318,11 @@ class NodeWidget(Gtk.Box):
         click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
         row.add_controller(click)
         self._left_box.append(row)
-
     def _build_ui(self):
+        if isinstance(self._node, (LabelNode, CommentNode)):
+            self._build_text_node_ui()
+            return
+
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         header.set_css_classes(["node-header"])
         header.set_hexpand(True)
@@ -346,6 +354,7 @@ class NodeWidget(Gtk.Box):
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
             pw = PortWidget(inp, self)
             self._input_port_widgets[inp.name] = pw
+
             lbl = Gtk.Label(label=inp.label, xalign=0)
             lbl.set_css_classes(["port-label"])
             row.append(pw)
@@ -421,6 +430,209 @@ class NodeWidget(Gtk.Box):
                 click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
                 row.add_controller(click)
                 self._left_box.append(row)
+
+    def _build_text_node_ui(self):
+        is_label = isinstance(self._node, LabelNode)
+        self._thumb_box = None
+        self._thumb_picture = None
+
+        outer_overlay = Gtk.Overlay()
+        outer_overlay.set_hexpand(True)
+        outer_overlay.set_vexpand(True)
+
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        body.set_hexpand(True)
+        body.set_vexpand(True)
+        self._body = body
+        body.set_name(f"node-body-{self._node.id.replace('-', '_')}")
+
+        self._text_stack = Gtk.Stack()
+        self._text_stack.set_hexpand(True)
+        self._text_stack.set_vexpand(True)
+        self._text_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+
+        display_label = Gtk.Label(label=self._node.text)
+        display_label.set_xalign(0.5)
+        display_label.set_yalign(0.5)
+        display_label.set_hexpand(True)
+        display_label.set_vexpand(True)
+        display_label.set_halign(Gtk.Align.FILL)
+        display_label.set_valign(Gtk.Align.FILL)
+        display_label.set_wrap(True)
+        css_class = "node-label-content" if is_label else "node-comment-content"
+        display_label.set_css_classes([css_class])
+        display_label.set_margin_start(8)
+        display_label.set_margin_end(8)
+        display_label.set_margin_top(8)
+        display_label.set_margin_bottom(8)
+        self._display_label = display_label
+        self._text_stack.add_child(display_label)
+
+        if is_label:
+            entry = Gtk.Entry()
+            entry.set_text(self._node.text)
+            entry.set_halign(Gtk.Align.FILL)
+            entry.set_margin_start(8)
+            entry.set_margin_end(8)
+            entry.set_margin_top(8)
+            entry.set_margin_bottom(8)
+            entry.connect("activate", self._on_text_entry_activated)
+            efocus = Gtk.EventControllerFocus()
+            efocus.connect("leave", lambda ctrl: self._on_text_edit_focus_out())
+            entry.add_controller(efocus)
+            self._edit_entry = entry
+            self._text_stack.add_child(entry)
+            self._text_stack.set_visible_child(display_label)
+        else:
+            sw = Gtk.ScrolledWindow()
+            sw.set_hexpand(True)
+            sw.set_vexpand(True)
+            sw.set_margin_start(8)
+            sw.set_margin_end(8)
+            sw.set_margin_top(8)
+            sw.set_margin_bottom(8)
+            tv = Gtk.TextView()
+            tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+            tv.set_hexpand(True)
+            tv.set_vexpand(True)
+            buf = tv.get_buffer()
+            buf.set_text(self._node.text)
+            vfocus = Gtk.EventControllerFocus()
+            vfocus.connect("leave", lambda ctrl: self._on_text_edit_focus_out())
+            tv.add_controller(vfocus)
+            self._edit_view = tv
+            sw.set_child(tv)
+            self._text_stack.add_child(sw)
+            self._text_stack.set_visible_child(display_label)
+
+        body.append(self._text_stack)
+
+        self._color_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._color_row.set_hexpand(True)
+        self._color_row.set_margin_start(4)
+        self._color_row.set_margin_end(4)
+        self._color_row.set_margin_bottom(4)
+        self._color_row.set_visible(False)
+
+        color_label = Gtk.Label(label=_("Color:"))
+        color_label.set_css_classes(["caption"])
+        self._color_row.append(color_label)
+
+        color_store = Gtk.StringList()
+        for cname, _chex in LABEL_COLORS:
+            color_store.append(cname)
+
+        dd = Gtk.DropDown(model=color_store)
+        current_color = self._node.color
+        idx = 0
+        if current_color:
+            for i, (_cname, chex) in enumerate(LABEL_COLORS):
+                if chex == current_color:
+                    idx = i
+                    break
+        dd.set_selected(idx)
+        dd.connect("notify::selected", self._on_color_changed)
+        self._color_dropdown = dd
+        self._color_row.append(dd)
+        body.append(self._color_row)
+
+        outer_overlay.set_child(body)
+
+        self._resize_handle = Gtk.Box()
+        self._resize_handle.set_size_request(12, 12)
+        self._resize_handle.set_halign(Gtk.Align.END)
+        self._resize_handle.set_valign(Gtk.Align.END)
+        self._resize_handle.add_css_class("resize-handle")
+        self._resize_handle.set_cursor(Gdk.Cursor.new_from_name("se-resize"))
+        self._resize_handle.set_visible(True)
+        outer_overlay.add_overlay(self._resize_handle)
+
+        self.append(outer_overlay)
+        self._min_node_w = 120
+        self._min_node_h = 60
+
+        click_ctrl = Gtk.GestureClick(button=1)
+        click_ctrl.connect("pressed", self._on_click)
+        self.add_controller(click_ctrl)
+
+        right_click_ctrl = Gtk.GestureClick(button=3)
+        right_click_ctrl.connect("pressed", self._on_right_click)
+        self.add_controller(right_click_ctrl)
+
+        self._apply_color_background(self._node.color)
+
+    def _start_text_edit(self):
+        is_label = isinstance(self._node, LabelNode)
+        if is_label:
+            self._edit_entry.set_text(self._node.text)
+            self._text_stack.set_visible_child(self._edit_entry)
+            self._edit_entry.grab_focus()
+        else:
+            buf = self._edit_view.get_buffer()
+            buf.set_text(self._node.text)
+            self._text_stack.set_visible_child(self._edit_view.get_parent())
+            self._edit_view.grab_focus()
+
+    def _finish_text_edit(self):
+        is_label = isinstance(self._node, LabelNode)
+        if is_label:
+            text = self._edit_entry.get_text()
+        else:
+            buf = self._edit_view.get_buffer()
+            start = buf.get_start_iter()
+            end = buf.get_end_iter()
+            text = buf.get_text(start, end, False)
+        self._node.text = text
+        self._display_label.set_label(text)
+        self._text_stack.set_visible_child(self._display_label)
+        self._canvas.emit("graph-changed")
+
+    def _on_text_entry_activated(self, entry):
+        self._finish_text_edit()
+
+    def _on_text_edit_focus_out(self, *args):
+        if self._text_stack.get_visible_child() is not self._display_label:
+            self._finish_text_edit()
+
+    def _on_color_changed(self, dd, pspec):
+        idx = dd.get_selected()
+        if idx != Gtk.INVALID_LIST_POSITION and idx < len(LABEL_COLORS):
+            _cname, hex_color = LABEL_COLORS[idx]
+            self._node.color = hex_color
+            self._apply_color_background(hex_color)
+            self._canvas.emit("graph-changed")
+
+    def _apply_color_background(self, hex_color):
+        if hasattr(self, "_bg_css_provider") and self._bg_css_provider:
+            try:
+                display = Gdk.Display.get_default()
+                if display:
+                    Gtk.StyleContext.remove_provider_for_display(display, self._bg_css_provider)
+            except Exception:
+                pass
+            self._bg_css_provider = None
+        if hex_color:
+            bid = self._node.id.replace("-", "_")
+            css = (
+                f"#node-body-{bid}, #node-body-{bid} textview,"
+                f" #node-body-{bid} textview text,"
+                f" #node-body-{bid} entry,"
+                f" #node-body-{bid} scrolledwindow"
+                f" {{ background: {hex_color}; }}\n"
+                f"#node-body-{bid} {{ border-radius: 8px; }}"
+            )
+            provider = Gtk.CssProvider()
+            provider.load_from_data(css.encode())
+            try:
+                display = Gdk.Display.get_default()
+                if display:
+                    Gtk.StyleContext.add_provider_for_display(
+                        display, provider, Gtk.STYLE_PROVIDER_PRIORITY_USER
+                    )
+                    self._bg_css_provider = provider
+            except Exception:
+                self._bg_css_provider = None
+        self.queue_draw()
 
     def _build_params(self):
         if isinstance(self._node, FilterNode):
@@ -681,13 +893,16 @@ class NodeWidget(Gtk.Box):
             pw.set_size_request(max(1, int(14 * zoom)), max(1, int(14 * zoom)))
         for pw in self._output_port_widgets.values():
             pw.set_size_request(max(1, int(14 * zoom)), max(1, int(14 * zoom)))
-        hs = max(1, int(12 * zoom))
-        self._resize_handle.set_size_request(hs, hs)
+        if self._resize_handle:
+            hs = max(1, int(12 * zoom))
+            self._resize_handle.set_size_request(hs, hs)
         margin = max(1, int(5 * zoom))
-        self._left_box.set_margin_top(margin)
-        self._left_box.set_margin_bottom(margin)
-        self._right_box.set_margin_top(margin)
-        self._right_box.set_margin_bottom(margin)
+        if hasattr(self, "_left_box") and self._left_box:
+            self._left_box.set_margin_top(margin)
+            self._left_box.set_margin_bottom(margin)
+        if hasattr(self, "_right_box") and self._right_box:
+            self._right_box.set_margin_top(margin)
+            self._right_box.set_margin_bottom(margin)
         for ctrl in self._ctrl_widgets:
             if isinstance(ctrl, Gtk.SpinButton):
                 ctrl.set_size_request(max(40, int(80 * zoom)), max(20, int(28 * zoom)))
@@ -713,7 +928,6 @@ class NodeWidget(Gtk.Box):
             _, self._resize_start_px, self._resize_start_py = event.get_position()
 
     def _update_resize(self, gesture, offset_x, offset_y):
-        aspect = self._image_aspect or 1.0
         event = gesture.get_last_event()
         if not event:
             return
@@ -721,12 +935,17 @@ class NodeWidget(Gtk.Box):
         zoom = self._canvas._zoom
         dx = (cx - self._resize_start_px) / zoom
         dy = (cy - self._resize_start_py) / zoom
-        if abs(dx) >= abs(dy * aspect):
-            dw = dx
+        if self._image_aspect is not None:
+            aspect = self._image_aspect
+            if abs(dx) >= abs(dy * aspect):
+                dw = dx
+            else:
+                dw = dy * aspect
+            new_w = max(self._min_node_w, self._resize_start_w + dw)
+            new_h = max(self._min_node_h, int(new_w / aspect + 0.5))
         else:
-            dw = dy * aspect
-        new_w = max(self._min_node_w, self._resize_start_w + dw)
-        new_h = max(self._min_node_h, int(new_w / aspect + 0.5))
+            new_w = max(self._min_node_w, self._resize_start_w + dx)
+            new_h = max(self._min_node_h, self._resize_start_h + dy)
         self._logical_w = int(new_w)
         self._logical_h = int(new_h)
         self._node.width = self._logical_w
@@ -795,6 +1014,8 @@ class NodeWidget(Gtk.Box):
         self._canvas.grab_focus()
         if isinstance(self._node, InputNode) and not self._node.file_path:
             self._canvas.emit("input-node-open", self._node.id)
+        if isinstance(self._node, (LabelNode, CommentNode)) and n_press == 2:
+            self._start_text_edit()
 
     def _on_right_click(self, gesture, n_press, x, y):
         a = self.get_allocation()
@@ -909,6 +1130,8 @@ class Minimap(Gtk.Widget):
         "round": Gdk.RGBA(0.70, 0.50, 0.30, 1.0),
         "sum": Gdk.RGBA(0.20, 0.70, 0.70, 1.0),
         "product": Gdk.RGBA(0.70, 0.20, 0.50, 1.0),
+        "label": Gdk.RGBA(0.50, 0.50, 0.20, 1.0),
+        "comment": Gdk.RGBA(0.30, 0.60, 0.30, 1.0),
     }
 
     SIZE = (180, 130)
@@ -1577,6 +1800,26 @@ class NodeCanvas(Gtk.Overlay):
             gy = (y - self._pan_y) / self._zoom
             nid = "product_" + str(GLib.get_monotonic_time())
             node = ProductNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("label:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "label_" + str(GLib.get_monotonic_time())
+            node = LabelNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("comment:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "comment_" + str(GLib.get_monotonic_time())
+            node = CommentNode(nid, gx, gy)
             self.add_node(node)
             w = self.get_node_widget(nid)
             if w:

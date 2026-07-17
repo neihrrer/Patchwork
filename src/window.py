@@ -96,6 +96,8 @@ class RingWindow(Adw.ApplicationWindow):
             .node-header.round { background: #FFCC80; }
             .node-header.sum { background: #4DD0E1; }
             .node-header.product { background: #F48FB1; }
+            .node-header.label { background: #E6EE9C; }
+            .node-header.comment { background: #A5D6A7; }
         """)
 
         self._setup_ui()

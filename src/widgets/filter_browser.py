@@ -41,6 +41,8 @@ _BASIC_ITEMS = [
     ("mask", "Mask", "mask"),
     ("input", "Input", "input"),
     ("output", "Output", "output"),
+    ("label", "Label", "label"),
+    ("comment", "Comment", "comment"),
 ]
 
 _MATH_ITEMS = [
@@ -438,7 +440,7 @@ class FilterBrowser(GObject.Object):
                 _pending_drag_text = text
                 data = GLib.Bytes.new(text.encode("utf-8"))
                 return Gdk.ContentProvider.new_for_bytes("text/plain", data)
-            elif node.node_type in ("constant", "add", "subtract", "multiply", "divide", "ceil", "floor", "round", "sum", "product"):
+            elif node.node_type in ("constant", "add", "subtract", "multiply", "divide", "ceil", "floor", "round", "sum", "product", "label", "comment"):
                 text = f"{node.node_type}:"
                 _pending_drag_text = text
                 data = GLib.Bytes.new(text.encode("utf-8"))
