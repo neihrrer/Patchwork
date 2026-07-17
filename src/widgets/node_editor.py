@@ -42,6 +42,38 @@ def _compute_bezier_segments(x1, y1, x2, y2, segments=CURVE_SEGMENTS):
     return pts
 
 
+def _compute_numeric_value(node_id: str, graph: NodeGraph, visited: set = None):
+    if visited is None:
+        visited = set()
+    if node_id in visited:
+        return None
+    visited.add(node_id)
+
+    node = graph.get_node(node_id)
+    if not node:
+        return None
+
+    if isinstance(node, ConstantNode):
+        return node.value
+
+    if isinstance(node, (AddNode, SubtractNode, MultiplyNode, DivideNode)):
+        a_edge = graph.get_connected_input(node_id, "a")
+        b_edge = graph.get_connected_input(node_id, "b")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        b = _compute_numeric_value(b_edge.src_node, graph, visited) if b_edge else 0.0
+        if isinstance(node, AddNode):
+            return a + b
+        if isinstance(node, SubtractNode):
+            return a - b
+        if isinstance(node, MultiplyNode):
+            return a * b
+        if isinstance(node, DivideNode):
+            return a / b if b != 0 else None
+        return None
+
+    return None
+
+
 class PortWidget(Gtk.Widget):
     __gtype_name__ = "PortWidget"
 
@@ -191,6 +223,7 @@ class NodeWidget(Gtk.Box):
         self._param_controls: list[Gtk.Widget] = []
         self._ctrl_widgets: list[Gtk.Widget] = []
         self._inline_numeric_ports: set[str] = set()
+        self._port_spin_buttons: dict[str, Gtk.SpinButton] = {}
         self._thumb_box: Optional[Gtk.Box] = None
         self._thumb_picture: Optional[Gtk.Picture] = None
         self._image_aspect: Optional[float] = None
@@ -436,6 +469,7 @@ class NodeWidget(Gtk.Box):
         spin.connect("value-changed", lambda s: setattr(node, "opacity", s.get_value()))
         spin.set_css_classes(["node-param-control"])
         self._ctrl_widgets.append(spin)
+        self._port_spin_buttons["opacity"] = spin
         self._make_control_row("Opacity", "opacity", spin)
 
     def _build_coloring_params(self):
@@ -450,6 +484,7 @@ class NodeWidget(Gtk.Box):
             spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
             spin.set_css_classes(["node-param-control"])
             self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[attr] = spin
             self._make_control_row(label, attr, spin)
 
     def _build_mask_params(self):
@@ -476,6 +511,7 @@ class NodeWidget(Gtk.Box):
         spin.connect("value-changed", lambda s: setattr(node, "threshold", s.get_value()))
         spin.set_css_classes(["node-param-control"])
         self._ctrl_widgets.append(spin)
+        self._port_spin_buttons["threshold"] = spin
         self._make_control_row("Threshold", "threshold", spin)
 
     def _get_numeric_port_widget(self, port_name: str) -> Optional[PortWidget]:
@@ -509,10 +545,44 @@ class NodeWidget(Gtk.Box):
         node: ConstantNode = self._node
         adj = Gtk.Adjustment(value=node.value, lower=-999999, upper=999999, step_increment=1)
         spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=2)
-        spin.connect("value-changed", lambda s: setattr(node, "value", s.get_value()))
+        spin.connect("value-changed", lambda s: (setattr(node, "value", s.get_value()), self._canvas._update_all_port_colors()) or None)
         spin.set_css_classes(["node-param-control"])
         self._ctrl_widgets.append(spin)
+        self._port_spin_buttons["value"] = spin
         self._make_control_row("Value", "value", spin)
+
+    def _get_local_numeric_value(self, port_name: str) -> Optional[float]:
+        node = self._node
+        if isinstance(node, FilterNode):
+            for p in node.filter_def.parameters:
+                if p.name == port_name:
+                    return node.param_values.get(p.name, p.default)
+            return None
+        return getattr(node, port_name, None)
+
+    def update_numeric_controls(self, graph: NodeGraph):
+        node_id = self._node.id
+        for port_name, spin in self._port_spin_buttons.items():
+            edge = graph.get_connected_input(node_id, port_name)
+            if edge:
+                val = _compute_numeric_value(edge.src_node, graph)
+                if val is not None:
+                    spin.set_sensitive(False)
+                    adj = spin.get_adjustment()
+                    adj.set_value(val)
+                    spin.add_css_class("connected-numeric")
+                else:
+                    spin.set_sensitive(True)
+                    spin.remove_css_class("connected-numeric")
+                    local_val = self._get_local_numeric_value(port_name)
+                    if local_val is not None:
+                        spin.get_adjustment().set_value(local_val)
+            else:
+                spin.set_sensitive(True)
+                spin.remove_css_class("connected-numeric")
+                local_val = self._get_local_numeric_value(port_name)
+                if local_val is not None:
+                    spin.get_adjustment().set_value(local_val)
 
     def _make_control(self, p) -> Optional[Gtk.Widget]:
         node = self._node
@@ -525,6 +595,7 @@ class NodeWidget(Gtk.Box):
             spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=0)
             spin.connect("value-changed", lambda s: node.set_param(p.name, int(s.get_value())))
             self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[p.name] = spin
             return spin
         elif p.kind == ParamKind.FLOAT:
             lo = p.min_val or 0
@@ -533,6 +604,7 @@ class NodeWidget(Gtk.Box):
             spin = Gtk.SpinButton(adjustment=adj, climb_rate=0.1, digits=2)
             spin.connect("value-changed", lambda s: node.set_param(p.name, s.get_value()))
             self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[p.name] = spin
             return spin
         elif p.kind == ParamKind.BOOL:
             sw = Gtk.Switch()
@@ -1254,6 +1326,7 @@ class NodeCanvas(Gtk.Overlay):
             pw = w.get_input_port_widget(inp.name)
             if pw:
                 pw.set_connected(self._graph.get_connected_input(node.id, inp.name) is not None)
+        w.update_numeric_controls(self._graph)
 
     def _update_all_port_colors(self):
         for node in self._graph.nodes.values():
