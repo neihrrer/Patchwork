@@ -22,6 +22,11 @@ def get_pending_drag_text():
     _pending_drag_text = None
     return t
 
+
+def set_pending_drag_text(text: str):
+    global _pending_drag_text
+    _pending_drag_text = text
+
 from gi.repository import GObject, Gtk, Gio, GLib, Gdk
 
 from models.filter import FilterDef, ENGINE_GMIC, ENGINE_IMAGEMAGICK
@@ -113,6 +118,8 @@ class FilterBrowser(GObject.Object):
         factory.connect("bind", self._on_factory_bind)
 
         self._list_view.set_factory(factory)
+        self._list_view.connect("activate", self._on_list_activate)
+
         self._rebuild_model()
 
     def _is_excluded(self, f: FilterDef) -> bool:
@@ -145,7 +152,6 @@ class FilterBrowser(GObject.Object):
         self._selection = Gtk.SingleSelection.new(tree_model)
         self._selection.set_can_unselect(True)
         self._selection.set_autoselect(False)
-        self._selection.connect("selection-changed", self._on_selection_changed)
         self._list_view.set_model(self._selection)
 
         if not search_text:
@@ -399,49 +405,33 @@ class FilterBrowser(GObject.Object):
         name_label.set_margin_top(8)
         name_label.set_margin_bottom(8)
 
+    def _get_drag_text(self, node: TreeItemNode) -> Optional[str]:
+        if node.node_type == "filter" and node.filter_def:
+            fd = node.filter_def
+            return f"filter:{fd.engine}:{fd.name}"
+        text_map = {
+            "blend": "blend:over",
+            "opacity": "opacity:",
+            "mask": "mask:",
+            "coloring": "coloring:",
+            "input": "input:",
+            "output": "output:",
+        }
+        if node.node_type in text_map:
+            return text_map[node.node_type]
+        if node.node_type in ("constant", "add", "subtract", "multiply",
+                               "divide", "ceil", "floor", "round",
+                               "sum", "product", "label", "comment"):
+            return f"{node.node_type}:"
+        return None
+
     def _on_drag_prepare(self, drag_source, x, y):
         global _pending_drag_text
         widget = drag_source.get_widget()
         node = widget._tree_item_node if widget else None
         if node:
-            if node.node_type == "filter" and node.filter_def:
-                fd = node.filter_def
-                text = f"filter:{fd.engine}:{fd.name}"
-                _pending_drag_text = text
-                data = GLib.Bytes.new(text.encode("utf-8"))
-                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
-            elif node.node_type == "blend":
-                text = "blend:over"
-                _pending_drag_text = text
-                data = GLib.Bytes.new(text.encode("utf-8"))
-                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
-            elif node.node_type == "opacity":
-                text = "opacity:"
-                _pending_drag_text = text
-                data = GLib.Bytes.new(text.encode("utf-8"))
-                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
-            elif node.node_type == "mask":
-                text = "mask:"
-                _pending_drag_text = text
-                data = GLib.Bytes.new(text.encode("utf-8"))
-                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
-            elif node.node_type == "coloring":
-                text = "coloring:"
-                _pending_drag_text = text
-                data = GLib.Bytes.new(text.encode("utf-8"))
-                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
-            elif node.node_type == "input":
-                text = "input:"
-                _pending_drag_text = text
-                data = GLib.Bytes.new(text.encode("utf-8"))
-                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
-            elif node.node_type == "output":
-                text = "output:"
-                _pending_drag_text = text
-                data = GLib.Bytes.new(text.encode("utf-8"))
-                return Gdk.ContentProvider.new_for_bytes("text/plain", data)
-            elif node.node_type in ("constant", "add", "subtract", "multiply", "divide", "ceil", "floor", "round", "sum", "product", "label", "comment"):
-                text = f"{node.node_type}:"
+            text = self._get_drag_text(node)
+            if text:
                 _pending_drag_text = text
                 data = GLib.Bytes.new(text.encode("utf-8"))
                 return Gdk.ContentProvider.new_for_bytes("text/plain", data)
@@ -456,13 +446,15 @@ class FilterBrowser(GObject.Object):
         if position <= selected < position + removed:
             GLib.idle_add(lambda: self.emit("filter-selected", None) or GLib.SOURCE_REMOVE)
 
-    def _on_selection_changed(self, selection, position, n_items):
-        selected = selection.get_selected()
-        if selected != Gtk.INVALID_LIST_POSITION:
-            item = selection.get_selected_item()
-            if isinstance(item, Gtk.TreeListRow):
-                item = item.get_item()
-            if item and item.node_type == "filter" and item.filter_def:
-                self.emit("filter-selected", item.filter_def)
-                return
-        self.emit("filter-selected", None)
+    def set_filters(self, filters: list[FilterDef]):
+        self._all_filters = filters
+        self._rebuild_model()
+
+    def _on_list_activate(self, list_view, position):
+        item = self._selection.get_item(position)
+        if isinstance(item, Gtk.TreeListRow):
+            item = item.get_item()
+        if item:
+            text = self._get_drag_text(item)
+            if text:
+                self.emit("filter-selected", text)

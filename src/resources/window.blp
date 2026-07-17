@@ -11,6 +11,7 @@ Adw.Breakpoint bp {
   condition ("max-width: 700sp")
   setters {
     split_view.collapsed: true;
+    split_view.show-content: true;
   }
 }
 
@@ -27,6 +28,11 @@ Adw.NavigationPage sidebar_page {
     Adw.HeaderBar {
       styles ["sidebar-filter-headerbar"]
       [start]
+      Button back_to_canvas_button {
+        icon-name: "go-previous-symbolic";
+        tooltip-text: _("Back to Canvas");
+        visible: false;
+      }
       ToggleButton search_toggle {
         icon-name: "system-search-symbolic";
         tooltip-text: _("Search Filters");
@@ -75,6 +81,11 @@ Adw.NavigationPage content_page {
         title: _("Node Editor");
       };
       [start]
+      Button show_filters_button {
+        icon-name: "sidebar-show-symbolic";
+        tooltip-text: _("Show Filters");
+        visible: false;
+      }
       Button open_button {
         icon-name: "document-open-symbolic";
         tooltip-text: _("Open Image");

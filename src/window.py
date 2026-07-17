@@ -24,7 +24,7 @@ from nodes import (
     NodeGraph, InputNode, OutputNode, Node,
 )
 from widgets.node_editor import NodeCanvas
-from widgets.filter_browser import FilterBrowser
+from widgets.filter_browser import FilterBrowser, set_pending_drag_text
 from processing.graph_executor import GraphExecutor
 from processing.runner import ProcessResult
 
@@ -170,10 +170,34 @@ class RingWindow(Adw.ApplicationWindow):
             self.add_breakpoint(bp)
 
         self._toast_overlay = Adw.ToastOverlay()
-        split_view = builder.get_object("split_view")
+        self._split_view = builder.get_object("split_view")
+        split_view = self._split_view
         if split_view:
             self._toast_overlay.set_child(split_view)
             self.set_content(self._toast_overlay)
+
+        show_filters_button = builder.get_object("show_filters_button")
+        back_to_canvas_button = builder.get_object("back_to_canvas_button")
+
+        def _update_nav_buttons(*_args):
+            if not split_view:
+                return
+            collapsed = split_view.get_collapsed()
+            show_content = split_view.get_show_content()
+            if show_filters_button:
+                show_filters_button.set_visible(collapsed and show_content)
+            if back_to_canvas_button:
+                back_to_canvas_button.set_visible(collapsed and not show_content)
+
+        if show_filters_button:
+            show_filters_button.connect("clicked", lambda b: split_view.set_show_content(False))
+        if back_to_canvas_button:
+            back_to_canvas_button.connect("clicked", lambda b: split_view.set_show_content(True))
+
+        if split_view:
+            split_view.connect("notify::collapsed", _update_nav_buttons)
+            split_view.connect("notify::show-content", _update_nav_buttons)
+            _update_nav_buttons()
 
         self._setup_menu()
         self._setup_node_header_theme()
@@ -387,13 +411,20 @@ class RingWindow(Adw.ApplicationWindow):
 
     # ─── Filter browser ──────────────────────────────────────────────────────
 
-    def _on_filter_selected(self, browser, filter_def: Optional[FilterDef]):
-        if not filter_def or not self._canvas:
+    def _on_filter_selected(self, browser, payload):
+        if not payload or not self._canvas:
             return
+        if isinstance(payload, FilterDef):
+            text = f"filter:{payload.engine}:{payload.name}"
+        else:
+            text = payload
         if self._canvas._drop_target:
             alloc = self._canvas.get_allocation()
             x, y = alloc.width / 2, alloc.height / 2
-            self._canvas._on_drop(self._canvas._drop_target, f"filter:{filter_def.engine}:{filter_def.name}", x, y)
+            set_pending_drag_text(text)
+            self._canvas._on_drop(self._canvas._drop_target, text, x, y)
+        if getattr(self, '_split_view', None) and self._split_view.get_collapsed():
+            self._split_view.set_show_content(True)
 
     def _on_search_changed(self, entry):
         if self._filter_browser:
@@ -801,10 +832,7 @@ class RingWindow(Adw.ApplicationWindow):
             self._all_filter_defs = all_f
             self._filter_def_map = {f"{f.engine}:{f.name}": f for f in all_f}
             if self._filter_browser:
-                self._filter_browser = FilterBrowser(
-                    self._builder.get_object("filter_list"), all_f
-                )
-                self._filter_browser.connect("filter-selected", self._on_filter_selected)
+                self._filter_browser.set_filters(all_f)
             if self._canvas:
                 self._canvas.set_filter_defs(all_f)
             total = len(all_f)
