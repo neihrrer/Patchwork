@@ -45,12 +45,12 @@ _ROOT_BASIC = "Basic"
 _ROOT_MATH = "Math"
 
 _BASIC_ITEMS = [
-    ("blending", "Blending", "blend"),
-    ("opacity", "Opacity", "opacity"),
-    ("coloring", "Coloring", "coloring"),
-    ("mask", "Mask", "mask"),
     ("input", "Input", "input"),
     ("output", "Output", "output"),
+    ("blending", "Blending", "blend"),
+    ("mask", "Mask", "mask"),
+    ("coloring", "Coloring", "coloring"),
+    ("opacity", "Opacity", "opacity"),
     ("label", "Label", "label"),
     ("comment", "Comment", "comment"),
 ]
