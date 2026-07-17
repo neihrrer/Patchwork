@@ -27,3 +27,6 @@ venv/
 
 # Project specific
 *.ring
+
+# Runtime logs
+filter_errors.log
