@@ -328,6 +328,7 @@ class NodeWidget(Gtk.Box):
         header.set_hexpand(True)
         ctx = header.get_style_context()
         ctx.add_class(self._node.node_type)
+        self._header = header
 
         title = Gtk.Label(label=self._node.label, xalign=0, hexpand=True)
         title.set_css_classes(["node-title"])
@@ -1013,6 +1014,10 @@ class NodeWidget(Gtk.Box):
         self._canvas.select_node(self)
         self._canvas.grab_focus()
         if isinstance(self._node, InputNode) and not self._node.file_path:
+            if hasattr(self, '_header') and self._header:
+                h = self._header.get_allocation().height
+                if 0 <= y < h:
+                    return
             self._canvas.emit("input-node-open", self._node.id)
         if isinstance(self._node, (LabelNode, CommentNode)) and n_press == 2:
             self._start_text_edit()
