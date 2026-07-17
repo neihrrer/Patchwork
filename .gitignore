@@ -30,3 +30,5 @@ venv/
 
 # Runtime logs
 filter_errors.log
+
+negate
