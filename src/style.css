@@ -97,6 +97,11 @@ navigation-split-view > separator {
 .node-header.subtract { background: #9a3359; }
 .node-header.multiply { background: #2666a6; }
 .node-header.divide { background: #a62626; }
+.node-header.ceil { background: #7d4db3; }
+.node-header.floor { background: #4db37d; }
+.node-header.round { background: #b37d4d; }
+.node-header.sum { background: #33b3b3; }
+.node-header.product { background: #b34d7d; }
 
 .node-title {
   font-weight: bold;

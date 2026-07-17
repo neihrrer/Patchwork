@@ -1,3 +1,4 @@
+import math
 import os
 import gettext
 from typing import Optional
@@ -262,5 +263,72 @@ class DivideNode(Node):
             Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
         ]
         super().__init__(id, "Divide", "divide", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class CeilNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Ceiling", "ceil", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class FloorNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Floor", "floor", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class RoundNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Round", "round", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class SumNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Sum", "sum", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class ProductNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Product", "product", inputs, outputs, x, y)
         self.width = 160
         self.height = 80

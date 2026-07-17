@@ -91,6 +91,11 @@ class RingWindow(Adw.ApplicationWindow):
             .node-header.subtract { background: #E91E63; }
             .node-header.multiply { background: #1E88E5; }
             .node-header.divide { background: #F44336; }
+            .node-header.ceil { background: #B39DDB; }
+            .node-header.floor { background: #80CBC4; }
+            .node-header.round { background: #FFCC80; }
+            .node-header.sum { background: #4DD0E1; }
+            .node-header.product { background: #F48FB1; }
         """)
 
         self._setup_ui()

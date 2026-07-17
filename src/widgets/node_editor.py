@@ -19,6 +19,7 @@ from nodes import (
     Node, NodeGraph, Port, PortDirection, PortType, FilterNode, InputNode, OutputNode, BlendNode,
     OpacityNode, ColoringNode, MaskNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
+    CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
 )
 from models.filter import FilterDef, ParamKind
 from .filter_browser import get_pending_drag_text
@@ -56,20 +57,35 @@ def _compute_numeric_value(node_id: str, graph: NodeGraph, visited: set = None):
     if isinstance(node, ConstantNode):
         return node.value
 
-    if isinstance(node, (AddNode, SubtractNode, MultiplyNode, DivideNode)):
+    if isinstance(node, (AddNode, SubtractNode, MultiplyNode, DivideNode, SumNode, ProductNode)):
         a_edge = graph.get_connected_input(node_id, "a")
         b_edge = graph.get_connected_input(node_id, "b")
         a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
         b = _compute_numeric_value(b_edge.src_node, graph, visited) if b_edge else 0.0
-        if isinstance(node, AddNode):
+        if isinstance(node, (AddNode, SumNode)):
             return a + b
         if isinstance(node, SubtractNode):
             return a - b
-        if isinstance(node, MultiplyNode):
+        if isinstance(node, (MultiplyNode, ProductNode)):
             return a * b
         if isinstance(node, DivideNode):
             return a / b if b != 0 else None
         return None
+
+    if isinstance(node, CeilNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        return math.ceil(a)
+
+    if isinstance(node, FloorNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        return math.floor(a)
+
+    if isinstance(node, RoundNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        return round(a)
 
     return None
 
@@ -888,6 +904,11 @@ class Minimap(Gtk.Widget):
         "subtract": Gdk.RGBA(0.60, 0.20, 0.35, 1.0),
         "multiply": Gdk.RGBA(0.15, 0.40, 0.65, 1.0),
         "divide": Gdk.RGBA(0.65, 0.15, 0.15, 1.0),
+        "ceil": Gdk.RGBA(0.50, 0.30, 0.70, 1.0),
+        "floor": Gdk.RGBA(0.30, 0.70, 0.50, 1.0),
+        "round": Gdk.RGBA(0.70, 0.50, 0.30, 1.0),
+        "sum": Gdk.RGBA(0.20, 0.70, 0.70, 1.0),
+        "product": Gdk.RGBA(0.70, 0.20, 0.50, 1.0),
     }
 
     SIZE = (180, 130)
@@ -1506,6 +1527,56 @@ class NodeCanvas(Gtk.Overlay):
             gy = (y - self._pan_y) / self._zoom
             nid = "divide_" + str(GLib.get_monotonic_time())
             node = DivideNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("ceil:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "ceil_" + str(GLib.get_monotonic_time())
+            node = CeilNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("floor:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "floor_" + str(GLib.get_monotonic_time())
+            node = FloorNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("round:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "round_" + str(GLib.get_monotonic_time())
+            node = RoundNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("sum:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "sum_" + str(GLib.get_monotonic_time())
+            node = SumNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("product:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "product_" + str(GLib.get_monotonic_time())
+            node = ProductNode(nid, gx, gy)
             self.add_node(node)
             w = self.get_node_widget(nid)
             if w:

@@ -1,3 +1,4 @@
+import math
 import os
 import tempfile
 import subprocess
@@ -7,6 +8,7 @@ from nodes import (
     NodeGraph, InputNode, OutputNode, FilterNode, BlendNode, ColorNode,
     OpacityNode, ColoringNode, MaskNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
+    CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
 )
 from models.filter import ENGINE_GMIC, ParamKind
 from gmic.cli import GmicCLI
@@ -149,6 +151,28 @@ class GraphExecutor:
                 if b == 0.0:
                     return ProcessResult(error=f"Divide by zero in node '{node.label}'")
                 numeric_outputs[node.id] = a / b
+
+            elif isinstance(node, CeilNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = math.ceil(a)
+
+            elif isinstance(node, FloorNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = math.floor(a)
+
+            elif isinstance(node, RoundNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = round(a)
+
+            elif isinstance(node, SumNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = a + b
+
+            elif isinstance(node, ProductNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = a * b
 
             if was_processed:
                 for e in graph.edges:

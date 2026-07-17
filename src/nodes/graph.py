@@ -217,7 +217,8 @@ class NodeGraph:
             from nodes.node_types import (
                 InputNode, FilterNode, BlendNode, ColorNode,
                 OpacityNode, ColoringNode, MaskNode,
-                ConstantNode,
+                ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
+                CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
             )
             if isinstance(n, InputNode):
                 nd["params"]["file_path"] = n.file_path
@@ -271,6 +272,7 @@ class NodeGraph:
             InputNode, OutputNode, FilterNode, BlendNode, ColorNode,
             OpacityNode, ColoringNode, MaskNode,
             ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
+            CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
         )
         graph = NodeGraph()
         for nd in data.get("nodes", []):
@@ -328,6 +330,9 @@ class NodeGraph:
                 node.value = params.get("value", 0.0)
             elif typ in ("add", "subtract", "multiply", "divide"):
                 cls = {"add": AddNode, "subtract": SubtractNode, "multiply": MultiplyNode, "divide": DivideNode}[typ]
+                node = cls(nid, x, y)
+            elif typ in ("ceil", "floor", "round", "sum", "product"):
+                cls = {"ceil": CeilNode, "floor": FloorNode, "round": RoundNode, "sum": SumNode, "product": ProductNode}[typ]
                 node = cls(nid, x, y)
             if node:
                 node.width = nd.get("width", node.width)
