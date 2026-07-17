@@ -262,15 +262,20 @@ class FilterBrowser(GObject.Object):
 
         cr.push_group()
 
+        ancestor_last = getattr(area, '_ancestor_last', [])
         for d in range(1, depth):
+            if d - 1 < len(ancestor_last) and ancestor_last[d - 1]:
+                continue
             x = d * _GUTTER_INDENT - _GUTTER_INDENT // 2
+            if d > 1:
+                x -= 3
             cr.move_to(x, -3)
             cr.line_to(x, height + 3)
             cr.stroke()
 
         stem_x = depth * _GUTTER_INDENT - _GUTTER_INDENT // 2
         if depth > 1:
-            stem_x -= 0.25 * (depth - 1) * _GUTTER_INDENT // 2
+            stem_x -= 3
 
         if is_last:
             cr.move_to(stem_x, -3)
@@ -377,9 +382,24 @@ class FilterBrowser(GObject.Object):
         name_label.set_tooltip_text(node.display_name)
         name_label.get_style_context().remove_class("heading")
 
+        # collect ancestor last-child flags for correct stem rendering
+        # stop at root (depth 0) so indices align with loop d=1,2,...
+        ancestor_last = []
+        if isinstance(item, Gtk.TreeListRow):
+            row = item
+            while True:
+                parent = row.get_parent()
+                if parent is None or parent.get_depth() == 0:
+                    break
+                parent_node = parent.get_item()
+                ancestor_last.append(getattr(parent_node, 'is_last_child', False))
+                row = parent
+            ancestor_last.reverse()
+
         gutter.set_size_request(max(3, depth * _GUTTER_INDENT), -1)
         gutter._depth = depth
         gutter._is_last = getattr(node, 'is_last_child', False)
+        gutter._ancestor_last = ancestor_last
         gutter.queue_draw()
 
         name_label.set_margin_top(8)
