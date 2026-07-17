@@ -16,7 +16,7 @@ except Exception:
     _ = lambda s: s
 
 from nodes import (
-    Node, NodeGraph, Port, PortDirection, PortType, FilterNode, InputNode, OutputNode, BlendNode,
+    Node, NodeGraph, Edge, Port, PortDirection, PortType, FilterNode, InputNode, OutputNode, BlendNode,
     OpacityNode, ColoringNode, MaskNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
@@ -1189,6 +1189,27 @@ class WireOverlay(Gtk.Widget):
                         Graphene.Rect().init(pts[i], pts[i + 1], 2, 2),
                     )
 
+        # highlight wire for drop-insert
+        if canvas._drag_insert_edge:
+            edge = canvas._drag_insert_edge
+            sw = canvas._node_widgets.get(edge.src_node)
+            dw = canvas._node_widgets.get(edge.dst_node)
+            if sw and dw:
+                spw = sw.get_output_port_widget(edge.src_port)
+                dpw = dw.get_input_port_widget(edge.dst_port)
+                if spw and dpw:
+                    x1, y1 = spw.center_x, spw.center_y
+                    x2, y2 = dpw.center_x, dpw.center_y
+                    pts = _compute_bezier_segments(x1, y1, x2, y2)
+                    for i in range(0, len(pts) - 2, 2):
+                        snapshot.append_color(
+                            Gdk.RGBA(0.21, 0.52, 0.89, 1.0),
+                            Graphene.Rect().init(pts[i], pts[i + 1], 4, 4),
+                        )
+                    ix, iy = canvas._drag_insert_pos
+                    marker_color = Gdk.RGBA(0.10, 0.37, 0.71, 1.0)
+                    snapshot.append_color(marker_color, Graphene.Rect().init(ix - 5, iy - 5, 10, 10))
+
 
 class Minimap(Gtk.Widget):
     __gtype_name__ = "Minimap"
@@ -1407,6 +1428,8 @@ class NodeCanvas(Gtk.Overlay):
 
         self._filter_def_map: dict[str, FilterDef] = {}
         self._drag_preview: Optional[DragPreview] = None
+        self._drag_insert_edge: Optional[Edge] = None
+        self._drag_insert_pos: tuple[float, float] = (0.0, 0.0)
 
         self._zoom_css = Gtk.CssProvider()
         self._zoom_css.load_from_data(b"")
@@ -1792,17 +1815,145 @@ class NodeCanvas(Gtk.Overlay):
         text = peek_pending_drag_text()
         if text:
             self._show_drag_preview(text, x, y)
+            self._update_drag_insert_edge(text, x, y)
             return Gdk.DragAction.COPY
         return Gdk.DragAction.COPY
 
     def _on_drag_leave(self, target):
         self._hide_drag_preview()
+        self._clear_drag_insert_edge()
 
     # ─── Drop from sidebar ───────────────────────────────────────────────────────
 
     def _on_drop_accept(self, target, drop):
         formats = drop.get_formats()
         return formats.contain_mime_type("text/plain")
+
+    # ─── Wire-insert helpers ───────────────────────────────────────────────────
+
+    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "coloring:", "mask:", "filter:"})
+
+    def _is_insertable_node(self, text: str) -> bool:
+        return any(text.startswith(p) for p in self._INSERTABLE_PREFIXES)
+
+    def _update_drag_insert_edge(self, text: str, x: float, y: float):
+        prev = self._drag_insert_edge
+        self._drag_insert_edge = None
+        if self._is_insertable_node(text):
+            edge = self._find_edge_at(x, y, threshold=30.0)
+            if edge:
+                src_n = self._graph.get_node(edge.src_node)
+                dst_n = self._graph.get_node(edge.dst_node)
+                if src_n and dst_n:
+                    src_p = src_n.get_output_port(edge.src_port)
+                    dst_p = dst_n.get_input_port(edge.dst_port)
+                    if src_p and dst_p and src_p.port_type == PortType.IMAGE and dst_p.port_type == PortType.IMAGE:
+                        self._drag_insert_edge = edge
+                        self._drag_insert_pos = (x, y)
+        if prev is not self._drag_insert_edge:
+            self.queue_gl_render()
+
+    def _clear_drag_insert_edge(self):
+        if self._drag_insert_edge is not None:
+            self._drag_insert_edge = None
+            self.queue_gl_render()
+
+    def _shift_downstream(self, from_node_id: str, dx: float):
+        visited = {from_node_id}
+        queue = [from_node_id]
+        while queue:
+            nid = queue.pop()
+            for e in self._graph.edges:
+                if e.src_node == nid and e.dst_node not in visited:
+                    visited.add(e.dst_node)
+                    queue.append(e.dst_node)
+        for nid in visited:
+            node = self._graph.get_node(nid)
+            if node:
+                node.x += dx
+                w = self._node_widgets.get(nid)
+                if w:
+                    self.update_node_position(w)
+
+    def _shift_upstream(self, from_node_id: str, dx: float):
+        visited = {from_node_id}
+        queue = [from_node_id]
+        while queue:
+            nid = queue.pop()
+            for e in self._graph.edges:
+                if e.dst_node == nid and e.src_node not in visited:
+                    visited.add(e.src_node)
+                    queue.append(e.src_node)
+        for nid in visited:
+            node = self._graph.get_node(nid)
+            if node:
+                node.x += dx
+                w = self._node_widgets.get(nid)
+                if w:
+                    self.update_node_position(w)
+
+    def _insert_new_node_into_edge(self, edge: Edge, new_node_id: str):
+        graph = self._graph
+        new_node = graph.get_node(new_node_id)
+        if not new_node:
+            return
+        img_input = None
+        for p in new_node.inputs:
+            if p.port_type == PortType.IMAGE:
+                img_input = p
+                break
+        img_output = None
+        for p in new_node.outputs:
+            if p.port_type == PortType.IMAGE:
+                img_output = p
+                break
+        if not img_input or not img_output:
+            return
+
+        src_node = graph.get_node(edge.src_node)
+        dst_node = graph.get_node(edge.dst_node)
+        if not src_node or not dst_node:
+            return
+
+        # Space out source and destination (and their connected chains)
+        # to make room for the new node
+        gap = 25.0
+        src_right = src_node.x + (src_node.width or 180)
+        new_left = new_node.x
+        new_right = new_node.x + (new_node.width or 220)
+        dst_left = dst_node.x
+
+        need_left = max(0.0, src_right + gap - new_left)
+        need_right = max(0.0, new_right + gap - dst_left)
+
+        if need_left > 0:
+            self._shift_upstream(edge.src_node, -need_left)
+        if need_right > 0:
+            self._shift_downstream(edge.dst_node, need_right)
+
+        graph.remove_edge(edge.id)
+        e1 = graph.add_edge(edge.src_node, edge.src_port, new_node_id, img_input.name)
+        e2 = graph.add_edge(new_node_id, img_output.name, edge.dst_node, edge.dst_port)
+        if e1 and e2:
+            self._update_all_port_colors()
+            self.emit("graph-changed")
+        elif e1 and not e2:
+            graph.remove_edge(e1.id)
+            graph.add_edge(edge.src_node, edge.src_port, edge.dst_node, edge.dst_port)
+
+    def _try_insert_at(self, x: float, y: float, new_node_id: str):
+        edge = self._find_edge_at(x, y, threshold=30.0)
+        if not edge:
+            return
+        src_n = self._graph.get_node(edge.src_node)
+        dst_n = self._graph.get_node(edge.dst_node)
+        if not src_n or not dst_n:
+            return
+        src_p = src_n.get_output_port(edge.src_port)
+        dst_p = dst_n.get_input_port(edge.dst_port)
+        if not src_p or not dst_p or src_p.port_type != PortType.IMAGE or dst_p.port_type != PortType.IMAGE:
+            return
+        self._insert_new_node_into_edge(edge, new_node_id)
 
     def _on_drop(self, target, value, x, y):
         self._hide_drag_preview()
@@ -1815,12 +1966,13 @@ class NodeCanvas(Gtk.Overlay):
                 if fd:
                     gx = (x - self._pan_x) / self._zoom
                     gy = (y - self._pan_y) / self._zoom
-                    nid = str(id(fd)) + "_" + str(hash(fd.name))
+                    nid = "filter_" + str(GLib.get_monotonic_time())
                     node = FilterNode(nid, fd, gx, gy)
                     self.add_node(node)
                     w = self.get_node_widget(nid)
                     if w:
                         self.select_node(w)
+                    self._try_insert_at(x, y, nid)
                     return True
         elif text and text.startswith("blend:"):
             parts = text.split(":", 1)
@@ -1833,6 +1985,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("opacity:"):
             gx = (x - self._pan_x) / self._zoom
@@ -1843,6 +1996,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("coloring:"):
             gx = (x - self._pan_x) / self._zoom
@@ -1853,6 +2007,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("input:"):
             gx = (x - self._pan_x) / self._zoom
@@ -1883,6 +2038,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("constant:"):
             gx = (x - self._pan_x) / self._zoom
@@ -2513,7 +2669,7 @@ class NodeCanvas(Gtk.Overlay):
                 return True
         return False
 
-    def _find_edge_at(self, x, y, threshold=15.0):
+    def _find_edge_at(self, x, y, threshold=20.0):
         closest = None
         closest_dist = threshold
         for edge in self._graph.edges:
@@ -2531,7 +2687,15 @@ class NodeCanvas(Gtk.Overlay):
                 continue
             x1, y1 = spw.center_x, spw.center_y
             x2, y2 = dpw.center_x, dpw.center_y
-            pts = _compute_bezier_segments(x1, y1, x2, y2, 20)
+            d1 = math.hypot(x - x1, y - y1)
+            if d1 < closest_dist:
+                closest_dist = d1
+                closest = edge
+            d2 = math.hypot(x - x2, y - y2)
+            if d2 < closest_dist:
+                closest_dist = d2
+                closest = edge
+            pts = _compute_bezier_segments(x1, y1, x2, y2, CURVE_SEGMENTS)
             for i in range(0, len(pts) - 2, 2):
                 ex, ey = pts[i], pts[i + 1]
                 d = math.hypot(x - ex, y - ey)

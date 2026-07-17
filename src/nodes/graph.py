@@ -225,6 +225,7 @@ class NodeGraph:
                 OpacityNode, ColoringNode, MaskNode,
                 ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
                 CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+                LabelNode, CommentNode,
             )
             if isinstance(n, InputNode):
                 nd["params"]["file_path"] = n.file_path

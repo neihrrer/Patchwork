@@ -224,6 +224,7 @@ class FilterBrowser(GObject.Object):
             for first in cats:
                 node = TreeItemNode(display_name=first, node_type="category")
                 node._category_path = [first]
+                node._engine = engine
                 store.append(node)
             return self._mark_last_child(store)
         elif item.node_type == "category":
@@ -232,10 +233,13 @@ class FilterBrowser(GObject.Object):
                 return None
 
             depth = len(path)
+            engine = getattr(item, '_engine', None)
             next_levels = set()
             same_level = []
             for f in self._all_filters:
                 if self._is_excluded(f):
+                    continue
+                if engine is not None and f.engine != engine:
                     continue
                 cat = f.category if f.category else ["Various"]
                 if cat[:depth] == path:
@@ -248,6 +252,7 @@ class FilterBrowser(GObject.Object):
             for seg in sorted(next_levels, key=str.casefold):
                 node = TreeItemNode(display_name=seg, node_type="category")
                 node._category_path = path + [seg]
+                node._engine = engine
                 store.append(node)
             for f in same_level:
                 node = TreeItemNode(display_name=f.display_name, node_type="filter", filter_def=f)
