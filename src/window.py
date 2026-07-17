@@ -71,7 +71,6 @@ class RingWindow(Adw.ApplicationWindow):
         self._output_format: str = self._config.output_format
         self._canvas: Optional[NodeCanvas] = None
         self._filter_browser: Optional[FilterBrowser] = None
-        self._current_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
         self._result_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
         self._result_pixbufs: dict[str, GdkPixbuf.Pixbuf] = {}
         self._minimap_switch: Optional[Adw.SwitchRow] = None
@@ -418,8 +417,6 @@ class RingWindow(Adw.ApplicationWindow):
 
     # ─── Open image ───────────────────────────────────────────────────────────
 
-    _open_dialog_result_path: Optional[str] = None
-
     def _on_open_clicked(self, button):
         file_filter = Gtk.FileFilter()
         file_filter.set_name(_("Images"))
@@ -447,8 +444,6 @@ class RingWindow(Adw.ApplicationWindow):
                     self._show_error(str(e))
                     return
 
-                self._current_pixbuf = pixbuf
-
                 if self._export_button:
                     self._export_button.set_sensitive(False)
 
@@ -467,7 +462,6 @@ class RingWindow(Adw.ApplicationWindow):
                             widget.queue_draw()
                         self._canvas.update_node_display(found.id)
                 else:
-                    self._open_dialog_result_path = path
                     nid = _generate_id()
                     node = InputNode(nid, 0, 0)
                     node.file_path = path
@@ -558,7 +552,6 @@ class RingWindow(Adw.ApplicationWindow):
                 except Exception as e:
                     self._show_error(str(e))
                     return
-                self._current_pixbuf = pixbuf
                 if self._export_button:
                     self._export_button.set_sensitive(False)
                 node.file_path = path

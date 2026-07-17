@@ -113,16 +113,4 @@ class GmicCLI:
 
         return all_filters if all_filters else self._parser.get_builtin_filters()
 
-    def get_version(self) -> str:
-        try:
-            result = subprocess.run(
-                [self._gmic_path, "--version"],
-                capture_output=True,
-                timeout=10,
-                text=True,
-            )
-            if result.returncode == 0:
-                return result.stdout.strip() or result.stderr.strip()
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-        return _("Unknown")
+

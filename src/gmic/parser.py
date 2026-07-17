@@ -248,10 +248,7 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
         min_val=min_val,
         max_val=max_val,
         choices=choices,
-        no_preview=no_preview,
-        randomizable=randomizable,
         is_hidden=is_hidden,
-        is_disabled=is_disabled,
     ), after_close
 
 

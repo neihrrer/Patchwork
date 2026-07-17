@@ -147,12 +147,6 @@ class ColorNode(Node):
         self.white_point: float = 100.0
         self.gamma: float = 1.0
 
-    COLOR_OPS = [
-        "brightness_contrast",
-        "hue_saturation",
-        "levels",
-    ]
-
 
 class OpacityNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):

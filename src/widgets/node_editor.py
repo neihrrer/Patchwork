@@ -811,18 +811,17 @@ class WireOverlay(Gtk.Widget):
         ox = pan_x % spacing
         oy = pan_y % spacing
 
-        if not canvas._grid_visible:
-            return
-        b = canvas._grid_brightness
-        grid_color = Gdk.RGBA(b, b, b + 0.01, 1.0)
-        x = ox
-        while x < w:
-            snapshot.append_color(grid_color, Graphene.Rect().init(x, 0, 1, h))
-            x += spacing
-        y = oy
-        while y < h:
-            snapshot.append_color(grid_color, Graphene.Rect().init(0, y, w, 1))
-            y += spacing
+        if canvas._grid_visible:
+            b = canvas._grid_brightness
+            grid_color = Gdk.RGBA(b, b, b + 0.01, 1.0)
+            x = ox
+            while x < w:
+                snapshot.append_color(grid_color, Graphene.Rect().init(x, 0, 1, h))
+                x += spacing
+            y = oy
+            while y < h:
+                snapshot.append_color(grid_color, Graphene.Rect().init(0, y, w, 1))
+                y += spacing
 
         # clip wires to widget bounds so they don't leak above the header bar
         snapshot.push_clip(Graphene.Rect().init(0, 0, w, h))
@@ -830,7 +829,6 @@ class WireOverlay(Gtk.Widget):
         snapshot.pop()
 
     def _draw_wires(self, snapshot, canvas):
-        from nodes import PortDirection
         graph = canvas._graph
         for edge in graph.edges:
             src_n = graph.get_node(edge.src_node)
@@ -1356,9 +1354,6 @@ class NodeCanvas(Gtk.Overlay):
                     w.clear_thumbnail()
             else:
                 w.clear_thumbnail()
-        elif isinstance(node, OutputNode):
-            pass
-
         self.queue_gl_render()
 
     def set_output_thumbnail(self, node_id: str, pixbuf: GdkPixbuf.Pixbuf):
@@ -1694,10 +1689,6 @@ class NodeCanvas(Gtk.Overlay):
 
     def set_extended_zoom(self, enabled: bool):
         self._extended_zoom = enabled
-
-    def set_grid_brightness(self, value: float):
-        self._grid_brightness = max(0.0, min(1.0, value))
-        self.queue_gl_render()
 
     def set_grid_visible(self, visible: bool):
         self._grid_visible = visible

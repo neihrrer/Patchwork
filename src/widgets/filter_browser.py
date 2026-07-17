@@ -87,14 +87,6 @@ class TreeItemNode(GObject.Object):
         self._filter_def = value
 
 
-def _format_category(cat: list[str]) -> str:
-    if not cat:
-        return "Various"
-    if cat[0].lower() == "about":
-        return ""
-    return "/".join(cat)
-
-
 class FilterBrowser(GObject.Object):
     __gsignals__ = {
         "filter-selected": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
@@ -326,11 +318,7 @@ class FilterBrowser(GObject.Object):
         hbox = Gtk.Box(orientation="horizontal", spacing=0)
         vbox = Gtk.Box(orientation="vertical", spacing=1, margin_start=4, margin_end=8)
         name_label = Gtk.Label(xalign=0, hexpand=True)
-        cat_label = Gtk.Label(xalign=0, hexpand=True)
-        cat_label.add_css_class("caption")
-        cat_label.add_css_class("dim-label")
         vbox.append(name_label)
-        vbox.append(cat_label)
         hbox.append(vbox)
         expander.set_child(hbox)
 
@@ -376,7 +364,6 @@ class FilterBrowser(GObject.Object):
         hbox = expander.get_child()
         vbox = hbox.get_first_child()
         name_label = vbox.get_first_child()
-        cat_label = name_label.get_next_sibling()
 
         name_label.set_label(node.display_name)
         name_label.set_tooltip_text(node.display_name)
@@ -404,8 +391,6 @@ class FilterBrowser(GObject.Object):
 
         name_label.set_margin_top(8)
         name_label.set_margin_bottom(8)
-        cat_label.set_label("")
-        cat_label.hide()
 
     def _on_drag_prepare(self, drag_source, x, y):
         global _pending_drag_text

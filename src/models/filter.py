@@ -33,10 +33,7 @@ class ParamDef:
         min_val: Optional[float] = None,
         max_val: Optional[float] = None,
         choices: Optional[list[str]] = None,
-        no_preview: bool = False,
-        randomizable: bool = False,
         is_hidden: bool = False,
-        is_disabled: bool = False,
     ):
         self.name = name
         self.label = label
@@ -45,10 +42,7 @@ class ParamDef:
         self.min_val = min_val
         self.max_val = max_val
         self.choices = choices or []
-        self.no_preview = no_preview
-        self.randomizable = randomizable
         self.is_hidden = is_hidden
-        self.is_disabled = is_disabled
 
     def __repr__(self):
         return f"ParamDef({self.name}, {self.kind}, default={self.default})"

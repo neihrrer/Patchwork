@@ -225,17 +225,4 @@ class ImageMagickCLI:
         except Exception as e:
             return ImageMagickResult(False, error=str(e))
 
-    def get_version(self) -> str:
-        try:
-            result = subprocess.run(
-                [self._magick_path, "--version"],
-                capture_output=True,
-                timeout=10,
-                text=True,
-            )
-            if result.returncode == 0:
-                first_line = result.stdout.strip().split("\n")[0]
-                return first_line or _("ImageMagick")
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-        return _("Unknown")
+
