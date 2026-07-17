@@ -39,6 +39,41 @@ INTERACTIVE_FILTERS = {
     "fx_mask_color", "fx_extract_foreground", "fx_morph_interactive",
     "fx_warp_interactive", "fx_colorize_interactive", "fx_gmic_demos",
     "fx_curves_interactive",
+    # gui_* filters open dialogs/windows in GIMP and do nothing on CLI
+    "gui_axis_streak",
+    "gui_download_all_data",
+    "gui_gb_about",
+    "gui_layer_info",
+    "gui_rep_acb",
+    "gui_rep_colmt",
+    "gui_rep_form_pixel",
+    "gui_rep_frblur",
+    "gui_rep_gv",
+    "gui_rep_majority",
+    "gui_rep_majority_threshold",
+    "gui_rep_objvf",
+    "gui_rep_perspective_streak",
+    "gui_rep_polkal",
+    "gui_rep_prime_surface",
+    "gui_rep_pw",
+    "gui_rep_recc",
+    "gui_rep_regm",
+    "gui_rep_sd",
+    "gui_rep_shape_brick",
+    "gui_rep_sptbwgp_recpoltrans",
+    "gui_rep_tfrac",
+    "gui_rep_trif",
+    "gui_rep_trps",
+    # open interactive windows / use GUI internals, not usable on CLI
+    "fx_display_fft",
+    "fx_fourier_transform",
+    "fx_guided_lightrays",
+    "fx_input_565",
+    "fx_gmicky",
+    "fx_rep_rpgtiler_noniso",
+    "samj_Selection_Hermite_Spline",
+    "samj_diaporama",
+    "samj_test_tout_interactif",
 }
 
 STDLIB_BUG_FILTERS = {
@@ -61,6 +96,21 @@ STDLIB_BUG_FILTERS = {
     "fx_MorphoPaint", "pat_rgb", "gcd_layers", "gcd_stereo_vid",
     "iain_savenoiseprint", "iain_fast_formula", "jeje_render3d",
     "mc_film_grain", "fx_karo_pink", "fx_karo_pink_bin",
+    # animated/generative — produce multiple frames, not single-image output
+    "fx_animate_cartoon",
+    "fx_animate_edges",
+    "fx_animate_elevation3d",
+    "fx_animate_extrude3d",
+    "fx_animate_glow",
+    "fx_animate_imageobject3d",
+    "fx_animate_lissajous",
+    "fx_animate_pencilbw",
+    "fx_animate_rodilius",
+    "fx_animate_stencilbw",
+    "fx_lavalampbw",
+    "fx_moire",
+    "fx_spatial_transition",
+    "fx_text_pointcloud3d",
 }
 
 
@@ -142,24 +192,28 @@ def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
               imagemagick: Optional[ImageMagickCLI],
               test_image: str, timeout: int, quick: bool,
               error_log
-              ) -> tuple[int, int, float]:
+              ) -> tuple[int, int, float, int]:
     if not filters:
-        return 0, 0, 0.0
+        return 0, 0, 0.0, 0
 
     if quick:
         filters = filters[:10]
 
     results: list[FilterTestResult] = []
     total = len(filters)
+    skipped_interactive = 0
+    skipped_bugs = 0
 
     print(f"\n  {label} ({total} filters):")
 
     for i, fd in enumerate(filters):
         if fd.name in INTERACTIVE_FILTERS:
             results.append(FilterTestResult(fd.name, fd.engine, True, 0.0, "skipped (interactive)"))
+            skipped_interactive += 1
             continue
         if fd.name in STDLIB_BUG_FILTERS:
             results.append(FilterTestResult(fd.name, fd.engine, True, 0.0, "skipped (known stdlib bug)"))
+            skipped_bugs += 1
             continue
         r = test_filter(gmic, imagemagick, test_image, fd, timeout)
         results.append(r)
@@ -190,9 +244,12 @@ def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
     line = "  " + "\u2500" * 60
     print(line)
     pct = passed / total * 100 if total else 0
-    print(f"  {passed}/{total} passed ({pct:.1f}%)  in {total_time:.1f}s")
+    skipped_total = skipped_interactive + skipped_bugs
+    print(f"  {passed}/{total} passed ({pct:.1f}%)" +
+          f"  {skipped_total} skipped" +
+          f"  in {total_time:.1f}s")
 
-    return passed, total, total_time
+    return passed, total, total_time, skipped_total
 
 
 def main():
@@ -277,15 +334,17 @@ def main():
     total_ok = 0
     total_all = 0
     total_secs = 0.0
+    total_skipped = 0
     grand_start = time.time()
 
     for label, filters in groups:
-        ok, n, secs = run_group(label, filters, gmic_cli, im_cli,
-                                test_image, args.timeout, args.quick,
-                                error_log)
+        ok, n, secs, skipped = run_group(label, filters, gmic_cli, im_cli,
+                                         test_image, args.timeout, args.quick,
+                                         error_log)
         total_ok += ok
         total_all += n
         total_secs += secs
+        total_skipped += skipped
 
     error_log.close()
 
@@ -295,6 +354,7 @@ def main():
     if total_all:
         pct = total_ok / total_all * 100
         print(f"  TOTAL: {total_ok}/{total_all} passed ({pct:.1f}%)"
+              f"  {total_skipped} skipped"
               f"  wall: {wall:.1f}s  cpu: {total_secs:.1f}s")
     else:
         print("  No tests were run.")
