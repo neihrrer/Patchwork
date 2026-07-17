@@ -338,12 +338,10 @@ class NodeWidget(Gtk.Box):
         ports_box.set_hexpand(True)
 
         self._left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        self._left_box.set_hexpand(True)
         self._left_box.set_halign(Gtk.Align.START)
         self._left_box.set_margin_top(5)
         self._left_box.set_margin_bottom(5)
         self._right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        self._right_box.set_hexpand(True)
         self._right_box.set_halign(Gtk.Align.END)
         self._right_box.set_margin_top(5)
         self._right_box.set_margin_bottom(5)
@@ -381,6 +379,7 @@ class NodeWidget(Gtk.Box):
 
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
+        spacer.set_size_request(24, -1)
         ports_box.append(self._left_box)
         ports_box.append(spacer)
         ports_box.append(self._right_box)
@@ -756,6 +755,7 @@ class NodeWidget(Gtk.Box):
     def _make_control_row(self, label: str, port_name: str, control: Gtk.Widget) -> Gtk.Box:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         row.set_css_classes(["node-param-row"])
+        row.set_margin_end(4)
         pw = self._get_numeric_port_widget(port_name)
         if pw is None:
             row.add_css_class("indented")
