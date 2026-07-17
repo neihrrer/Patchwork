@@ -21,7 +21,7 @@ _GRAYSCALE_METHODS = [
     "Brightness",
 ]
 
-_MORPHOLOGY_KERNEL = "Disk:{radius}"
+_MORPHOLOGY_KERNEL = "disk:{radius}"
 
 
 def _join_params_raw(params: list[str], joiner: str, count: Optional[int] = None) -> str:
@@ -44,7 +44,7 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
         return [("-motion-blur", val)]
     elif op == "radial_blur":
         val = raw_params[0] if raw_params else None
-        return [("-radial-blur", val)]
+        return [("-rotational-blur", val)]
     elif op == "median":
         val = raw_params[0] if raw_params else None
         return [("-median", val)]
@@ -111,7 +111,7 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
         return [("-charcoal", val)]
     elif op == "oil":
         val = raw_params[0] if raw_params else None
-        return [("-oil", val)]
+        return [("-paint", val)]
     elif op == "emboss":
         val = raw_params[0] if raw_params else None
         return [("-emboss", val)]
@@ -126,20 +126,20 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
         idx = max(0, min(idx, len(_NOISE_TYPES) - 1))
         return [("+noise", _NOISE_TYPES[idx])]
     elif op == "reduce_noise":
-        val = raw_params[0] if raw_params else None
-        return [("-reduce-noise", val)]
+        val = raw_params[0] if raw_params else "3"
+        return [("-statistic", ["Median", val])]
     elif op == "dilate":
         radius = raw_params[0] if raw_params else "3"
-        return [("-morphology", "Dilate " + _MORPHOLOGY_KERNEL.format(radius=radius))]
+        return [("-morphology", ["Dilate", _MORPHOLOGY_KERNEL.format(radius=radius)])]
     elif op == "erode":
         radius = raw_params[0] if raw_params else "3"
-        return [("-morphology", "Erode " + _MORPHOLOGY_KERNEL.format(radius=radius))]
+        return [("-morphology", ["Erode", _MORPHOLOGY_KERNEL.format(radius=radius)])]
     elif op == "opening":
         radius = raw_params[0] if raw_params else "3"
-        return [("-morphology", "Open " + _MORPHOLOGY_KERNEL.format(radius=radius))]
+        return [("-morphology", ["Open", _MORPHOLOGY_KERNEL.format(radius=radius)])]
     elif op == "closing":
         radius = raw_params[0] if raw_params else "3"
-        return [("-morphology", "Close " + _MORPHOLOGY_KERNEL.format(radius=radius))]
+        return [("-morphology", ["Close", _MORPHOLOGY_KERNEL.format(radius=radius)])]
     return []
 
 
@@ -193,7 +193,10 @@ class ImageMagickCLI:
             for flag, arg in flag_parts:
                 args.append(flag)
                 if arg is not None:
-                    args.append(arg)
+                    if isinstance(arg, list):
+                        args.extend(arg)
+                    else:
+                        args.append(arg)
 
         args.append(output_path)
 

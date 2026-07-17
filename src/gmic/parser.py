@@ -21,6 +21,19 @@ def _strip_name(name: str) -> str:
     return html_mod.unescape(_strip_html(name.strip()))
 
 
+def _find_matching_close(text: str, open_idx: int,
+                        open_ch: str = "(", close_ch: str = ")") -> int:
+    depth = 0
+    for i in range(open_idx, len(text)):
+        if text[i] == open_ch:
+            depth += 1
+        elif text[i] == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
 def _split_args(text: str) -> list[str]:
     parts = []
     depth = 0
@@ -42,6 +55,12 @@ def _split_args(text: str) -> list[str]:
         elif ch == "," and depth == 0 and in_quote is None:
             parts.append("".join(current).strip())
             current = []
+        elif ch in ("{", "[") and in_quote is None:
+            depth += 1
+            current.append(ch)
+        elif ch in ("}", "]") and in_quote is None:
+            depth -= 1
+            current.append(ch)
         else:
             current.append(ch)
     rest = "".join(current).strip()
@@ -88,7 +107,7 @@ _PARAM_TYPES = {
 }
 
 
-def _parse_param_def(text: str) -> Optional[ParamDef]:
+def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
     eq_idx = text.find("=")
     if eq_idx < 0:
         return None
@@ -119,12 +138,17 @@ def _parse_param_def(text: str) -> Optional[ParamDef]:
         idx = paren_idx
 
     type_name = rest[:idx].strip().lower()
-    args_text = rest[idx:]
-
-    if not args_text.endswith(close_char):
+    close_idx = _find_matching_close(rest, idx, open_char, close_char)
+    if close_idx < 0:
         return None
 
-    args_text = args_text[1:-1]
+    args_text = rest[idx + 1:close_idx]
+    after_close = rest[close_idx + 1:].strip()
+
+    # Skip non-param markers but let caller continue parsing
+    if type_name in ("sep", "separator", "note"):
+        return None, after_close
+
     args = _split_args(args_text)
 
     is_hidden = type_name.endswith("_0")
@@ -133,7 +157,7 @@ def _parse_param_def(text: str) -> Optional[ParamDef]:
 
     kind = _PARAM_TYPES.get(type_name)
     if kind is None:
-        return None
+        return None, after_close
 
     if type_name == "value":
         is_hidden = True
@@ -228,7 +252,50 @@ def _parse_param_def(text: str) -> Optional[ParamDef]:
         randomizable=randomizable,
         is_hidden=is_hidden,
         is_disabled=is_disabled,
-    )
+    ), after_close
+
+
+def _parse_params(text: str) -> list[ParamDef]:
+    results = []
+    remaining = text
+    while remaining:
+        result = _parse_param_def(remaining)
+        if result is None:
+            break
+        param, after_close = result
+        if param is None:
+            remaining = after_close
+            continue
+        results.append(param)
+        # Check if there's another param after this one, separated by comma
+        # Format: ..., param_name = type(...)
+        while after_close.startswith(","):
+            after_close = after_close[1:].strip()
+            # Look for another "= type(" pattern
+            next_eq = after_close.find("=")
+            if next_eq < 0:
+                remaining = after_close
+                break
+            # Check the next part has a type with parentheses
+            next_rest = after_close[next_eq + 1:].strip()
+            next_paren = next_rest.find("(")
+            next_brace = next_rest.find("{")
+            has_type = (next_paren >= 0 and (next_brace < 0 or next_paren < next_brace))
+            if not has_type:
+                remaining = after_close
+                break
+            remaining = after_close
+            result = _parse_param_def(remaining)
+            if result is None:
+                break
+            sub_param, after_close = result
+            if sub_param is None:
+                remaining = after_close
+                break
+            results.append(sub_param)
+        else:
+            remaining = after_close
+    return results
 
 
 def _join_continuations(lines: list[str]) -> list[str]:
@@ -273,15 +340,12 @@ def _join_continuations(lines: list[str]) -> list[str]:
 
 
 def _munge_gui_command(command: str) -> str:
-    # Format: "command, preview_command(zoom_factor)[*|+]" or just "command"
-    # Always pick the first (non-preview) command
     command = command.strip()
-    if "," in command:
-        command = command.split(",")[0].strip()
-    command = command.split("(")[0].strip()
-    if command.endswith(":*"):
-        command = command[:-2]
-    return command
+    # Strip preview suffix: ..., preview_command(zoom)[*|+]
+    m = re.search(r',\s*[a-zA-Z_]\w*(?:\([^)]*\))?\s*[*+]?\s*$', command)
+    if m:
+        command = command[:m.start()]
+    return command.strip()
 
 
 class GmicFilterParser:
@@ -327,9 +391,9 @@ class GmicFilterParser:
             if not lhs:
                 if current_filter is not None:
                     try:
-                        param = _parse_param_def(rhs)
-                        if param is not None:
-                            current_filter.parameters.append(param)
+                        params = _parse_params(rhs)
+                        for p in params:
+                            current_filter.parameters.append(p)
                     except Exception:
                         pass
                 continue
@@ -376,27 +440,27 @@ class GmicFilterParser:
     def _create_builtin_filters(self) -> list[FilterDef]:
         categories = {
             _("Artistic"): [
-                ("fx_sketchbw", _("Sketch (B&W)"), "fx_sketchbw"),
-                ("fx_oilpaint", _("Oil Painting"), "fx_oilpaint"),
-                ("fx_pencil", _("Pencil Drawing"), "fx_pencil"),
-                ("fx_watercolor", _("Watercolor"), "fx_watercolor"),
-                ("fx_cartoon", _("Cartoon"), "fx_cartoon"),
-                ("fx_comic", _("Comic Book"), "fx_comic"),
+                ("sketchbw", _("Sketch (B&W)"), "sketchbw 50,0,0,0"),
+                ("oilpaint", _("Oil Painting"), "oilpaint 3,30"),
+                ("fx_cpencil", _("Pencil Drawing"), "fx_cpencil 30,60,0,0,50,0,2,25"),
+                ("watercolor", _("Watercolor"), "watercolor 20,10,0"),
+                ("cartoon", _("Cartoon"), "cartoon 3,10,10,1"),
+                ("cl_comic", _("Comic Book"), "cl_comic"),
             ],
             _("Colors"): [
-                ("fx_boost_chroma", _("Boost Chroma"), "fx_boost_chroma"),
+                ("boost_chroma", _("Boost Chroma"), "boost_chroma 50,0,1"),
                 ("sepia", _("Sepia"), "sepia"),
-                ("fx_colorize", _("Colorize"), "fx_colorize"),
+                ("colorize", _("Colorize"), "colorize 0,50,50,0"),
                 ("normalize", _("Auto Levels"), "normalize 0,255"),
                 ("equalize", _("Histogram Equalization"), "equalize 256"),
-                ("fx_balance_gray", _("Gray Balance"), "fx_balance_gray"),
+                ("balance_gray", _("Gray Balance"), "balance_gray"),
             ],
             _("Details"): [
                 ("sharpen", _("Sharpen"), "sharpen 500"),
-                ("fx_unsharp", _("Unsharp Mask"), "fx_unsharp"),
-                ("fx_details", _("Extract Details"), "fx_details"),
+                ("unsharp", _("Unsharp Mask"), "unsharp 2,50,0,0,0.5,0"),
+                ("details", _("Extract Details"), "details 2,30,10,0,0"),
                 ("blur", _("Blur"), "blur 3"),
-                ("fx_denoise", _("Denoise"), "fx_denoise"),
+                ("denoise", _("Denoise"), "denoise 3,10,0,6"),
             ],
             _("Deformations"): [
                 ("rotate", _("Rotate"), "rotate 90"),
@@ -406,8 +470,8 @@ class GmicFilterParser:
                 ("mirror", _("Mirror"), "mirror"),
             ],
             _("Light & Shadows"): [
-                ("fx_light_balance", _("Light Balance"), "fx_light_balance"),
-                ("fx_retinex", _("Retinex"), "fx_retinex"),
+                ("light_balance", _("Light Balance"), "light_balance 10,0,10,0,0"),
+                ("retinex", _("Retinex"), "retinex 100,2,0,200,1,5,15,80,250"),
                 ("normalize_local", _("Local Normalization"), "normalize_local 10"),
             ],
             _("B&W"): [
@@ -416,18 +480,18 @@ class GmicFilterParser:
                 ("invert", _("Invert"), "invert"),
             ],
             _("Frames"): [
-                ("frame", _("Add Frame"), "frame 5,white"),
-                ("fx_polaroid", _("Polaroid"), "fx_polaroid"),
+                ("frame", _("Add Frame"), "frame 5,255,255,255"),
+                ("polaroid", _("Polaroid"), "polaroid 10,5,0,0"),
                 ("vignette", _("Vignette"), "vignette 20"),
             ],
             _("Repair"): [
-                ("fx_hotpixels", _("Remove Hot Pixels"), "fx_hotpixels"),
-                ("fx_banding", _("Remove Banding"), "fx_banding"),
-                ("fx_antialias", _("Anti-alias"), "fx_antialias"),
+                ("remove_hotpixels", _("Remove Hot Pixels"), "remove_hotpixels 3"),
+                ("remove_banding", _("Remove Banding"), "remove_banding 2,10,0"),
+                ("antialias", _("Anti-alias"), "antialias 2"),
             ],
             _("Rendering"): [
                 ("plasma", _("Plasma"), "plasma 50"),
-                ("cloud", _("Cloud"), "cloud 50"),
+                ("clouds", _("Cloud"), "clouds 50"),
                 ("fractal", _("Fractal"), "fractal"),
             ],
         }

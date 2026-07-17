@@ -214,14 +214,25 @@ class GraphExecutor:
         fd, out_path = tempfile.mkstemp(suffix="." + output_fmt)
         os.close(fd)
 
-        commands = [input_paths[0], node.filter_def.gmic_command]
-        for p in node.filter_def.parameters:
-            val = node.param_values.get(p.name, p.default)
+        raw_cmd = node.filter_def.gmic_command
+        space_idx = raw_cmd.find(" ")
+        cmd_name = raw_cmd[:space_idx] if space_idx >= 0 else raw_cmd
+        serialized = [_serialize_param(
+            node.param_values.get(p.name, p.default), p
+        ) for p in node.filter_def.parameters]
+        for i, p in enumerate(node.filter_def.parameters):
             if p.kind in (ParamKind.INT, ParamKind.FLOAT) and not p.is_hidden and graph and numeric_outputs:
                 num_val = self._get_numeric_input(node, p.name, graph, numeric_outputs)
                 if num_val is not None:
                     val = int(num_val) if p.kind == ParamKind.INT else num_val
-            commands[-1] += f",{_serialize_param(val, p)}"
+                    serialized[i] = _serialize_param(val, p)
+        if serialized:
+            full_cmd = cmd_name + "," + ",".join(serialized)
+        elif space_idx >= 0:
+            full_cmd = raw_cmd
+        else:
+            full_cmd = cmd_name
+        commands = [input_paths[0], full_cmd]
 
         if node.filter_def.engine == ENGINE_GMIC:
             result = self._gmic.run_pipeline(input_paths, commands[1:], out_path, timeout=timeout)
