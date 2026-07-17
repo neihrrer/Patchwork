@@ -14,6 +14,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
   <object class="AdwBreakpoint" id="bp">
     <condition>max-width: 700sp</condition>
     <setter object="split_view" property="collapsed">true</setter>
+    <setter object="split_view" property="show-content">true</setter>
   </object>
   <object class="AdwNavigationSplitView" id="split_view">
     <property name="sidebar">sidebar_page</property>
@@ -32,6 +33,13 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
               <class name="sidebar-filter-headerbar"/>
             </style>
             <child type="start">
+              <object class="GtkButton" id="back_to_canvas_button">
+                <property name="icon-name">go-previous-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Back to Canvas</property>
+                <property name="visible">false</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkToggleButton" id="search_toggle">
                 <property name="icon-name">system-search-symbolic</property>
                 <property name="tooltip-text" translatable="yes">Search Filters</property>
@@ -102,6 +110,13 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
               </object>
             </property>
             <child type="start">
+              <object class="GtkButton" id="show_filters_button">
+                <property name="icon-name">sidebar-show-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Show Filters</property>
+                <property name="visible">false</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkButton" id="open_button">
                 <property name="icon-name">document-open-symbolic</property>
                 <property name="tooltip-text" translatable="yes">Open Image</property>

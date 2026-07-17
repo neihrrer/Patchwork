@@ -24,7 +24,7 @@ from nodes import (
 )
 from nodes.node_types import LABEL_COLORS
 from models.filter import FilterDef, ParamKind
-from .filter_browser import get_pending_drag_text
+from .filter_browser import get_pending_drag_text, peek_pending_drag_text
 
 CURVE_SEGMENTS = 48
 
@@ -90,6 +90,49 @@ def _compute_numeric_value(node_id: str, graph: NodeGraph, visited: set = None):
         return round(a)
 
     return None
+
+
+_NODE_PREVIEW_INFO = {
+    "blend:": (_("Blend"), "blend"),
+    "opacity:": (_("Opacity"), "opacity"),
+    "mask:": (_("Mask"), "mask"),
+    "coloring:": (_("Coloring"), "coloring"),
+    "input:": (_("Input"), "input"),
+    "output:": (_("Output"), "output"),
+    "constant:": (_("Constant"), "constant"),
+    "add:": (_("Add"), "add"),
+    "subtract:": (_("Subtract"), "subtract"),
+    "multiply:": (_("Multiply"), "multiply"),
+    "divide:": (_("Divide"), "divide"),
+    "ceil:": (_("Ceil"), "ceil"),
+    "floor:": (_("Floor"), "floor"),
+    "round:": (_("Round"), "round"),
+    "sum:": (_("Sum"), "sum"),
+    "product:": (_("Product"), "product"),
+    "label:": (_("Label"), "label"),
+    "comment:": (_("Comment"), "comment"),
+}
+
+
+class DragPreview(Gtk.Box):
+    __gtype_name__ = "DragPreview"
+
+    def __init__(self, label: str, css_class: str):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add_css_class("node-widget")
+        self.set_opacity(0.5)
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        header.set_css_classes(["node-header", css_class])
+        header.set_hexpand(True)
+        title = Gtk.Label(label=label, xalign=0, hexpand=True)
+        title.set_css_classes(["node-title"])
+        header.append(title)
+        self.append(header)
+
+        body = Gtk.Box()
+        body.set_size_request(180, 40)
+        self.append(body)
 
 
 class PortWidget(Gtk.Widget):
@@ -974,12 +1017,20 @@ class NodeWidget(Gtk.Box):
                     self._begin_resize(gesture, start_x, start_y)
                     return
                 p = p.get_parent()
-        if not self._selected:
+        event = gesture.get_last_event()
+        if event:
+            shift = bool(event.get_modifier_state() & Gdk.ModifierType.SHIFT_MASK)
+        else:
+            shift = False
+        if not shift and not self._selected:
             self._canvas.select_node(self)
         self._canvas._dragging_node = self._node
         self._canvas._drag_start_x = self._node.x
         self._canvas._drag_start_y = self._node.y
-        event = gesture.get_last_event()
+        self._canvas._drag_group_starts = {
+            w: (w.graph_node.x, w.graph_node.y)
+            for w in self._canvas._selected_widgets
+        }
         if event:
             _, sx, sy = event.get_position()
             self._canvas._drag_pointer_start_x = sx
@@ -998,9 +1049,10 @@ class NodeWidget(Gtk.Box):
         dx = sx - self._canvas._drag_pointer_start_x
         dy = sy - self._canvas._drag_pointer_start_y
         zoom = self._canvas._zoom
-        self._node.x = self._canvas._drag_start_x + dx / zoom
-        self._node.y = self._canvas._drag_start_y + dy / zoom
-        self._canvas.update_node_position(self)
+        for w, (start_x, start_y) in self._canvas._drag_group_starts.items():
+            w.graph_node.x = start_x + dx / zoom
+            w.graph_node.y = start_y + dy / zoom
+            self._canvas.update_node_position(w)
 
     def _on_drag_end(self, gesture, offset_x, offset_y):
         if self._canvas._resizing_node is self._node:
@@ -1009,9 +1061,18 @@ class NodeWidget(Gtk.Box):
             return
         if self._canvas._dragging_node is self._node:
             self._canvas._dragging_node = None
+        self._canvas._drag_group_starts.clear()
 
     def _on_click(self, gesture, n_press, x, y):
-        self._canvas.select_node(self)
+        event = gesture.get_last_event()
+        shift = bool(event.get_modifier_state() & Gdk.ModifierType.SHIFT_MASK) if event else False
+        if shift:
+            if self._selected:
+                self._canvas._remove_from_selection(self)
+            else:
+                self._canvas._add_to_selection(self)
+        elif not self._selected:
+            self._canvas.select_node(self)
         self._canvas.grab_focus()
         if isinstance(self._node, InputNode) and not self._node.file_path:
             if hasattr(self, '_header') and self._header:
@@ -1069,6 +1130,22 @@ class WireOverlay(Gtk.Widget):
         snapshot.push_clip(Graphene.Rect().init(0, 0, w, h))
         self._draw_wires(snapshot, canvas)
         snapshot.pop()
+
+        # rubber-band selection rectangle
+        if canvas._rubber_band_rect:
+            sx1, sy1, sx2, sy2 = canvas._rubber_band_rect
+            rx = min(sx1, sx2)
+            ry = min(sy1, sy2)
+            rw = abs(sx2 - sx1)
+            rh = abs(sy2 - sy1)
+            if rw > 0 and rh > 0:
+                fill = Gdk.RGBA(0.3, 0.5, 0.9, 0.15)
+                snapshot.append_color(fill, Graphene.Rect().init(rx, ry, rw, rh))
+                outline = Gdk.RGBA(0.3, 0.5, 0.9, 1.0)
+                snapshot.append_color(outline, Graphene.Rect().init(rx, ry, rw, 1))
+                snapshot.append_color(outline, Graphene.Rect().init(rx, ry + rh - 1, rw, 1))
+                snapshot.append_color(outline, Graphene.Rect().init(rx, ry, 1, rh))
+                snapshot.append_color(outline, Graphene.Rect().init(rx + rw - 1, ry, 1, rh))
 
     def _draw_wires(self, snapshot, canvas):
         graph = canvas._graph
@@ -1307,13 +1384,14 @@ class NodeCanvas(Gtk.Overlay):
         style_mgr = Adw.StyleManager.get_default()
         style_mgr.connect("notify::dark", self._on_color_scheme_changed)
         self._node_widgets: dict[str, NodeWidget] = {}
-        self._selected_widget: Optional[NodeWidget] = None
+        self._selected_widgets: set[NodeWidget] = set()
         self._dragging_node: Optional[Node] = None
         self._resizing_node: Optional[Node] = None
         self._drag_start_x = 0.0
         self._drag_start_y = 0.0
         self._drag_pointer_start_x = 0.0
         self._drag_pointer_start_y = 0.0
+        self._drag_group_starts: dict[NodeWidget, tuple[float, float]] = {}
 
         self._drag_port: Optional[PortWidget] = None
         self._drag_port_start = (0.0, 0.0)
@@ -1321,7 +1399,14 @@ class NodeCanvas(Gtk.Overlay):
         self._drag_valid_target: Optional[PortWidget] = None
         self._selected_port: Optional[PortWidget] = None
 
+        self._rubber_band_rect: Optional[tuple[float, float, float, float]] = None
+        self._rubber_band_active: bool = False
+        self._rubber_band_hovered: set[NodeWidget] = set()
+
+        self._clipboard: Optional[dict] = None
+
         self._filter_def_map: dict[str, FilterDef] = {}
+        self._drag_preview: Optional[DragPreview] = None
 
         self._zoom_css = Gtk.CssProvider()
         self._zoom_css.load_from_data(b"")
@@ -1357,6 +1442,18 @@ class NodeCanvas(Gtk.Overlay):
         self._canvas_click.connect("pressed", self._on_canvas_click)
         self._fixed.add_controller(self._canvas_click)
 
+        self._sel_drag = Gtk.GestureDrag(button=1)
+        self._sel_drag.connect("drag-begin", self._on_sel_drag_begin)
+        self._sel_drag.connect("drag-update", self._on_sel_drag_update)
+        self._sel_drag.connect("drag-end", self._on_sel_drag_end)
+        self._fixed.add_controller(self._sel_drag)
+
+        self._last_cursor_x = 0.0
+        self._last_cursor_y = 0.0
+        self._motion = Gtk.EventControllerMotion()
+        self._motion.connect("motion", self._on_motion)
+        self._fixed.add_controller(self._motion)
+
         self._canvas_right_click = Gtk.GestureClick(button=3)
         self._canvas_right_click.connect("pressed", self._on_canvas_right_click)
         self._fixed.add_controller(self._canvas_right_click)
@@ -1368,6 +1465,8 @@ class NodeCanvas(Gtk.Overlay):
         # Drop target for sidebar drag
         self._drop_target = Gtk.DropTarget.new(GObject.TYPE_STRING, Gdk.DragAction.COPY)
         self._drop_target.connect("accept", self._on_drop_accept)
+        self._drop_target.connect("motion", self._on_drag_motion)
+        self._drop_target.connect("leave", self._on_drag_leave)
         self._drop_target.connect("drop", self._on_drop)
         self._drop_target.set_propagation_limit(Gtk.PropagationLimit.NONE)
         self.add_controller(self._drop_target)
@@ -1387,13 +1486,45 @@ class NodeCanvas(Gtk.Overlay):
     def get_node_widget(self, node_id: str) -> Optional[NodeWidget]:
         return self._node_widgets.get(node_id)
 
+    def _clear_selection(self):
+        for w in list(self._selected_widgets):
+            w.set_selected(False)
+        self._selected_widgets.clear()
+        self.emit("node-selected", None)
+
+    def _add_to_selection(self, widget: NodeWidget):
+        widget.set_selected(True)
+        self._selected_widgets.add(widget)
+
+    def _remove_from_selection(self, widget: NodeWidget):
+        widget.set_selected(False)
+        self._selected_widgets.discard(widget)
+        first = next(iter(self._selected_widgets), None)
+        self.emit("node-selected", first.graph_node if first else None)
+
     def select_node(self, widget: Optional[NodeWidget]):
-        if self._selected_widget and self._selected_widget is not widget:
-            self._selected_widget.set_selected(False)
-        self._selected_widget = widget
+        for w in list(self._selected_widgets):
+            w.set_selected(False)
+        self._selected_widgets.clear()
         if widget:
             widget.set_selected(True)
+            self._selected_widgets.add(widget)
         self.emit("node-selected", widget.graph_node if widget else None)
+
+    def _select_nodes_in_rect(self, gx1, gy1, gx2, gy2):
+        for w in list(self._selected_widgets):
+            w.set_selected(False)
+        self._selected_widgets.clear()
+        min_gx, max_gx = min(gx1, gx2), max(gx1, gx2)
+        min_gy, max_gy = min(gy1, gy2), max(gy1, gy2)
+        for widget in self._node_widgets.values():
+            node = widget.graph_node
+            if (node.x < max_gx and node.x + (node.width or 1) > min_gx
+                    and node.y < max_gy and node.y + (node.height or 1) > min_gy):
+                widget.set_selected(True)
+                self._selected_widgets.add(widget)
+        first = next(iter(self._selected_widgets), None)
+        self.emit("node-selected", first.graph_node if first else None)
 
     def add_node(self, node: Node):
         self._graph.add_node(node)
@@ -1435,7 +1566,7 @@ class NodeCanvas(Gtk.Overlay):
         for w in self._node_widgets.values():
             self._fixed.remove(w)
         self._node_widgets.clear()
-        self._selected_widget = None
+        self._selected_widgets.clear()
         self._selected_port = None
         self._drag_port = None
         self._graph.clear()
@@ -1446,8 +1577,7 @@ class NodeCanvas(Gtk.Overlay):
         w = self._node_widgets.pop(node_id, None)
         if w:
             self._fixed.remove(w)
-            if self._selected_widget is w:
-                self._selected_widget = None
+            self._selected_widgets.discard(w)
             if self._dragging_node is w.graph_node:
                 self._dragging_node = None
             if self._resizing_node is w.graph_node:
@@ -1625,6 +1755,49 @@ class NodeCanvas(Gtk.Overlay):
         for fd in defs:
             self._filter_def_map[f"{fd.engine}:{fd.name}"] = fd
 
+    # ─── Drag preview ──────────────────────────────────────────────────────────
+
+    def _show_drag_preview(self, text: str, screen_x: float, screen_y: float):
+        label = None
+        css_class = None
+        if text.startswith("filter:"):
+            parts = text.split(":", 2)
+            if len(parts) == 3:
+                key = f"{parts[1]}:{parts[2]}"
+                fd = self._filter_def_map.get(key)
+                if fd:
+                    label = fd.display_name
+                    css_class = "filter"
+        else:
+            for prefix, (lbl, cls) in _NODE_PREVIEW_INFO.items():
+                if text.startswith(prefix):
+                    label = lbl
+                    css_class = cls
+                    break
+        if label is None:
+            return
+        if self._drag_preview is None:
+            self._drag_preview = DragPreview(label, css_class)
+            self._fixed.put(self._drag_preview, int(screen_x), int(screen_y))
+            self._drag_preview.set_visible(True)
+        else:
+            self._fixed.move(self._drag_preview, int(screen_x), int(screen_y))
+
+    def _hide_drag_preview(self):
+        if self._drag_preview is not None:
+            self._fixed.remove(self._drag_preview)
+            self._drag_preview = None
+
+    def _on_drag_motion(self, target, x, y):
+        text = peek_pending_drag_text()
+        if text:
+            self._show_drag_preview(text, x, y)
+            return Gdk.DragAction.COPY
+        return Gdk.DragAction.COPY
+
+    def _on_drag_leave(self, target):
+        self._hide_drag_preview()
+
     # ─── Drop from sidebar ───────────────────────────────────────────────────────
 
     def _on_drop_accept(self, target, drop):
@@ -1632,6 +1805,7 @@ class NodeCanvas(Gtk.Overlay):
         return formats.contain_mime_type("text/plain")
 
     def _on_drop(self, target, value, x, y):
+        self._hide_drag_preview()
         text = get_pending_drag_text()
         if text and text.startswith("filter:"):
             parts = text.split(":", 2)
@@ -1994,9 +2168,69 @@ class NodeCanvas(Gtk.Overlay):
                 if isinstance(p, NodeWidget):
                     return
                 p = p.get_parent()
-        self.select_node(None)
+        self._clear_selection()
         self.grab_focus()
         self.queue_gl_render()
+
+    def _on_sel_drag_begin(self, gesture, start_x, start_y):
+        child = self._fixed.pick(start_x, start_y, Gtk.PickFlags.DEFAULT)
+        if child is not None:
+            p = child
+            while p and p is not self._fixed:
+                if isinstance(p, NodeWidget):
+                    self._rubber_band_active = False
+                    return
+                p = p.get_parent()
+        self._rubber_band_active = True
+        self._rubber_band_rect = (start_x, start_y, start_x, start_y)
+        self._rubber_band_hovered.clear()
+        self.queue_gl_render()
+
+    def _on_sel_drag_update(self, gesture, offset_x, offset_y):
+        if not self._rubber_band_active:
+            return
+        sx1, sy1, _, _ = self._rubber_band_rect
+        self._rubber_band_rect = (sx1, sy1, sx1 + offset_x, sy1 + offset_y)
+        sx2, sy2 = sx1 + offset_x, sy1 + offset_y
+        gx1, gy1 = self._screen_to_graph(min(sx1, sx2), min(sy1, sy2))
+        gx2, gy2 = self._screen_to_graph(max(sx1, sx2), max(sy1, sy2))
+        if abs(gx2 - gx1) < 1 or abs(gy2 - gy1) < 1:
+            self.queue_gl_render()
+            return
+        newly_in = set()
+        for widget in self._node_widgets.values():
+            node = widget.graph_node
+            if (node.x < max(gx1, gx2) and node.x + (node.width or 1) > min(gx1, gx2)
+                    and node.y < max(gy1, gy2) and node.y + (node.height or 1) > min(gy1, gy2)):
+                if widget not in self._rubber_band_hovered:
+                    widget.set_selected(True)
+                    newly_in.add(widget)
+            else:
+                if widget in self._rubber_band_hovered:
+                    widget.set_selected(False)
+                    self._rubber_band_hovered.discard(widget)
+        self._rubber_band_hovered.update(newly_in)
+        self.queue_gl_render()
+
+    def _on_sel_drag_end(self, gesture, offset_x, offset_y):
+        if not self._rubber_band_active:
+            return
+        self._rubber_band_active = False
+        self._rubber_band_rect = None
+        for w in list(self._selected_widgets):
+            if w not in self._rubber_band_hovered:
+                w.set_selected(False)
+        for w in self._rubber_band_hovered:
+            w.set_selected(True)
+        self._selected_widgets = set(self._rubber_band_hovered)
+        self._rubber_band_hovered.clear()
+        first = next(iter(self._selected_widgets), None)
+        self.emit("node-selected", first.graph_node if first else None)
+        self.queue_gl_render()
+
+    def _on_motion(self, controller, x, y):
+        self._last_cursor_x = x
+        self._last_cursor_y = y
 
     def _on_canvas_right_click(self, gesture, n_press, x, y):
         edge = self._find_edge_at(x, y)
@@ -2030,7 +2264,229 @@ class NodeCanvas(Gtk.Overlay):
     def toggle_minimap(self):
         self.set_minimap_visible(not self._minimap.get_visible())
 
+    def _on_select_all(self):
+        for w in list(self._selected_widgets):
+            w.set_selected(False)
+        self._selected_widgets.clear()
+        for w in self._node_widgets.values():
+            w.set_selected(True)
+            self._selected_widgets.add(w)
+        first = next(iter(self._selected_widgets), None)
+        self.emit("node-selected", first.graph_node if first else None)
+
+    def _on_copy(self):
+        if not self._selected_widgets:
+            return
+        selected_ids = {w.graph_node.id for w in self._selected_widgets}
+        nodes_data = []
+        for w in self._selected_widgets:
+            n = w.graph_node
+            nd = {
+                "id": n.id,
+                "type": n.node_type,
+                "label": n.label,
+                "x": n.x,
+                "y": n.y,
+                "width": n.width,
+                "height": n.height,
+                "params": {},
+            }
+            from nodes.node_types import (
+                InputNode, FilterNode, BlendNode, ColorNode,
+                OpacityNode, ColoringNode, MaskNode,
+                ConstantNode, LabelNode, CommentNode,
+            )
+            if isinstance(n, InputNode):
+                nd["params"]["file_path"] = n.file_path
+            elif isinstance(n, FilterNode):
+                nd["params"]["filter_key"] = f"{n.filter_def.engine}:{n.filter_def.name}"
+                nd["params"]["param_values"] = dict(n.param_values)
+            elif isinstance(n, BlendNode):
+                nd["params"]["mode"] = n.mode
+                nd["params"]["extra_ports"] = len(n.inputs) - 2
+            elif isinstance(n, ColorNode):
+                nd["params"]["operation"] = n.operation
+                nd["params"]["brightness"] = n.brightness
+                nd["params"]["contrast"] = n.contrast
+                nd["params"]["saturation"] = n.saturation
+                nd["params"]["hue"] = n.hue
+                nd["params"]["black_point"] = n.black_point
+                nd["params"]["white_point"] = n.white_point
+                nd["params"]["gamma"] = n.gamma
+            elif isinstance(n, OpacityNode):
+                nd["params"]["opacity"] = n.opacity
+            elif isinstance(n, ColoringNode):
+                nd["params"]["hue"] = n.hue
+                nd["params"]["saturation"] = n.saturation
+                nd["params"]["lightness"] = n.lightness
+            elif isinstance(n, MaskNode):
+                nd["params"]["invert"] = n.invert
+                nd["params"]["threshold"] = n.threshold
+            elif isinstance(n, ConstantNode):
+                nd["params"]["value"] = n.value
+            elif isinstance(n, (LabelNode, CommentNode)):
+                nd["params"]["text"] = n.text
+                nd["params"]["color"] = n.color
+            nodes_data.append(nd)
+
+        edges_data = []
+        for e in self._graph.edges:
+            if e.src_node in selected_ids and e.dst_node in selected_ids:
+                edges_data.append({
+                    "src_node": e.src_node,
+                    "src_port": e.src_port,
+                    "dst_node": e.dst_node,
+                    "dst_port": e.dst_port,
+                })
+
+        self._clipboard = {"nodes": nodes_data, "edges": edges_data}
+
+    def _on_paste(self):
+        if not self._clipboard:
+            return
+        from nodes.node_types import (
+            InputNode, OutputNode, FilterNode, BlendNode, ColorNode,
+            OpacityNode, ColoringNode, MaskNode,
+            ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
+            CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+            LabelNode, CommentNode,
+        )
+        ts = str(GLib.get_monotonic_time())
+        id_map = {}
+        for nd in self._clipboard["nodes"]:
+            old_id = nd["id"]
+            new_id = f"pasted_{old_id}_{ts}"
+            id_map[old_id] = new_id
+
+        nodes_data = self._clipboard["nodes"]
+        if not nodes_data:
+            return
+
+        # compute bounding box center of copied nodes
+        min_cx = min(n["x"] for n in nodes_data)
+        max_cx = max(n["x"] + (n.get("width") or 200) for n in nodes_data)
+        min_cy = min(n["y"] for n in nodes_data)
+        max_cy = max(n["y"] + (n.get("height") or 100) for n in nodes_data)
+        center_x = (min_cx + max_cx) / 2
+        center_y = (min_cy + max_cy) / 2
+
+        # convert cursor screen position to graph coordinates
+        cursor_gx = (self._last_cursor_x - self._pan_x) / self._zoom
+        cursor_gy = (self._last_cursor_y - self._pan_y) / self._zoom
+
+        dx = cursor_gx - center_x
+        dy = cursor_gy - center_y
+
+        new_widgets = []
+        for nd in nodes_data:
+            nid = id_map[nd["id"]]
+            typ = nd["type"]
+            params = nd.get("params", {})
+            x = nd.get("x", 0) + dx
+            y = nd.get("y", 0) + dy
+            node = None
+            if typ == "input":
+                node = InputNode(nid, x, y)
+                fp = params.get("file_path")
+                if fp:
+                    node.file_path = fp
+            elif typ == "output":
+                node = OutputNode(nid, x, y)
+            elif typ == "filter":
+                fkey = params.get("filter_key", "")
+                fdef = self._filter_def_map.get(fkey)
+                if fdef:
+                    node = FilterNode(nid, fdef, x, y)
+                    for k, v in params.get("param_values", {}).items():
+                        node.set_param(k, v)
+                else:
+                    continue
+            elif typ == "blend":
+                mode = params.get("mode", "over")
+                node = BlendNode(nid, mode, x, y)
+                extra = params.get("extra_ports", 0)
+                for _ in range(extra):
+                    node.add_input_port()
+            elif typ == "color":
+                node = ColorNode(nid, x, y)
+                node.operation = params.get("operation", "brightness_contrast")
+                node.brightness = params.get("brightness", 0.0)
+                node.contrast = params.get("contrast", 0.0)
+                node.saturation = params.get("saturation", 0.0)
+                node.hue = params.get("hue", 0.0)
+                node.black_point = params.get("black_point", 0.0)
+                node.white_point = params.get("white_point", 100.0)
+                node.gamma = params.get("gamma", 1.0)
+            elif typ == "opacity":
+                node = OpacityNode(nid, x, y)
+                node.opacity = params.get("opacity", 1.0)
+            elif typ == "coloring":
+                node = ColoringNode(nid, x, y)
+                node.hue = params.get("hue", 0.0)
+                node.saturation = params.get("saturation", 0.0)
+                node.lightness = params.get("lightness", 0.0)
+            elif typ == "mask":
+                node = MaskNode(nid, x, y)
+                node.invert = params.get("invert", False)
+                node.threshold = params.get("threshold", 0.5)
+            elif typ == "constant":
+                node = ConstantNode(nid, x, y)
+                node.value = params.get("value", 0.0)
+            elif typ in ("add", "subtract", "multiply", "divide"):
+                cls = {"add": AddNode, "subtract": SubtractNode, "multiply": MultiplyNode, "divide": DivideNode}[typ]
+                node = cls(nid, x, y)
+            elif typ in ("ceil", "floor", "round", "sum", "product"):
+                cls = {"ceil": CeilNode, "floor": FloorNode, "round": RoundNode, "sum": SumNode, "product": ProductNode}[typ]
+                node = cls(nid, x, y)
+            elif typ == "label":
+                node = LabelNode(nid, x, y)
+                node.text = params.get("text", "Label")
+                node.color = params.get("color")
+            elif typ == "comment":
+                node = CommentNode(nid, x, y)
+                node.text = params.get("text", "Comment")
+                node.color = params.get("color")
+
+            if node:
+                node.width = nd.get("width", node.width)
+                node.height = nd.get("height", node.height)
+                label = nd.get("label")
+                if label and typ != "input":
+                    node.label = label
+                self.add_node(node)
+                nw = self._node_widgets.get(nid)
+                if nw:
+                    new_widgets.append(nw)
+
+        for ed in self._clipboard["edges"]:
+            new_src = id_map.get(ed["src_node"])
+            new_dst = id_map.get(ed["dst_node"])
+            if new_src and new_dst:
+                self._graph.add_edge(new_src, ed["src_port"], new_dst, ed["dst_port"])
+
+        for w in list(self._selected_widgets):
+            w.set_selected(False)
+        self._selected_widgets.clear()
+        for w in new_widgets:
+            w.set_selected(True)
+            self._selected_widgets.add(w)
+        first = next(iter(self._selected_widgets), None)
+        self.emit("node-selected", first.graph_node if first else None)
+        self._update_all_port_colors()
+        self.queue_gl_render()
+        self.emit("graph-changed")
+
     def _on_key_pressed(self, controller, keyval, keycode, state):
+        ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        if ctrl and keyval in (Gdk.KEY_C, Gdk.KEY_c):
+            self._on_copy()
+            return True
+        if ctrl and keyval in (Gdk.KEY_V, Gdk.KEY_v):
+            self._on_paste()
+            return True
+        if ctrl and keyval in (Gdk.KEY_A, Gdk.KEY_a):
+            self._on_select_all()
+            return True
         if keyval in (Gdk.KEY_M, Gdk.KEY_m):
             self.toggle_minimap()
             return True
@@ -2051,9 +2507,9 @@ class NodeCanvas(Gtk.Overlay):
                 self.queue_gl_render()
                 self.emit("graph-changed")
                 return True
-            if self._selected_widget:
-                self.remove_node(self._selected_widget.graph_node.id)
-                self._selected_widget = None
+            if self._selected_widgets:
+                for w in list(self._selected_widgets):
+                    self.remove_node(w.graph_node.id)
                 return True
         return False
 

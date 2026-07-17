@@ -23,6 +23,11 @@ def get_pending_drag_text():
     return t
 
 
+def peek_pending_drag_text():
+    global _pending_drag_text
+    return _pending_drag_text
+
+
 def set_pending_drag_text(text: str):
     global _pending_drag_text
     _pending_drag_text = text
@@ -342,6 +347,8 @@ class FilterBrowser(GObject.Object):
         drag_src = Gtk.DragSource()
         drag_src.set_actions(Gdk.DragAction.COPY)
         drag_src.connect("prepare", self._on_drag_prepare)
+        drag_src.connect("drag-begin", self._on_drag_begin)
+        drag_src.connect("drag-end", self._on_drag_end)
         expander.add_controller(drag_src)
 
     def _on_factory_bind(self, factory, list_item):
@@ -373,6 +380,7 @@ class FilterBrowser(GObject.Object):
             return
 
         expander._tree_item_node = node
+        expander._tree_item_pos = list_item.get_position()
 
         hbox = expander.get_child()
         vbox = hbox.get_first_child()
@@ -436,6 +444,20 @@ class FilterBrowser(GObject.Object):
                 data = GLib.Bytes.new(text.encode("utf-8"))
                 return Gdk.ContentProvider.new_for_bytes("text/plain", data)
         return None
+
+    def _on_drag_begin(self, source, drag):
+        widget = source.get_widget()
+        if widget and hasattr(widget, '_tree_item_pos'):
+            self._selection.set_selected(widget._tree_item_pos)
+        try:
+            pixel = GLib.Bytes.new(b"\x00\x00\x00\x00")
+            texture = Gdk.MemoryTexture.new(1, 1, Gdk.MemoryFormat.B8G8R8A8, pixel, 4)
+            source.set_icon(texture, 0, 0)
+        except Exception:
+            pass
+
+    def _on_drag_end(self, source, drag, delete_data):
+        pass
 
     def _on_model_items_changed(self, model, position, removed, added):
         if removed == 0:
