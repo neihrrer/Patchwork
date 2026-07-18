@@ -10,7 +10,7 @@ class TestAppConfig:
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
         assert cfg.output_format == "png"
-        assert cfg.processing_timeout == 120
+        assert cfg.processing_timeout == 60
         assert cfg.auto_save_interval == 0
         assert cfg.grid_visible is True
         assert cfg.snap_to_grid is False
@@ -39,7 +39,7 @@ class TestAppConfig:
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
         assert cfg.output_format == "webp"
-        assert cfg.processing_timeout == 120
+        assert cfg.processing_timeout == 60
 
     def test_corrupted_file_falls_back(self, tmp_path):
         config_path = tmp_path / "config.json"

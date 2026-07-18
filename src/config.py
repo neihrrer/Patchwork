@@ -6,7 +6,7 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 
 DEFAULTS = {
     "output_format": "png",
-    "processing_timeout": 120,
+    "processing_timeout": 60,
     "snap_to_grid": False,
     "auto_save_interval": 0,
     "grid_visible": True,
