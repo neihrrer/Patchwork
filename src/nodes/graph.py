@@ -101,6 +101,29 @@ class NodeGraph:
         self._edges = [e for e in self._edges
                        if e.src_node != node_id and e.dst_node != node_id]
 
+    def remove_node_with_bypass(self, node_id: str):
+        node = self._nodes.get(node_id)
+        if not node:
+            self.remove_node(node_id)
+            return
+
+        incoming = [e for e in self._edges if e.dst_node == node_id]
+        outgoing = [e for e in self._edges if e.src_node == node_id]
+
+        self.remove_node(node_id)
+
+        for ie in incoming:
+            ip = node.get_input_port(ie.dst_port)
+            if not ip:
+                continue
+            for oe in outgoing:
+                op = node.get_output_port(oe.src_port)
+                if not op:
+                    continue
+                if ip.port_type == op.port_type:
+                    self.add_edge(ie.src_node, ie.src_port,
+                                  oe.dst_node, oe.dst_port)
+
     def get_node(self, node_id: str) -> Optional[Node]:
         return self._nodes.get(node_id)
 

@@ -1605,7 +1605,7 @@ class NodeCanvas(Gtk.Overlay):
                 self._dragging_node = None
             if self._resizing_node is w.graph_node:
                 self._resizing_node = None
-        self._graph.remove_node(node_id)
+        self._graph.remove_node_with_bypass(node_id)
         self._update_all_port_colors()
         self.queue_gl_render()
         self.emit("graph-changed")
