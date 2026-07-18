@@ -210,6 +210,18 @@ class FilterBrowser(GObject.Object):
             for f in matching:
                 node = TreeItemNode(display_name=f.display_name, node_type="filter", filter_def=f)
                 root_store.append(node)
+
+            for cat_name, items in _BASIC_SUBCATEGORIES.items():
+                for key, label, ntype in items:
+                    if lower in label.lower() or lower in cat_name.lower() or lower in key.lower():
+                        node = TreeItemNode(display_name=label, node_type=ntype)
+                        root_store.append(node)
+
+            for cat_name, items in _ADVANCED_SUBCATEGORIES.items():
+                for key, label, ntype in items:
+                    if lower in label.lower() or lower in cat_name.lower() or lower in key.lower():
+                        node = TreeItemNode(display_name=label, node_type=ntype)
+                        root_store.append(node)
         else:
             root_store.append(TreeItemNode(display_name=_ROOT_BASIC, node_type="root"))
             root_store.append(TreeItemNode(display_name=_ROOT_ADVANCED, node_type="root"))
