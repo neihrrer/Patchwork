@@ -320,7 +320,7 @@ def _join_continuations(lines: list[str]) -> list[str]:
             content = stripped[5:].strip()
             if ":" in content:
                 lhs, rhs = content.split(":", 1)
-                if not lhs.strip() and "=" not in rhs and "=" in gui_buf:
+                if not lhs.strip() and "=" in gui_buf:
                     gui_buf += " " + rhs.strip()
                     continue
             if gui_buf:
@@ -396,16 +396,24 @@ class GmicFilterParser:
                 continue
 
             # Extract multi-input flags (*, +) from the right-hand side
-            # Format: "command, preview_command(zoom_factor) [: *|+]"
             image_input_count = 1
-            if " : " in rhs:
-                cmd_part, flags_part = rhs.rsplit(" : ", 1)
-                flags = flags_part.strip()
-                if flags in ("*", "+"):
-                    image_input_count = 2
-                rhs = cmd_part.strip()
+            # Format: "command, preview_command(zoom_factor) [: *|+]"
+            m = re.match(r'^(.*?)\s*:\s*([*+])$', rhs)
+            if m:
+                rhs = m.group(1).strip()
+                image_input_count = 2
+            # Also handle :* or :+ without space before the flag
+            elif rhs.endswith(":*") or rhs.endswith(":+") or rhs.endswith(": *") or rhs.endswith(": +"):
+                for sep in [":*", ":+", ": *", ": +"]:
+                    if rhs.endswith(sep):
+                        rhs = rhs[:-len(sep)].strip()
+                        image_input_count = 2
+                        break
 
             display_name = _strip_name(lhs)
+            if display_name in ("note", "sep", "separator"):
+                continue
+
             command = _munge_gui_command(rhs)
 
             if not command or command.startswith("_"):
@@ -438,36 +446,28 @@ class GmicFilterParser:
         categories = {
             _("Artistic"): [
                 ("sketchbw", _("Sketch (B&W)"), "sketchbw 50,0,0,0"),
-                ("oilpaint", _("Oil Painting"), "oilpaint 3,30"),
                 ("fx_cpencil", _("Pencil Drawing"), "fx_cpencil 30,60,0,0,50,0,2,25"),
-                ("watercolor", _("Watercolor"), "watercolor 20,10,0"),
                 ("cartoon", _("Cartoon"), "cartoon 3,10,10,1"),
                 ("cl_comic", _("Comic Book"), "cl_comic"),
             ],
             _("Colors"): [
-                ("boost_chroma", _("Boost Chroma"), "boost_chroma 50,0,1"),
                 ("sepia", _("Sepia"), "sepia"),
-                ("colorize", _("Colorize"), "colorize 0,50,50,0"),
                 ("normalize", _("Auto Levels"), "normalize 0,255"),
                 ("equalize", _("Histogram Equalization"), "equalize 256"),
-                ("balance_gray", _("Gray Balance"), "balance_gray"),
             ],
             _("Details"): [
                 ("sharpen", _("Sharpen"), "sharpen 500"),
                 ("unsharp", _("Unsharp Mask"), "unsharp 2,50,0,0,0.5,0"),
-                ("details", _("Extract Details"), "details 2,30,10,0,0"),
                 ("blur", _("Blur"), "blur 3"),
                 ("denoise", _("Denoise"), "denoise 3,10,0,6"),
             ],
             _("Deformations"): [
                 ("rotate", _("Rotate"), "rotate 90"),
                 ("resize", _("Resize"), "resize 50%,50%"),
-                ("warp", _("Warp"), "warp 10,10"),
-                ("flip", _("Flip"), "flip"),
-                ("mirror", _("Mirror"), "mirror"),
+                ("warp", _("Warp"), "warp 10"),
+                ("mirror", _("Mirror"), "mirror x"),
             ],
             _("Light & Shadows"): [
-                ("light_balance", _("Light Balance"), "light_balance 10,0,10,0,0"),
                 ("retinex", _("Retinex"), "retinex 100,2,0,200,1,5,15,80,250"),
                 ("normalize_local", _("Local Normalization"), "normalize_local 10"),
             ],
@@ -483,13 +483,10 @@ class GmicFilterParser:
             ],
             _("Repair"): [
                 ("remove_hotpixels", _("Remove Hot Pixels"), "remove_hotpixels 3"),
-                ("remove_banding", _("Remove Banding"), "remove_banding 2,10,0"),
-                ("antialias", _("Anti-alias"), "antialias 2"),
             ],
             _("Rendering"): [
                 ("plasma", _("Plasma"), "plasma 50"),
                 ("clouds", _("Cloud"), "clouds 50"),
-                ("fractal", _("Fractal"), "fractal"),
             ],
         }
 

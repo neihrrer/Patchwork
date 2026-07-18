@@ -101,7 +101,7 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
     elif op == "canny_edge":
         val = _join_params_raw(raw_params, "x", 2) if raw_params else None
         if len(raw_params) >= 4:
-            val = val + "+" + raw_params[2] + "+" + raw_params[3]
+            val = val + "+" + raw_params[2] + "%+" + raw_params[3] + "%"
         return [("-canny", val)]
     elif op == "edge":
         val = raw_params[0] if raw_params else None
@@ -116,11 +116,15 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
         val = raw_params[0] if raw_params else None
         return [("-emboss", val)]
     elif op == "vignette":
-        val = _join_params_raw(raw_params, "x", 2) if raw_params else None
-        if val and "x" in val:
-            parts = val.split("x")
-            val = parts[0] + "%x" + parts[1] + "%"
-        return [("-vignette", val)]
+        sigma = raw_params[2] if raw_params and len(raw_params) >= 3 else "3"
+        shade = int(raw_params[3]) if raw_params and len(raw_params) >= 4 else 0
+        bg = "white" if shade else "black"
+        val = "0x" + sigma
+        if raw_params and len(raw_params) >= 1:
+            val += "+" + raw_params[0] + "%"
+        if raw_params and len(raw_params) >= 2:
+            val += "+" + raw_params[1] + "%"
+        return [("-background", bg), ("-vignette", val)]
     elif op == "add_noise":
         idx = int(raw_params[0]) if raw_params else 0
         idx = max(0, min(idx, len(_NOISE_TYPES) - 1))

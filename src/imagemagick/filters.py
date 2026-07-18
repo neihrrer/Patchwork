@@ -236,8 +236,10 @@ BUILTIN_FILTERS: list[FilterDef] = [
         category=["Artistic"],
         engine=ENGINE_IMAGEMAGICK,
         parameters=[
-            ParamDef(name="radius_x", label="Radius X", kind=ParamKind.FLOAT, default=50.0, min_val=0.0, max_val=100.0),
-            ParamDef(name="radius_y", label="Radius Y", kind=ParamKind.FLOAT, default=50.0, min_val=0.0, max_val=100.0),
+            ParamDef(name="radius_x", label="Vignette X %", kind=ParamKind.FLOAT, default=10.0, min_val=0.0, max_val=49.0),
+            ParamDef(name="radius_y", label="Vignette Y %", kind=ParamKind.FLOAT, default=10.0, min_val=0.0, max_val=49.0),
+            ParamDef(name="softness", label="Softness", kind=ParamKind.FLOAT, default=3.0, min_val=0.0, max_val=50.0),
+            ParamDef(name="shade", label="Shade", kind=ParamKind.CHOICE, default=0, choices=["Black", "White"]),
         ],
         gmic_command="vignette",
     ),
