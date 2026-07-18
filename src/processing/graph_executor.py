@@ -13,7 +13,10 @@ from nodes import (
     BlurNode, SharpenNode, EdgeDetectNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+    ModuloNode, PowerNode, SquareRootNode, AbsoluteNode, LogNode, ExpNode, RandomNode,
     HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
+    NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
+    CompareNode, ClampNode, MapRangeNode,
 )
 from models.filter import ENGINE_GMIC, ParamKind
 from gmic.cli import GmicCLI
@@ -373,6 +376,108 @@ class GraphExecutor:
                 a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
                 b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
                 numeric_outputs[node.id] = a * b
+
+            elif isinstance(node, NotNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = 1.0 if a == 0.0 else 0.0
+
+            elif isinstance(node, AndNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = 1.0 if a != 0.0 and b != 0.0 else 0.0
+
+            elif isinstance(node, OrNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = 1.0 if a != 0.0 or b != 0.0 else 0.0
+
+            elif isinstance(node, NandNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = 0.0 if a != 0.0 and b != 0.0 else 1.0
+
+            elif isinstance(node, NorNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = 0.0 if a != 0.0 or b != 0.0 else 1.0
+
+            elif isinstance(node, XorNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = 1.0 if (a != 0.0) != (b != 0.0) else 0.0
+
+            elif isinstance(node, XnorNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = 1.0 if (a != 0.0) == (b != 0.0) else 0.0
+
+            elif isinstance(node, CompareNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 0.0
+                op = node.operator
+                result = False
+                if op == "==":
+                    result = a == b
+                elif op == "!=":
+                    result = a != b
+                elif op == "<":
+                    result = a < b
+                elif op == ">":
+                    result = a > b
+                elif op == "<=":
+                    result = a <= b
+                elif op == ">=":
+                    result = a >= b
+                numeric_outputs[node.id] = 1.0 if result else 0.0
+
+            elif isinstance(node, ClampNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = max(node.min_val, min(node.max_val, a))
+
+            elif isinstance(node, MapRangeNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                in_range = node.in_max - node.in_min
+                if in_range == 0.0:
+                    numeric_outputs[node.id] = node.out_min
+                else:
+                    t = (a - node.in_min) / in_range
+                    numeric_outputs[node.id] = node.out_min + t * (node.out_max - node.out_min)
+
+            elif isinstance(node, ModuloNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 1.0
+                if b == 0.0:
+                    return ProcessResult(error=f"Modulo by zero in node '{node.label}'")
+                numeric_outputs[node.id] = a % b
+
+            elif isinstance(node, PowerNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                b = self._get_numeric_input(node, "b", graph, numeric_outputs) or 1.0
+                numeric_outputs[node.id] = a ** b
+
+            elif isinstance(node, SquareRootNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                if a < 0.0:
+                    return ProcessResult(error=f"Square root of negative number in node '{node.label}'")
+                numeric_outputs[node.id] = math.sqrt(a)
+
+            elif isinstance(node, AbsoluteNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = abs(a)
+
+            elif isinstance(node, LogNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 1.0
+                if a <= 0.0:
+                    return ProcessResult(error=f"Log of non-positive number in node '{node.label}'")
+                numeric_outputs[node.id] = math.log(a)
+
+            elif isinstance(node, ExpNode):
+                a = self._get_numeric_input(node, "a", graph, numeric_outputs) or 0.0
+                numeric_outputs[node.id] = math.exp(a)
+
+            elif isinstance(node, RandomNode):
+                node.randomize()
+                numeric_outputs[node.id] = node.value
 
             if was_processed:
                 for e in graph.edges:

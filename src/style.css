@@ -120,6 +120,23 @@ navigation-split-view > separator {
 .node-header.waveform_monitor { background: #6a4a8a; }
 .node-header.vectorscope { background: #3a7a6a; }
 .node-header.frequency_domain { background: #8a4a5a; }
+.node-header.not { background: #9c27b0; }
+.node-header.and { background: #64dd17; }
+.node-header.or { background: #ffd600; }
+.node-header.nand { background: #d50000; }
+.node-header.nor { background: #e65100; }
+.node-header.xor { background: #00bcd4; }
+.node-header.xnor { background: #00838f; }
+.node-header.compare { background: #aa00ff; }
+.node-header.clamp { background: #00c853; }
+.node-header.map_range { background: #2962ff; }
+.node-header.modulo { background: #6d4c41; }
+.node-header.power { background: #00695c; }
+.node-header.square_root { background: #2e7d32; }
+.node-header.absolute { background: #6a1b9a; }
+.node-header.log { background: #006064; }
+.node-header.exp { background: #bf360c; }
+.node-header.random { background: #283593; }
 
 .node-label-content {
     font-size: 18pt;

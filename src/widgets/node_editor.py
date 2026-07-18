@@ -26,8 +26,11 @@ from nodes import (
     BlurNode, SharpenNode, EdgeDetectNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+    ModuloNode, PowerNode, SquareRootNode, AbsoluteNode, LogNode, ExpNode, RandomNode,
     LabelNode, CommentNode,
     HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
+    NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
+    CompareNode, ClampNode, MapRangeNode,
 )
 from nodes.node_types import LABEL_COLORS, HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode
 from models.filter import FilterDef, ParamKind
@@ -81,8 +84,8 @@ def _compute_numeric_value(node_id: str, graph: NodeGraph, visited: set = None):
     if isinstance(node, (AddNode, SubtractNode, MultiplyNode, DivideNode, SumNode, ProductNode)):
         a_edge = graph.get_connected_input(node_id, "a")
         b_edge = graph.get_connected_input(node_id, "b")
-        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
-        b = _compute_numeric_value(b_edge.src_node, graph, visited) if b_edge else 0.0
+        a = (_compute_numeric_value(a_edge.src_node, graph, visited) or 0.0) if a_edge else 0.0
+        b = (_compute_numeric_value(b_edge.src_node, graph, visited) or 0.0) if b_edge else 0.0
         if isinstance(node, (AddNode, SumNode)):
             return a + b
         if isinstance(node, SubtractNode):
@@ -96,17 +99,121 @@ def _compute_numeric_value(node_id: str, graph: NodeGraph, visited: set = None):
     if isinstance(node, CeilNode):
         a_edge = graph.get_connected_input(node_id, "a")
         a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
-        return math.ceil(a)
+        return math.ceil(a) if a is not None else 0.0
 
     if isinstance(node, FloorNode):
         a_edge = graph.get_connected_input(node_id, "a")
         a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
-        return math.floor(a)
+        return math.floor(a) if a is not None else 0.0
 
     if isinstance(node, RoundNode):
         a_edge = graph.get_connected_input(node_id, "a")
         a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
-        return round(a)
+        return round(a) if a is not None else 0.0
+
+    if isinstance(node, NotNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) or 0.0 if a_edge else 0.0
+        return 1.0 if a == 0.0 else 0.0
+
+    if isinstance(node, (AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode)):
+        a_edge = graph.get_connected_input(node_id, "a")
+        b_edge = graph.get_connected_input(node_id, "b")
+        a = (_compute_numeric_value(a_edge.src_node, graph, visited) or 0.0) if a_edge else 0.0
+        b = (_compute_numeric_value(b_edge.src_node, graph, visited) or 0.0) if b_edge else 0.0
+        a_bool = a != 0.0
+        b_bool = b != 0.0
+        if isinstance(node, AndNode):
+            return 1.0 if a_bool and b_bool else 0.0
+        if isinstance(node, OrNode):
+            return 1.0 if a_bool or b_bool else 0.0
+        if isinstance(node, NandNode):
+            return 0.0 if a_bool and b_bool else 1.0
+        if isinstance(node, NorNode):
+            return 0.0 if a_bool or b_bool else 1.0
+        if isinstance(node, XorNode):
+            return 1.0 if a_bool != b_bool else 0.0
+        if isinstance(node, XnorNode):
+            return 1.0 if a_bool == b_bool else 0.0
+
+    if isinstance(node, CompareNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        b_edge = graph.get_connected_input(node_id, "b")
+        a = (_compute_numeric_value(a_edge.src_node, graph, visited) or 0.0) if a_edge else 0.0
+        b = (_compute_numeric_value(b_edge.src_node, graph, visited) or 0.0) if b_edge else 0.0
+        op = node.operator
+        if op == "==":
+            return 1.0 if a == b else 0.0
+        if op == "!=":
+            return 1.0 if a != b else 0.0
+        if op == "<":
+            return 1.0 if a < b else 0.0
+        if op == ">":
+            return 1.0 if a > b else 0.0
+        if op == "<=":
+            return 1.0 if a <= b else 0.0
+        if op == ">=":
+            return 1.0 if a >= b else 0.0
+        return 0.0
+
+    if isinstance(node, ClampNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        if a is not None:
+            return max(node.min_val, min(node.max_val, a))
+        return node.min_val
+
+    if isinstance(node, MapRangeNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        if a is not None:
+            in_range = node.in_max - node.in_min
+            if in_range == 0.0:
+                return node.out_min
+            t = (a - node.in_min) / in_range
+            return node.out_min + t * (node.out_max - node.out_min)
+        return node.out_min
+
+    if isinstance(node, ModuloNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        b_edge = graph.get_connected_input(node_id, "b")
+        a = (_compute_numeric_value(a_edge.src_node, graph, visited) or 0.0) if a_edge else 0.0
+        b = (_compute_numeric_value(b_edge.src_node, graph, visited) or 1.0) if b_edge else 1.0
+        return a % b if b != 0 else None
+
+    if isinstance(node, PowerNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        b_edge = graph.get_connected_input(node_id, "b")
+        a = (_compute_numeric_value(a_edge.src_node, graph, visited) or 0.0) if a_edge else 0.0
+        b = (_compute_numeric_value(b_edge.src_node, graph, visited) or 1.0) if b_edge else 1.0
+        return a ** b
+
+    if isinstance(node, SquareRootNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        if a is not None and a >= 0:
+            return math.sqrt(a)
+        return 0.0
+
+    if isinstance(node, AbsoluteNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        return abs(a) if a is not None else 0.0
+
+    if isinstance(node, LogNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 1.0
+        if a is not None and a > 0:
+            return math.log(a)
+        return 0.0
+
+    if isinstance(node, ExpNode):
+        a_edge = graph.get_connected_input(node_id, "a")
+        a = _compute_numeric_value(a_edge.src_node, graph, visited) if a_edge else 0.0
+        return math.exp(a) if a is not None else 1.0
+
+    if isinstance(node, RandomNode):
+        return node.value
 
     return None
 
@@ -146,6 +253,23 @@ _NODE_PREVIEW_INFO = {
     "product:": (_("Product"), "product"),
     "label:": (_("Label"), "label"),
     "comment:": (_("Comment"), "comment"),
+    "not:": (_("NOT"), "not"),
+    "and:": (_("AND"), "and"),
+    "or:": (_("OR"), "or"),
+    "nand:": (_("NAND"), "nand"),
+    "nor:": (_("NOR"), "nor"),
+    "xor:": (_("XOR"), "xor"),
+    "xnor:": (_("XNOR"), "xnor"),
+    "compare:": (_("Compare"), "compare"),
+    "clamp:": (_("Clamp"), "clamp"),
+    "map_range:": (_("Map Range"), "map_range"),
+    "modulo:": (_("Modulo"), "modulo"),
+    "power:": (_("Power"), "power"),
+    "square_root:": (_("Square Root"), "square_root"),
+    "absolute:": (_("Absolute"), "absolute"),
+    "log:": (_("Log"), "log"),
+    "exp:": (_("Exp"), "exp"),
+    "random:": (_("Random"), "random"),
 }
 
 
@@ -773,6 +897,14 @@ class NodeWidget(Gtk.Box):
             self._build_edge_detect_params()
         elif isinstance(self._node, ConstantNode):
             self._build_constant_params()
+        elif isinstance(self._node, CompareNode):
+            self._build_compare_params()
+        elif isinstance(self._node, ClampNode):
+            self._build_clamp_params()
+        elif isinstance(self._node, MapRangeNode):
+            self._build_map_range_params()
+        elif isinstance(self._node, RandomNode):
+            self._build_random_params()
 
     def _build_filter_params(self):
         fd = self._node.filter_def
@@ -1201,6 +1333,81 @@ class NodeWidget(Gtk.Box):
         self._ctrl_widgets.append(spin)
         self._port_spin_buttons["value"] = spin
         self._make_control_row("Value", "value", spin)
+
+    def _build_compare_params(self):
+        node: CompareNode = self._node
+        operators = ["==", "!=", "<", ">", "<=", ">="]
+        combo = Gtk.DropDown.new_from_strings(operators)
+        selected = operators.index(node.operator) if node.operator in operators else 0
+        combo.set_selected(selected)
+        combo.connect("notify::selected", lambda c, _: setattr(node, "operator", operators[c.get_selected()]))
+        combo.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(combo)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        row.set_css_classes(["node-param-row"])
+        row.set_margin_end(4)
+        lbl = Gtk.Label(label="Operator", xalign=0)
+        lbl.set_css_classes(["node-param-label"])
+        row.append(lbl)
+        row.append(combo)
+        self.append(row)
+        self._param_controls.append(row)
+
+    def _build_clamp_params(self):
+        node: ClampNode = self._node
+        adj_min = Gtk.Adjustment(value=node.min_val, lower=-999999, upper=999999, step_increment=0.1)
+        spin_min = Gtk.SpinButton(adjustment=adj_min, climb_rate=1, digits=2)
+        spin_min.connect("value-changed", lambda s: setattr(node, "min_val", s.get_value()))
+        spin_min.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_min)
+        self._make_control_row("Min", "", spin_min)
+        adj_max = Gtk.Adjustment(value=node.max_val, lower=-999999, upper=999999, step_increment=0.1)
+        spin_max = Gtk.SpinButton(adjustment=adj_max, climb_rate=1, digits=2)
+        spin_max.connect("value-changed", lambda s: setattr(node, "max_val", s.get_value()))
+        spin_max.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_max)
+        self._make_control_row("Max", "", spin_max)
+
+    def _build_map_range_params(self):
+        node: MapRangeNode = self._node
+        def _row(label, attr, value):
+            adj = Gtk.Adjustment(value=value, lower=-999999, upper=999999, step_increment=0.1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=2)
+            spin.connect("value-changed", lambda s: setattr(node, attr, s.get_value()))
+            spin.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(spin)
+            self._make_control_row(label, "", spin)
+        _row("In Min", "in_min", node.in_min)
+        _row("In Max", "in_max", node.in_max)
+        _row("Out Min", "out_min", node.out_min)
+        _row("Out Max", "out_max", node.out_max)
+
+    def _build_random_params(self):
+        node: RandomNode = self._node
+        adj_min = Gtk.Adjustment(value=node.min_val, lower=-999999, upper=999999, step_increment=0.1)
+        spin_min = Gtk.SpinButton(adjustment=adj_min, climb_rate=1, digits=2)
+        spin_min.connect("value-changed", lambda s: setattr(node, "min_val", s.get_value()))
+        spin_min.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_min)
+        self._make_control_row("Min", "", spin_min)
+        adj_max = Gtk.Adjustment(value=node.max_val, lower=-999999, upper=999999, step_increment=0.1)
+        spin_max = Gtk.SpinButton(adjustment=adj_max, climb_rate=1, digits=2)
+        spin_max.connect("value-changed", lambda s: setattr(node, "max_val", s.get_value()))
+        spin_max.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_max)
+        self._make_control_row("Max", "", spin_max)
+        btn = Gtk.Button(label="Randomize")
+        btn.add_css_class("node-param-control")
+        btn.connect("clicked", lambda b: self._on_randomize_clicked(node))
+        row = Gtk.CenterBox()
+        row.set_hexpand(True)
+        row.set_center_widget(btn)
+        self.append(row)
+        self._param_controls.append(row)
+
+    def _on_randomize_clicked(self, node: RandomNode):
+        node.randomize()
+        self._canvas._update_all_port_colors()
 
     def _get_local_numeric_value(self, port_name: str) -> Optional[float]:
         node = self._node
@@ -1894,6 +2101,23 @@ class Minimap(Gtk.Widget):
         "product": Gdk.RGBA(0.70, 0.20, 0.50, 1.0),
         "label": Gdk.RGBA(0.50, 0.50, 0.20, 1.0),
         "comment": Gdk.RGBA(0.30, 0.60, 0.30, 1.0),
+        "not": Gdk.RGBA(0.90, 0.25, 0.50, 1.0),
+        "and": Gdk.RGBA(0.46, 0.83, 0.02, 1.0),
+        "or": Gdk.RGBA(1.00, 0.84, 0.00, 1.0),
+        "nand": Gdk.RGBA(0.67, 0.08, 0.08, 1.0),
+        "nor": Gdk.RGBA(0.85, 0.37, 0.01, 1.0),
+        "xor": Gdk.RGBA(0.00, 0.90, 0.96, 1.0),
+        "xnor": Gdk.RGBA(0.05, 0.55, 0.60, 1.0),
+        "compare": Gdk.RGBA(0.88, 0.25, 0.98, 1.0),
+        "clamp": Gdk.RGBA(0.26, 0.67, 0.32, 1.0),
+        "map_range": Gdk.RGBA(0.19, 0.54, 0.80, 1.0),
+        "modulo": Gdk.RGBA(0.67, 0.42, 0.18, 1.0),
+        "power": Gdk.RGBA(0.18, 0.54, 0.67, 1.0),
+        "square_root": Gdk.RGBA(0.22, 0.65, 0.42, 1.0),
+        "absolute": Gdk.RGBA(0.62, 0.28, 0.62, 1.0),
+        "log": Gdk.RGBA(0.15, 0.60, 0.55, 1.0),
+        "exp": Gdk.RGBA(0.72, 0.30, 0.20, 1.0),
+        "random": Gdk.RGBA(0.30, 0.30, 0.70, 1.0),
     }
 
     SIZE = (180, 130)
@@ -2495,7 +2719,7 @@ class NodeCanvas(Gtk.Overlay):
 
     # ─── Wire-insert helpers ───────────────────────────────────────────────────
 
-    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:", "color_source:", "gradient:", "noise:", "color_balance:", "exposure_gamma:", "curves:", "crop:", "resize:", "rotate:", "flip:", "distort:", "blur:", "sharpen:", "edge_detect:", "histogram:", "waveform_monitor:", "vectorscope:", "frequency_domain:"})
+    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:", "color_source:", "gradient:", "noise:", "color_balance:", "exposure_gamma:", "curves:", "crop:", "resize:", "rotate:", "flip:", "distort:", "blur:", "sharpen:", "edge_detect:", "histogram:", "waveform_monitor:", "vectorscope:", "frequency_domain:", "not:", "and:", "or:", "nand:", "nor:", "xor:", "xnor:", "compare:", "clamp:", "map_range:", "modulo:", "power:", "square_root:", "absolute:", "log:", "exp:", "random:"})
 
     def _is_insertable_node(self, text: str) -> bool:
         return any(text.startswith(p) for p in self._INSERTABLE_PREFIXES)
@@ -2821,6 +3045,176 @@ class NodeCanvas(Gtk.Overlay):
             gy = (y - self._pan_y) / self._zoom
             nid = "product_" + str(GLib.get_monotonic_time())
             node = ProductNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("not:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "not_" + str(GLib.get_monotonic_time())
+            node = NotNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("and:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "and_" + str(GLib.get_monotonic_time())
+            node = AndNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("or:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "or_" + str(GLib.get_monotonic_time())
+            node = OrNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("nand:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "nand_" + str(GLib.get_monotonic_time())
+            node = NandNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("nor:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "nor_" + str(GLib.get_monotonic_time())
+            node = NorNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("xor:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "xor_" + str(GLib.get_monotonic_time())
+            node = XorNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("xnor:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "xnor_" + str(GLib.get_monotonic_time())
+            node = XnorNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("compare:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "compare_" + str(GLib.get_monotonic_time())
+            node = CompareNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("clamp:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "clamp_" + str(GLib.get_monotonic_time())
+            node = ClampNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("map_range:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "map_range_" + str(GLib.get_monotonic_time())
+            node = MapRangeNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("modulo:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "modulo_" + str(GLib.get_monotonic_time())
+            node = ModuloNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("power:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "power_" + str(GLib.get_monotonic_time())
+            node = PowerNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("square_root:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "sqrt_" + str(GLib.get_monotonic_time())
+            node = SquareRootNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("absolute:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "abs_" + str(GLib.get_monotonic_time())
+            node = AbsoluteNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("log:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "log_" + str(GLib.get_monotonic_time())
+            node = LogNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("exp:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "exp_" + str(GLib.get_monotonic_time())
+            node = ExpNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("random:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "random_" + str(GLib.get_monotonic_time())
+            node = RandomNode(nid, gx, gy)
             self.add_node(node)
             w = self.get_node_widget(nid)
             if w:

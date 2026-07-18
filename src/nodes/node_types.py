@@ -343,6 +343,115 @@ class ProductNode(Node):
         self.height = 80
 
 
+class ModuloNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Modulo", "modulo", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class PowerNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Power", "power", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class SquareRootNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Square Root", "square_root", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class AbsoluteNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Absolute", "absolute", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class LogNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Log", "log", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class ExpNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Exp", "exp", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class RandomNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0,
+                 min_val: float = 0.0, max_val: float = 1.0, seed: Optional[int] = None):
+        outputs = [
+            Port(id, "value", "Value", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Random", "random", [], outputs, x, y)
+        self.width = 160
+        self.height = 130
+        self.min_val: float = min_val
+        self.max_val: float = max_val
+        self.seed: Optional[int] = seed
+        self._current_value: float = self._generate()
+
+    def _generate(self) -> float:
+        import random
+        if self.seed is not None:
+            random.seed(self.seed)
+        return random.uniform(self.min_val, self.max_val)
+
+    def randomize(self):
+        self._current_value = self._generate()
+        self.cache_dirty = True
+
+    @property
+    def value(self) -> float:
+        return self._current_value
+
+
 LABEL_COLORS = [
     ("None", None),
     ("Blue", "#62a0ea"),
@@ -709,3 +818,149 @@ class FrequencyDomainNode(Node):
         self.width = 220
         self.height = 220
         self.analysis_data: Optional[dict] = None
+
+
+class NotNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "NOT", "not", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class AndNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "AND", "and", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class OrNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "OR", "or", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class NandNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "NAND", "nand", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class NorNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "NOR", "nor", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class XorNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "XOR", "xor", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class XnorNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "XNOR", "xnor", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 80
+
+
+class CompareNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0, operator: str = "=="):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "b", "B", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Compare", "compare", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 100
+        self.operator: str = operator
+
+
+class ClampNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0, min_val: float = 0.0, max_val: float = 1.0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Clamp", "clamp", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 100
+        self.min_val: float = min_val
+        self.max_val: float = max_val
+
+
+class MapRangeNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0,
+                 in_min: float = 0.0, in_max: float = 1.0,
+                 out_min: float = 0.0, out_max: float = 1.0):
+        inputs = [
+            Port(id, "a", "A", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "result", "Result", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Map Range", "map_range", inputs, outputs, x, y)
+        self.width = 160
+        self.height = 120
+        self.in_min: float = in_min
+        self.in_max: float = in_max
+        self.out_min: float = out_min
+        self.out_max: float = out_max

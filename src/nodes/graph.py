@@ -255,6 +255,9 @@ class NodeGraph:
                 CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
                 LabelNode, CommentNode,
                 HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
+                NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
+                CompareNode, ClampNode, MapRangeNode,
+                ModuloNode, PowerNode, SquareRootNode, AbsoluteNode, LogNode, ExpNode, RandomNode,
             )
             if isinstance(n, InputNode):
                 nd["params"]["file_path"] = n.file_path
@@ -341,6 +344,20 @@ class NodeGraph:
                 nd["params"]["threshold"] = n.threshold
             elif isinstance(n, ConstantNode):
                 nd["params"]["value"] = n.value
+            elif isinstance(n, CompareNode):
+                nd["params"]["operator"] = n.operator
+            elif isinstance(n, ClampNode):
+                nd["params"]["min_val"] = n.min_val
+                nd["params"]["max_val"] = n.max_val
+            elif isinstance(n, MapRangeNode):
+                nd["params"]["in_min"] = n.in_min
+                nd["params"]["in_max"] = n.in_max
+                nd["params"]["out_min"] = n.out_min
+                nd["params"]["out_max"] = n.out_max
+            elif isinstance(n, RandomNode):
+                nd["params"]["min_val"] = n.min_val
+                nd["params"]["max_val"] = n.max_val
+                nd["params"]["seed"] = n.seed
             elif isinstance(n, (LabelNode, CommentNode)):
                 nd["params"]["text"] = n.text
                 nd["params"]["color"] = n.color
@@ -509,6 +526,33 @@ class NodeGraph:
             elif typ in ("ceil", "floor", "round", "sum", "product"):
                 cls = {"ceil": CeilNode, "floor": FloorNode, "round": RoundNode, "sum": SumNode, "product": ProductNode}[typ]
                 node = cls(nid, x, y)
+            elif typ in ("not", "and", "or", "nand", "nor", "xor", "xnor"):
+                cls = {"not": NotNode, "and": AndNode, "or": OrNode, "nand": NandNode, "nor": NorNode, "xor": XorNode, "xnor": XnorNode}[typ]
+                node = cls(nid, x, y)
+            elif typ == "compare":
+                node = CompareNode(nid, x, y)
+                node.operator = params.get("operator", "==")
+            elif typ == "clamp":
+                node = ClampNode(nid, x, y)
+                node.min_val = params.get("min_val", 0.0)
+                node.max_val = params.get("max_val", 1.0)
+            elif typ == "map_range":
+                node = MapRangeNode(nid, x, y)
+                node.in_min = params.get("in_min", 0.0)
+                node.in_max = params.get("in_max", 1.0)
+                node.out_min = params.get("out_min", 0.0)
+                node.out_max = params.get("out_max", 1.0)
+            elif typ in ("modulo", "power"):
+                cls = {"modulo": ModuloNode, "power": PowerNode}[typ]
+                node = cls(nid, x, y)
+            elif typ in ("square_root", "absolute", "log", "exp"):
+                cls = {"square_root": SquareRootNode, "absolute": AbsoluteNode, "log": LogNode, "exp": ExpNode}[typ]
+                node = cls(nid, x, y)
+            elif typ == "random":
+                node = RandomNode(nid, x, y)
+                node.min_val = params.get("min_val", 0.0)
+                node.max_val = params.get("max_val", 1.0)
+                node.seed = params.get("seed")
             elif typ == "label":
                 node = LabelNode(nid, x, y)
                 node.text = params.get("text", _("Label"))

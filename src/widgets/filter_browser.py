@@ -98,6 +98,16 @@ _MATH_ITEMS = [
     ("round", "Round", "round"),
     ("sum", "Sum", "sum"),
     ("product", "Product", "product"),
+    ("modulo", "Modulo", "modulo"),
+    ("power", "Power", "power"),
+    ("square_root", "Square Root", "square_root"),
+    ("absolute", "Absolute", "absolute"),
+    ("log", "Log", "log"),
+    ("exp", "Exp", "exp"),
+    ("random", "Random", "random"),
+    ("compare", "Compare", "compare"),
+    ("clamp", "Clamp", "clamp"),
+    ("map_range", "Map Range", "map_range"),
 ]
 
 _ADVANCED_SUBCATEGORIES = {
@@ -108,6 +118,15 @@ _ADVANCED_SUBCATEGORIES = {
         ("frequency_domain", "Frequency Domain", "frequency_domain"),
     ],
     "Math": _MATH_ITEMS,
+    "Logic": [
+        ("not", "NOT", "not"),
+        ("and", "AND", "and"),
+        ("or", "OR", "or"),
+        ("nand", "NAND", "nand"),
+        ("nor", "NOR", "nor"),
+        ("xor", "XOR", "xor"),
+        ("xnor", "XNOR", "xnor"),
+    ],
 }
 
 
@@ -518,9 +537,14 @@ class FilterBrowser(GObject.Object):
             return text_map[node.node_type]
         if node.node_type in ("constant", "add", "subtract", "multiply",
                                "divide", "ceil", "floor", "round",
-                               "sum", "product", "label", "comment",
+                               "sum", "product",
+                               "modulo", "power", "square_root", "absolute",
+                               "log", "exp", "random",
+                               "label", "comment",
                                "histogram", "waveform_monitor", "vectorscope",
-                               "frequency_domain"):
+                               "frequency_domain",
+                               "not", "and", "or", "nand", "nor", "xor", "xnor",
+                               "compare", "clamp", "map_range"):
             return f"{node.node_type}:"
         return None
 

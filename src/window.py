@@ -116,6 +116,23 @@ class RingWindow(Adw.ApplicationWindow):
             .node-header.product { background: #F48FB1; }
             .node-header.label { background: #E6EE9C; }
             .node-header.comment { background: #A5D6A7; }
+            .node-header.not { background: #E040FB; }
+            .node-header.and { background: #76FF03; }
+            .node-header.or { background: #FFD600; }
+            .node-header.nand { background: #FF1744; }
+            .node-header.nor { background: #FF6D00; }
+            .node-header.xor { background: #00E5FF; }
+            .node-header.xnor { background: #18FFFF; }
+            .node-header.compare { background: #D500F9; }
+            .node-header.clamp { background: #00C853; }
+            .node-header.map_range { background: #2979FF; }
+            .node-header.modulo { background: #8D6E63; }
+            .node-header.power { background: #00897B; }
+            .node-header.square_root { background: #43A047; }
+            .node-header.absolute { background: #8E24AA; }
+            .node-header.log { background: #00838F; }
+            .node-header.exp { background: #E64A19; }
+            .node-header.random { background: #3949AB; }
         """)
 
         self._setup_ui()
@@ -807,6 +824,8 @@ class RingWindow(Adw.ApplicationWindow):
         self._progress_revealer.set_reveal_child(False)
         self._status_spinner.set_spinning(False)
         self._update_render_button()
+        if self._canvas:
+            self._canvas._update_all_port_colors()
 
         if not result.success:
             self._set_status(_("Render failed"))

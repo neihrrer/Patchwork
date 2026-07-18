@@ -8,6 +8,9 @@ from nodes.node_types import (
     BlurNode, SharpenNode, EdgeDetectNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+    ModuloNode, PowerNode, SquareRootNode, AbsoluteNode, LogNode, ExpNode, RandomNode,
     LabelNode, CommentNode,
     HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
+    NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
+    CompareNode, ClampNode, MapRangeNode,
 )
