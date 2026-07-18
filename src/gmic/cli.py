@@ -97,6 +97,8 @@ class GmicCLI:
         except Exception as e:
             return GmicResult(False, error=str(e))
 
+    _EXCLUDED_FILTERS: set[str] = {"fx_apply_haldclut", "apply_from_clut_set", "fx_extract_objects", "fx_clut_from_ab", "fx_customize_clut"}
+
     def list_filters(self) -> list[FilterDef]:
         main_text, community_text = fetch_or_get_cached()
 
@@ -107,7 +109,7 @@ class GmicCLI:
             if text:
                 gui_filters = self._parser.parse_gui(text)
                 for f in gui_filters:
-                    if f.name not in seen:
+                    if f.name not in seen and f.name not in self._EXCLUDED_FILTERS:
                         seen.add(f.name)
                         all_filters.append(f)
 
