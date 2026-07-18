@@ -244,8 +244,9 @@ class NodeGraph:
                 "params": {},
             }
             from nodes.node_types import (
-                InputNode, FilterNode, BlendNode, ColorNode,
-                OpacityNode, ColoringNode, MaskNode,
+                InputNode, FilterNode, BlendNode,
+                OpacityNode, MaskNode,
+                BrightnessContrastNode, LevelsNode, HSLNode,
                 ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
                 CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
                 LabelNode, CommentNode,
@@ -258,21 +259,19 @@ class NodeGraph:
             elif isinstance(n, BlendNode):
                 nd["params"]["mode"] = n.mode
                 nd["params"]["extra_ports"] = len(n.inputs) - 2
-            elif isinstance(n, ColorNode):
-                nd["params"]["operation"] = n.operation
+            elif isinstance(n, BrightnessContrastNode):
                 nd["params"]["brightness"] = n.brightness
                 nd["params"]["contrast"] = n.contrast
-                nd["params"]["saturation"] = n.saturation
-                nd["params"]["hue"] = n.hue
+            elif isinstance(n, LevelsNode):
                 nd["params"]["black_point"] = n.black_point
                 nd["params"]["white_point"] = n.white_point
                 nd["params"]["gamma"] = n.gamma
-            elif isinstance(n, OpacityNode):
-                nd["params"]["opacity"] = n.opacity
-            elif isinstance(n, ColoringNode):
+            elif isinstance(n, HSLNode):
                 nd["params"]["hue"] = n.hue
                 nd["params"]["saturation"] = n.saturation
                 nd["params"]["lightness"] = n.lightness
+            elif isinstance(n, OpacityNode):
+                nd["params"]["opacity"] = n.opacity
             elif isinstance(n, MaskNode):
                 nd["params"]["invert"] = n.invert
                 nd["params"]["threshold"] = n.threshold
@@ -302,8 +301,9 @@ class NodeGraph:
     @staticmethod
     def from_dict(data: dict, filter_def_map: dict[str, "FilterDef"] = {}) -> "NodeGraph":
         from nodes.node_types import (
-            InputNode, OutputNode, FilterNode, BlendNode, ColorNode,
-            OpacityNode, ColoringNode, MaskNode,
+            InputNode, OutputNode, FilterNode, BlendNode,
+            OpacityNode, MaskNode,
+            BrightnessContrastNode, LevelsNode, HSLNode,
             ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
             CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
             LabelNode, CommentNode,
@@ -337,24 +337,23 @@ class NodeGraph:
                 extra = params.get("extra_ports", 0)
                 for _i in range(extra):
                     node.add_input_port()
-            elif typ == "color":
-                node = ColorNode(nid, x, y)
-                node.operation = params.get("operation", "brightness_contrast")
+            elif typ == "brightness_contrast":
+                node = BrightnessContrastNode(nid, x, y)
                 node.brightness = params.get("brightness", 0.0)
                 node.contrast = params.get("contrast", 0.0)
-                node.saturation = params.get("saturation", 0.0)
-                node.hue = params.get("hue", 0.0)
+            elif typ == "levels":
+                node = LevelsNode(nid, x, y)
                 node.black_point = params.get("black_point", 0.0)
                 node.white_point = params.get("white_point", 100.0)
                 node.gamma = params.get("gamma", 1.0)
-            elif typ == "opacity":
-                node = OpacityNode(nid, x, y)
-                node.opacity = params.get("opacity", 1.0)
-            elif typ == "coloring":
-                node = ColoringNode(nid, x, y)
+            elif typ == "hsl":
+                node = HSLNode(nid, x, y)
                 node.hue = params.get("hue", 0.0)
                 node.saturation = params.get("saturation", 0.0)
                 node.lightness = params.get("lightness", 0.0)
+            elif typ == "opacity":
+                node = OpacityNode(nid, x, y)
+                node.opacity = params.get("opacity", 1.0)
             elif typ == "mask":
                 node = MaskNode(nid, x, y)
                 node.invert = params.get("invert", False)

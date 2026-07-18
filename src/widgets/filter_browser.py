@@ -44,16 +44,29 @@ _ROOT_IMAGEMAGICK = "ImageMagick"
 _ROOT_BASIC = "Basic"
 _ROOT_MATH = "Math"
 
-_BASIC_ITEMS = [
-    ("input", "Input", "input"),
-    ("output", "Output", "output"),
-    ("blending", "Blending", "blend"),
-    ("mask", "Mask", "mask"),
-    ("coloring", "Coloring", "coloring"),
-    ("opacity", "Opacity", "opacity"),
-    ("label", "Label", "label"),
-    ("comment", "Comment", "comment"),
+_BASIC_ROOT_ITEMS = [
 ]
+
+_BASIC_SUBCATEGORIES = {
+    "Source": [
+        ("input", "Input", "input"),
+        ("output", "Output", "output"),
+    ],
+    "Adjust": [
+        ("brightness_contrast", "Brightness/Contrast", "brightness_contrast"),
+        ("levels", "Levels", "levels"),
+        ("hsl", "HSL", "hsl"),
+    ],
+    "Composite": [
+        ("blending", "Blending", "blend"),
+        ("mask", "Mask", "mask"),
+        ("opacity", "Opacity", "opacity"),
+    ],
+    "Decorative": [
+        ("label", "Label", "label"),
+        ("comment", "Comment", "comment"),
+    ],
+}
 
 _MATH_ITEMS = [
     ("constant", "Constant", "constant"),
@@ -173,6 +186,9 @@ class FilterBrowser(GObject.Object):
             try:
                 row = model.get_row(i)
                 if row and row.is_expandable():
+                    item = row.get_item()
+                    if item and getattr(item, 'node_type', None) == 'basic_category':
+                        continue
                     row.set_expanded(True)
                     self._expand_recursive(row.get_model())
             except Exception:
@@ -189,11 +205,14 @@ class FilterBrowser(GObject.Object):
         if item.node_type == "root":
             if item.display_name == _ROOT_BASIC:
                 store = Gio.ListStore.new(TreeItemNode)
-                for _key, label, ntype in _BASIC_ITEMS:
+                for _key, label, ntype in _BASIC_ROOT_ITEMS:
                     node = TreeItemNode(display_name=label, node_type=ntype)
-                    if ntype == "blend":
-                        node._blend_mode = "over"
                     store.append(node)
+                for cat_name in _BASIC_SUBCATEGORIES:
+                    if _BASIC_SUBCATEGORIES[cat_name]:
+                        node = TreeItemNode(display_name=cat_name, node_type="basic_category")
+                        node._category_name = cat_name
+                        store.append(node)
                 return self._mark_last_child(store)
 
             if item.display_name == _ROOT_MATH:
@@ -225,6 +244,16 @@ class FilterBrowser(GObject.Object):
                 node = TreeItemNode(display_name=first, node_type="category")
                 node._category_path = [first]
                 node._engine = engine
+                store.append(node)
+            return self._mark_last_child(store)
+        elif item.node_type == "basic_category":
+            cat_name = getattr(item, "_category_name", "")
+            items = _BASIC_SUBCATEGORIES.get(cat_name, [])
+            store = Gio.ListStore.new(TreeItemNode)
+            for _key, label, ntype in items:
+                node = TreeItemNode(display_name=label, node_type=ntype)
+                if ntype == "blend":
+                    node._blend_mode = "over"
                 store.append(node)
             return self._mark_last_child(store)
         elif item.node_type == "category":
@@ -426,7 +455,9 @@ class FilterBrowser(GObject.Object):
             "blend": "blend:over",
             "opacity": "opacity:",
             "mask": "mask:",
-            "coloring": "coloring:",
+            "brightness_contrast": "brightness_contrast:",
+            "levels": "levels:",
+            "hsl": "hsl:",
             "input": "input:",
             "output": "output:",
         }

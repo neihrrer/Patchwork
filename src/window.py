@@ -86,8 +86,9 @@ class RingWindow(Adw.ApplicationWindow):
             .node-header.blend { background: #FF9800; }
             .node-header.mask { background: #26A69A; }
             .node-header.opacity { background: #AB47BC; }
-            .node-header.color { background: #00BCD4; }
-            .node-header.coloring { background: #29B6F6; }
+            .node-header.brightness_contrast { background: #00BCD4; }
+            .node-header.levels { background: #4DD0E1; }
+            .node-header.hsl { background: #29B6F6; }
             .node-header.constant { background: #FFC107; }
             .node-header.add { background: #66BB6A; }
             .node-header.subtract { background: #E91E63; }

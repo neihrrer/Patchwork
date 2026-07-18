@@ -1,7 +1,7 @@
 from nodes import (
-    NodeGraph, InputNode, OutputNode, FilterNode, BlendNode, ColorNode,
-    OpacityNode, ColoringNode, MaskNode, ConstantNode,
-    AddNode, SubtractNode, MultiplyNode, DivideNode,
+    NodeGraph, InputNode, OutputNode, FilterNode, BlendNode,
+    OpacityNode, MaskNode, BrightnessContrastNode, LevelsNode, HSLNode,
+    ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
     LabelNode, CommentNode,
     Edge, Port, PortDirection, PortType, Node,
@@ -519,9 +519,10 @@ class TestSerialization:
         empty_graph.add_node(InputNode("in"))
         empty_graph.add_node(OutputNode("out"))
         empty_graph.add_node(BlendNode("bl", "over"))
-        empty_graph.add_node(ColorNode("col"))
+        empty_graph.add_node(BrightnessContrastNode("bc"))
+        empty_graph.add_node(LevelsNode("lv"))
+        empty_graph.add_node(HSLNode("hsl"))
         empty_graph.add_node(OpacityNode("op"))
-        empty_graph.add_node(ColoringNode("colr"))
         empty_graph.add_node(MaskNode("mask"))
         empty_graph.add_node(ConstantNode("cnst"))
         empty_graph.add_node(AddNode("add"))
@@ -538,8 +539,8 @@ class TestSerialization:
         data = empty_graph.to_dict()
         types = {nd["type"] for nd in data["nodes"]}
         assert types == {
-            "input", "output", "blend", "color", "opacity",
-            "coloring", "mask", "constant", "add", "subtract",
+            "input", "output", "blend", "brightness_contrast", "opacity",
+            "levels", "hsl", "mask", "constant", "add", "subtract",
             "multiply", "divide", "ceil", "floor", "round",
             "sum", "product", "label", "comment",
         }

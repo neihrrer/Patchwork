@@ -122,14 +122,27 @@ class BlendNode(Node):
     ]
 
 
-class ColorNode(Node):
+class BrightnessContrastNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
         inputs = [
             Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
             Port(id, "brightness", "Brightness", PortDirection.INPUT, PortType.NUMERIC),
             Port(id, "contrast", "Contrast", PortDirection.INPUT, PortType.NUMERIC),
-            Port(id, "saturation", "Saturation", PortDirection.INPUT, PortType.NUMERIC),
-            Port(id, "hue", "Hue", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Brightness/Contrast", "brightness_contrast", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 150
+        self.brightness: float = 0.0
+        self.contrast: float = 0.0
+
+
+class LevelsNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
             Port(id, "black_point", "Black Point", PortDirection.INPUT, PortType.NUMERIC),
             Port(id, "white_point", "White Point", PortDirection.INPUT, PortType.NUMERIC),
             Port(id, "gamma", "Gamma", PortDirection.INPUT, PortType.NUMERIC),
@@ -137,17 +150,31 @@ class ColorNode(Node):
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
-        super().__init__(id, "Color Adjust", "color", inputs, outputs, x, y)
+        super().__init__(id, "Levels", "levels", inputs, outputs, x, y)
         self.width = 200
-        self.height = 200
-        self.operation: str = "brightness_contrast"
-        self.brightness: float = 0.0
-        self.contrast: float = 0.0
-        self.saturation: float = 0.0
-        self.hue: float = 0.0
+        self.height = 170
         self.black_point: float = 0.0
         self.white_point: float = 100.0
         self.gamma: float = 1.0
+
+
+class HSLNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "hue", "Hue", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "saturation", "Saturation", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "lightness", "Lightness", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "HSL", "hsl", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 180
+        self.hue: float = 0.0
+        self.saturation: float = 0.0
+        self.lightness: float = 0.0
 
 
 class OpacityNode(Node):
@@ -163,25 +190,6 @@ class OpacityNode(Node):
         self.width = 180
         self.height = 120
         self.opacity: float = 1.0
-
-
-class ColoringNode(Node):
-    def __init__(self, id: str, x: float = 0, y: float = 0):
-        inputs = [
-            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
-            Port(id, "hue", "Hue", PortDirection.INPUT, PortType.NUMERIC),
-            Port(id, "saturation", "Saturation", PortDirection.INPUT, PortType.NUMERIC),
-            Port(id, "lightness", "Lightness", PortDirection.INPUT, PortType.NUMERIC),
-        ]
-        outputs = [
-            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
-        ]
-        super().__init__(id, "Coloring", "coloring", inputs, outputs, x, y)
-        self.width = 200
-        self.height = 180
-        self.hue: float = 0.0
-        self.saturation: float = 0.0
-        self.lightness: float = 0.0
 
 
 class MaskNode(Node):

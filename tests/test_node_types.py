@@ -1,7 +1,7 @@
 from nodes import (
-    InputNode, OutputNode, FilterNode, BlendNode, ColorNode,
-    OpacityNode, ColoringNode, MaskNode, ConstantNode,
-    AddNode, SubtractNode, MultiplyNode, DivideNode,
+    InputNode, OutputNode, FilterNode, BlendNode,
+    OpacityNode, MaskNode, BrightnessContrastNode, LevelsNode, HSLNode,
+    ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
     LabelNode, CommentNode,
     PortDirection, PortType,
@@ -127,32 +127,62 @@ class TestBlendNode:
         assert "multiply" in BlendNode.BLEND_MODES
 
 
-class TestColorNode:
+class TestBrightnessContrastNode:
     def test_construction(self):
-        n = ColorNode("col")
-        assert n.node_type == "color"
-        assert n.operation == "brightness_contrast"
+        n = BrightnessContrastNode("bc")
+        assert n.node_type == "brightness_contrast"
         assert n.brightness == 0.0
         assert n.contrast == 0.0
-        assert n.saturation == 0.0
-        assert n.hue == 0.0
+
+    def test_image_input(self):
+        n = BrightnessContrastNode("bc")
+        inputs = {p.name: p for p in n.inputs}
+        assert inputs["image"].port_type == PortType.IMAGE
+
+    def test_numeric_inputs(self):
+        n = BrightnessContrastNode("bc")
+        numeric = [p for p in n.inputs if p.port_type == PortType.NUMERIC]
+        assert len(numeric) == 2
+
+    def test_output(self):
+        n = BrightnessContrastNode("bc")
+        assert n.outputs[0].name == "image"
+
+
+class TestLevelsNode:
+    def test_construction(self):
+        n = LevelsNode("lv")
+        assert n.node_type == "levels"
         assert n.black_point == 0.0
         assert n.white_point == 100.0
         assert n.gamma == 1.0
 
     def test_image_input(self):
-        n = ColorNode("col")
-        inputs = {p.name: p for p in n.inputs}
-        assert inputs["image"].port_type == PortType.IMAGE
+        n = LevelsNode("lv")
+        assert n.inputs[0].name == "image"
 
     def test_numeric_inputs(self):
-        n = ColorNode("col")
+        n = LevelsNode("lv")
         numeric = [p for p in n.inputs if p.port_type == PortType.NUMERIC]
-        assert len(numeric) == 7
+        assert len(numeric) == 3
 
-    def test_output(self):
-        n = ColorNode("col")
-        assert n.outputs[0].name == "image"
+
+class TestHSLNode:
+    def test_construction(self):
+        n = HSLNode("hsl")
+        assert n.node_type == "hsl"
+        assert n.hue == 0.0
+        assert n.saturation == 0.0
+        assert n.lightness == 0.0
+
+    def test_image_input(self):
+        n = HSLNode("hsl")
+        assert n.inputs[0].name == "image"
+
+    def test_numeric_inputs(self):
+        n = HSLNode("hsl")
+        numeric = [p for p in n.inputs if p.port_type == PortType.NUMERIC]
+        assert len(numeric) == 3
 
 
 class TestOpacityNode:
@@ -170,15 +200,6 @@ class TestOpacityNode:
         n = OpacityNode("op")
         numeric = [p for p in n.inputs if p.port_type == PortType.NUMERIC]
         assert len(numeric) == 1
-
-
-class TestColoringNode:
-    def test_construction(self):
-        n = ColoringNode("colr")
-        assert n.node_type == "coloring"
-        assert n.hue == 0.0
-        assert n.saturation == 0.0
-        assert n.lightness == 0.0
 
 
 class TestMaskNode:

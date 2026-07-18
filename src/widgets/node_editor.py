@@ -17,7 +17,7 @@ except Exception:
 
 from nodes import (
     Node, NodeGraph, Edge, Port, PortDirection, PortType, FilterNode, InputNode, OutputNode, BlendNode,
-    OpacityNode, ColoringNode, MaskNode,
+    OpacityNode, MaskNode, BrightnessContrastNode, LevelsNode, HSLNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
     LabelNode, CommentNode,
@@ -96,7 +96,9 @@ _NODE_PREVIEW_INFO = {
     "blend:": (_("Blend"), "blend"),
     "opacity:": (_("Opacity"), "opacity"),
     "mask:": (_("Mask"), "mask"),
-    "coloring:": (_("Coloring"), "coloring"),
+    "brightness_contrast:": (_("Brightness/Contrast"), "brightness_contrast"),
+    "levels:": (_("Levels"), "levels"),
+    "hsl:": (_("HSL"), "hsl"),
     "input:": (_("Input"), "input"),
     "output:": (_("Output"), "output"),
     "constant:": (_("Constant"), "constant"),
@@ -684,10 +686,14 @@ class NodeWidget(Gtk.Box):
             self._build_blend_params()
         elif isinstance(self._node, OpacityNode):
             self._build_opacity_params()
-        elif isinstance(self._node, ColoringNode):
-            self._build_coloring_params()
         elif isinstance(self._node, MaskNode):
             self._build_mask_params()
+        elif isinstance(self._node, BrightnessContrastNode):
+            self._build_brightness_contrast_params()
+        elif isinstance(self._node, LevelsNode):
+            self._build_levels_params()
+        elif isinstance(self._node, HSLNode):
+            self._build_hsl_params()
         elif isinstance(self._node, ConstantNode):
             self._build_constant_params()
 
@@ -743,8 +749,37 @@ class NodeWidget(Gtk.Box):
         self._port_spin_buttons["opacity"] = spin
         self._make_control_row("Opacity", "opacity", spin)
 
-    def _build_coloring_params(self):
-        node: ColoringNode = self._node
+    def _build_brightness_contrast_params(self):
+        node: BrightnessContrastNode = self._node
+        for label, attr, lo, hi in [
+            ("Brightness", "brightness", -100.0, 100.0),
+            ("Contrast", "contrast", -100.0, 100.0),
+        ]:
+            adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
+            spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
+            spin.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[attr] = spin
+            self._make_control_row(label, attr, spin)
+
+    def _build_levels_params(self):
+        node: LevelsNode = self._node
+        for label, attr, lo, hi in [
+            ("Black Point", "black_point", 0.0, 100.0),
+            ("White Point", "white_point", 0.0, 100.0),
+            ("Gamma", "gamma", 0.01, 10.0),
+        ]:
+            adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=0.1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=0.1, digits=2)
+            spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
+            spin.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[attr] = spin
+            self._make_control_row(label, attr, spin)
+
+    def _build_hsl_params(self):
+        node: HSLNode = self._node
         for label, attr, lo, hi in [
             ("Hue", "hue", -180.0, 180.0),
             ("Saturation", "saturation", -100.0, 100.0),
@@ -1220,9 +1255,10 @@ class Minimap(Gtk.Widget):
         "filter": Gdk.RGBA(0.04, 0.28, 0.44, 1.0),
         "blend": Gdk.RGBA(0.42, 0.29, 0.18, 1.0),
         "mask": Gdk.RGBA(0.18, 0.35, 0.42, 1.0),
-        "color": Gdk.RGBA(0.23, 0.42, 0.48, 1.0),
+        "brightness_contrast": Gdk.RGBA(0.23, 0.42, 0.48, 1.0),
+        "levels": Gdk.RGBA(0.30, 0.50, 0.60, 1.0),
+        "hsl": Gdk.RGBA(0.20, 0.55, 0.55, 1.0),
         "opacity": Gdk.RGBA(0.35, 0.23, 0.48, 1.0),
-        "coloring": Gdk.RGBA(0.23, 0.42, 0.48, 1.0),
         "constant": Gdk.RGBA(0.70, 0.50, 0.15, 1.0),
         "add": Gdk.RGBA(0.30, 0.60, 0.20, 1.0),
         "subtract": Gdk.RGBA(0.60, 0.20, 0.35, 1.0),
@@ -1831,7 +1867,7 @@ class NodeCanvas(Gtk.Overlay):
 
     # ─── Wire-insert helpers ───────────────────────────────────────────────────
 
-    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "coloring:", "mask:", "filter:"})
+    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:"})
 
     def _is_insertable_node(self, text: str) -> bool:
         return any(text.startswith(p) for p in self._INSERTABLE_PREFIXES)
@@ -1998,11 +2034,33 @@ class NodeCanvas(Gtk.Overlay):
                 self.select_node(w)
             self._try_insert_at(x, y, nid)
             return True
-        elif text and text.startswith("coloring:"):
+        elif text and text.startswith("brightness_contrast:"):
             gx = (x - self._pan_x) / self._zoom
             gy = (y - self._pan_y) / self._zoom
-            nid = "coloring_" + str(GLib.get_monotonic_time())
-            node = ColoringNode(nid, gx, gy)
+            nid = "bc_" + str(GLib.get_monotonic_time())
+            node = BrightnessContrastNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("levels:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "levels_" + str(GLib.get_monotonic_time())
+            node = LevelsNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("hsl:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "hsl_" + str(GLib.get_monotonic_time())
+            node = HSLNode(nid, gx, gy)
             self.add_node(node)
             w = self.get_node_widget(nid)
             if w:
@@ -2448,8 +2506,8 @@ class NodeCanvas(Gtk.Overlay):
                 "params": {},
             }
             from nodes.node_types import (
-                InputNode, FilterNode, BlendNode, ColorNode,
-                OpacityNode, ColoringNode, MaskNode,
+                InputNode, FilterNode, BlendNode, OpacityNode, MaskNode,
+                BrightnessContrastNode, LevelsNode, HSLNode,
                 ConstantNode, LabelNode, CommentNode,
             )
             if isinstance(n, InputNode):
@@ -2460,21 +2518,19 @@ class NodeCanvas(Gtk.Overlay):
             elif isinstance(n, BlendNode):
                 nd["params"]["mode"] = n.mode
                 nd["params"]["extra_ports"] = len(n.inputs) - 2
-            elif isinstance(n, ColorNode):
-                nd["params"]["operation"] = n.operation
+            elif isinstance(n, BrightnessContrastNode):
                 nd["params"]["brightness"] = n.brightness
                 nd["params"]["contrast"] = n.contrast
-                nd["params"]["saturation"] = n.saturation
-                nd["params"]["hue"] = n.hue
+            elif isinstance(n, LevelsNode):
                 nd["params"]["black_point"] = n.black_point
                 nd["params"]["white_point"] = n.white_point
                 nd["params"]["gamma"] = n.gamma
-            elif isinstance(n, OpacityNode):
-                nd["params"]["opacity"] = n.opacity
-            elif isinstance(n, ColoringNode):
+            elif isinstance(n, HSLNode):
                 nd["params"]["hue"] = n.hue
                 nd["params"]["saturation"] = n.saturation
                 nd["params"]["lightness"] = n.lightness
+            elif isinstance(n, OpacityNode):
+                nd["params"]["opacity"] = n.opacity
             elif isinstance(n, MaskNode):
                 nd["params"]["invert"] = n.invert
                 nd["params"]["threshold"] = n.threshold
@@ -2501,8 +2557,9 @@ class NodeCanvas(Gtk.Overlay):
         if not self._clipboard:
             return
         from nodes.node_types import (
-            InputNode, OutputNode, FilterNode, BlendNode, ColorNode,
-            OpacityNode, ColoringNode, MaskNode,
+            InputNode, OutputNode, FilterNode, BlendNode,
+            OpacityNode, MaskNode,
+            BrightnessContrastNode, LevelsNode, HSLNode,
             ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
             CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
             LabelNode, CommentNode,
@@ -2563,24 +2620,23 @@ class NodeCanvas(Gtk.Overlay):
                 extra = params.get("extra_ports", 0)
                 for _ in range(extra):
                     node.add_input_port()
-            elif typ == "color":
-                node = ColorNode(nid, x, y)
-                node.operation = params.get("operation", "brightness_contrast")
+            elif typ == "brightness_contrast":
+                node = BrightnessContrastNode(nid, x, y)
                 node.brightness = params.get("brightness", 0.0)
                 node.contrast = params.get("contrast", 0.0)
-                node.saturation = params.get("saturation", 0.0)
-                node.hue = params.get("hue", 0.0)
+            elif typ == "levels":
+                node = LevelsNode(nid, x, y)
                 node.black_point = params.get("black_point", 0.0)
                 node.white_point = params.get("white_point", 100.0)
                 node.gamma = params.get("gamma", 1.0)
-            elif typ == "opacity":
-                node = OpacityNode(nid, x, y)
-                node.opacity = params.get("opacity", 1.0)
-            elif typ == "coloring":
-                node = ColoringNode(nid, x, y)
+            elif typ == "hsl":
+                node = HSLNode(nid, x, y)
                 node.hue = params.get("hue", 0.0)
                 node.saturation = params.get("saturation", 0.0)
                 node.lightness = params.get("lightness", 0.0)
+            elif typ == "opacity":
+                node = OpacityNode(nid, x, y)
+                node.opacity = params.get("opacity", 1.0)
             elif typ == "mask":
                 node = MaskNode(nid, x, y)
                 node.invert = params.get("invert", False)
