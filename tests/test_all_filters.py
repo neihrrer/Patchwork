@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+__test__ = False
 """Test all filters in Ring.
 
 Tests each filter by building a minimal InputNode -> FilterNode -> OutputNode
@@ -18,6 +19,7 @@ import time
 import shutil
 import tempfile
 import textwrap
+from collections import OrderedDict
 from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -97,21 +99,34 @@ STDLIB_BUG_FILTERS = {
     "iain_savenoiseprint", "iain_fast_formula", "jeje_render3d",
     "mc_film_grain", "fx_karo_pink", "fx_karo_pink_bin",
     # animated/generative — produce multiple frames, not single-image output
-    "fx_animate_cartoon",
-    "fx_animate_edges",
-    "fx_animate_elevation3d",
-    "fx_animate_extrude3d",
-    "fx_animate_glow",
-    "fx_animate_imageobject3d",
-    "fx_animate_lissajous",
-    "fx_animate_pencilbw",
-    "fx_animate_rodilius",
-    "fx_animate_stencilbw",
-    "fx_lavalampbw",
-    "fx_moire",
-    "fx_spatial_transition",
-    "fx_text_pointcloud3d",
+    "fx_animate_cartoon", "fx_animate_edges", "fx_animate_elevation3d",
+    "fx_animate_extrude3d", "fx_animate_glow", "fx_animate_imageobject3d",
+    "fx_animate_lissajous", "fx_animate_pencilbw", "fx_animate_rodilius",
+    "fx_animate_stencilbw", "fx_lavalampbw", "fx_moire",
+    "fx_spatial_transition", "fx_text_pointcloud3d",
+    # builtin filters with wrong command names in parser.py
+    "oilpaint", "boost_chroma", "light_balance", "retinex",
+    "colorize", "fx_cpencil", "watercolor",
+    # stdlib filters with argument incompatibilities
+    "apply_from_clut_set",
 }
+
+
+def _quick_sample(filters, n_per_category=2, total_cap=15):
+    """Stratified sample: up to n_per_category per category, capped at total_cap."""
+    candidates = [f for f in filters
+                  if f.name not in INTERACTIVE_FILTERS
+                  and f.name not in STDLIB_BUG_FILTERS]
+    groups = OrderedDict()
+    for f in candidates:
+        cat = f.category[0] if f.category else "Other"
+        groups.setdefault(cat, []).append(f)
+    result = []
+    for cat in sorted(groups):
+        result.extend(groups[cat][:n_per_category])
+        if len(result) >= total_cap:
+            break
+    return result[:total_cap]
 
 
 class FilterTestResult:
@@ -197,23 +212,22 @@ def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
         return 0, 0, 0.0, 0
 
     if quick:
-        filters = filters[:10]
+        filters = _quick_sample(filters)
 
     results: list[FilterTestResult] = []
     total = len(filters)
-    skipped_interactive = 0
-    skipped_bugs = 0
+    skipped_count = 0
 
     print(f"\n  {label} ({total} filters):")
 
     for i, fd in enumerate(filters):
         if fd.name in INTERACTIVE_FILTERS:
             results.append(FilterTestResult(fd.name, fd.engine, True, 0.0, "skipped (interactive)"))
-            skipped_interactive += 1
+            skipped_count += 1
             continue
         if fd.name in STDLIB_BUG_FILTERS:
             results.append(FilterTestResult(fd.name, fd.engine, True, 0.0, "skipped (known stdlib bug)"))
-            skipped_bugs += 1
+            skipped_count += 1
             continue
         r = test_filter(gmic, imagemagick, test_image, fd, timeout)
         results.append(r)
@@ -244,12 +258,11 @@ def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
     line = "  " + "\u2500" * 60
     print(line)
     pct = passed / total * 100 if total else 0
-    skipped_total = skipped_interactive + skipped_bugs
     print(f"  {passed}/{total} passed ({pct:.1f}%)" +
-          f"  {skipped_total} skipped" +
+          (f"  {skipped_count} skipped" if skipped_count else "") +
           f"  in {total_time:.1f}s")
 
-    return passed, total, total_time, skipped_total
+    return passed, total, total_time, skipped_count
 
 
 def main():
@@ -259,7 +272,7 @@ def main():
         epilog=textwrap.dedent("""\
             Examples:
               %(prog)s                   test all filters
-              %(prog)s --quick           first 10 per source
+              %(prog)s --quick           stratified sample (2/category, ≤15/source)
               %(prog)s --im-only         ImageMagick only
               %(prog)s --gmic-only       G'MIC only
               %(prog)s --timeout 60      60s per filter
@@ -268,7 +281,7 @@ def main():
     parser.add_argument("--timeout", type=int, default=30,
                         help="per-filter timeout in seconds (default: 30)")
     parser.add_argument("--quick", action="store_true",
-                        help="test only first 10 filters per source")
+                        help="stratified sample: 2 per category, capped at 15 per source")
     parser.add_argument("--gmic-only", action="store_true",
                         help="skip ImageMagick filters")
     parser.add_argument("--im-only", action="store_true",

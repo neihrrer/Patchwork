@@ -10,14 +10,18 @@ meson setup build && meson compile -C build && sudo meson install -C build   # f
 
 ## Testing
 
-Only test file: `tests/test_pipeline.py` (unittest, no GTK needed). No pytest.
+16 test files in `tests/` using **pytest** (249 tests).
 
 ```bash
-python3 -m unittest tests/test_pipeline.py   # single file
-python3 -m unittest                           # all tests
+python3 -m pytest tests/ -q                  # all tests (fast, no CLI needed)
+python3 -m pytest tests/foo.py -q            # single file
 ```
 
-Tests manually insert `sys.path.insert(0, "src")` — run from repo root.
+Two integration tests require `gmic` + `magick` CLIs and are run separately:
+- `tests/test_filters_quick.py` — `python3 -m pytest tests/test_filters_quick.py`
+- `tests/test_all_filters.py` — `python3 tests/test_all_filters.py`
+
+`conftest.py` handles `sys.path.insert(0, "src")` and GTK introspection setup.
 
 ## Lint & CI
 
