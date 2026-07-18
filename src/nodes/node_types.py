@@ -659,3 +659,53 @@ class EdgeDetectNode(Node):
         self.width = 200
         self.height = 140
         self.threshold: float = 0.0
+
+
+# --- Analysis nodes ---
+
+class HistogramNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+        ]
+        outputs: list[Port] = []
+        super().__init__(id, "Histogram", "histogram", inputs, outputs, x, y)
+        self.width = 220
+        self.height = 200
+        self.analysis_data: Optional[dict] = None
+
+
+class WaveformMonitorNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+        ]
+        outputs: list[Port] = []
+        super().__init__(id, "Waveform Monitor", "waveform_monitor", inputs, outputs, x, y)
+        self.width = 220
+        self.height = 200
+        self.analysis_data: Optional[dict] = None
+
+
+class VectorscopeNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+        ]
+        outputs: list[Port] = []
+        super().__init__(id, "Vectorscope", "vectorscope", inputs, outputs, x, y)
+        self.width = 220
+        self.height = 220
+        self.analysis_data: Optional[dict] = None
+
+
+class FrequencyDomainNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+        ]
+        outputs: list[Port] = []
+        super().__init__(id, "Frequency Domain", "frequency_domain", inputs, outputs, x, y)
+        self.width = 220
+        self.height = 220
+        self.analysis_data: Optional[dict] = None

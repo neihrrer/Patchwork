@@ -116,6 +116,10 @@ navigation-split-view > separator {
 .node-header.product { background: #b34d7d; }
 .node-header.label { background: #b3a33a; }
 .node-header.comment { background: #5a9a5a; }
+.node-header.histogram { background: #4a6a9a; }
+.node-header.waveform_monitor { background: #6a4a8a; }
+.node-header.vectorscope { background: #3a7a6a; }
+.node-header.frequency_domain { background: #8a4a5a; }
 
 .node-label-content {
     font-size: 18pt;

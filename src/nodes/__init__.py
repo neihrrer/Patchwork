@@ -9,4 +9,5 @@ from nodes.node_types import (
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
     LabelNode, CommentNode,
+    HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
 )

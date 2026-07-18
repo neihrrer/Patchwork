@@ -13,6 +13,7 @@ from nodes import (
     BlurNode, SharpenNode, EdgeDetectNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+    HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
 )
 from models.filter import ENGINE_GMIC, ParamKind
 from gmic.cli import GmicCLI
@@ -26,6 +27,10 @@ from processing.pillow_ops import (
     adjust_color_balance, adjust_exposure_gamma, adjust_curves,
     crop_image, resize_image, rotate_image, flip_image, distort_image,
     blur_image, sharpen_image, edge_detect,
+)
+from processing.analysis import (
+    compute_histogram_data, compute_waveform_data, compute_vectorscope_data,
+    compute_frequency_data,
 )
 
 
@@ -293,6 +298,34 @@ class GraphExecutor:
                 if inp:
                     node_outputs[node.id] = inp
                     self._output_paths[node.id] = inp
+
+            elif isinstance(node, HistogramNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Histogram '{node.label}' has no input")
+                node.analysis_data = compute_histogram_data(inp)
+                node.cache_dirty = False
+
+            elif isinstance(node, WaveformMonitorNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Waveform Monitor '{node.label}' has no input")
+                node.analysis_data = compute_waveform_data(inp)
+                node.cache_dirty = False
+
+            elif isinstance(node, VectorscopeNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Vectorscope '{node.label}' has no input")
+                node.analysis_data = compute_vectorscope_data(inp)
+                node.cache_dirty = False
+
+            elif isinstance(node, FrequencyDomainNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Frequency Domain '{node.label}' has no input")
+                node.analysis_data = compute_frequency_data(inp)
+                node.cache_dirty = False
 
             elif isinstance(node, ConstantNode):
                 numeric_outputs[node.id] = node.value

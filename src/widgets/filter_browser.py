@@ -43,6 +43,7 @@ _ROOT_GMIC = "G'mic"
 _ROOT_IMAGEMAGICK = "ImageMagick"
 _ROOT_BASIC = "Basic"
 _ROOT_MATH = "Math"
+_ROOT_ADVANCED = "Advanced"
 
 _BASIC_ROOT_ITEMS = [
 ]
@@ -98,6 +99,16 @@ _MATH_ITEMS = [
     ("sum", "Sum", "sum"),
     ("product", "Product", "product"),
 ]
+
+_ADVANCED_SUBCATEGORIES = {
+    "Analysis": [
+        ("histogram", "Histogram", "histogram"),
+        ("waveform_monitor", "Waveform Monitor", "waveform_monitor"),
+        ("vectorscope", "Vectorscope", "vectorscope"),
+        ("frequency_domain", "Frequency Domain", "frequency_domain"),
+    ],
+    "Math": _MATH_ITEMS,
+}
 
 
 class TreeItemNode(GObject.Object):
@@ -178,7 +189,7 @@ class FilterBrowser(GObject.Object):
                 root_store.append(node)
         else:
             root_store.append(TreeItemNode(display_name=_ROOT_BASIC, node_type="root"))
-            root_store.append(TreeItemNode(display_name=_ROOT_MATH, node_type="root"))
+            root_store.append(TreeItemNode(display_name=_ROOT_ADVANCED, node_type="root"))
             root_store.append(TreeItemNode(display_name=_ROOT_GMIC, node_type="root"))
             root_store.append(TreeItemNode(display_name=_ROOT_IMAGEMAGICK, node_type="root"))
 
@@ -233,11 +244,13 @@ class FilterBrowser(GObject.Object):
                         store.append(node)
                 return self._mark_last_child(store)
 
-            if item.display_name == _ROOT_MATH:
+            if item.display_name == _ROOT_ADVANCED:
                 store = Gio.ListStore.new(TreeItemNode)
-                for _key, label, ntype in _MATH_ITEMS:
-                    node = TreeItemNode(display_name=label, node_type=ntype)
-                    store.append(node)
+                for cat_name in _ADVANCED_SUBCATEGORIES:
+                    if _ADVANCED_SUBCATEGORIES[cat_name]:
+                        node = TreeItemNode(display_name=cat_name, node_type="advanced_category")
+                        node._category_name = cat_name
+                        store.append(node)
                 return self._mark_last_child(store)
 
             if item.display_name == _ROOT_IMAGEMAGICK:
@@ -272,6 +285,14 @@ class FilterBrowser(GObject.Object):
                 node = TreeItemNode(display_name=label, node_type=ntype)
                 if ntype == "blend":
                     node._blend_mode = "over"
+                store.append(node)
+            return self._mark_last_child(store)
+        elif item.node_type == "advanced_category":
+            cat_name = getattr(item, "_category_name", "")
+            items = _ADVANCED_SUBCATEGORIES.get(cat_name, [])
+            store = Gio.ListStore.new(TreeItemNode)
+            for _key, label, ntype in items:
+                node = TreeItemNode(display_name=label, node_type=ntype)
                 store.append(node)
             return self._mark_last_child(store)
         elif item.node_type == "category":
@@ -497,7 +518,9 @@ class FilterBrowser(GObject.Object):
             return text_map[node.node_type]
         if node.node_type in ("constant", "add", "subtract", "multiply",
                                "divide", "ceil", "floor", "round",
-                               "sum", "product", "label", "comment"):
+                               "sum", "product", "label", "comment",
+                               "histogram", "waveform_monitor", "vectorscope",
+                               "frequency_domain"):
             return f"{node.node_type}:"
         return None
 

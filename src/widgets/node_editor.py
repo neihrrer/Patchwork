@@ -1,6 +1,7 @@
 import math
+import os
 import gettext
-from typing import Optional
+from typing import Optional, Callable
 
 import gi
 
@@ -26,10 +27,23 @@ from nodes import (
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
     LabelNode, CommentNode,
+    HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
 )
-from nodes.node_types import LABEL_COLORS
+from nodes.node_types import LABEL_COLORS, HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode
 from models.filter import FilterDef, ParamKind
 from .filter_browser import get_pending_drag_text, peek_pending_drag_text
+
+# ─── Analysis node types for Cairo rendering ────────────────────────────────
+
+_ANALYSIS_NODE_TYPES = (
+    HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
+)
+
+_ANALYSIS_RED    = (0.88, 0.11, 0.14)
+_ANALYSIS_GREEN  = (0.18, 0.76, 0.49)
+_ANALYSIS_BLUE   = (0.11, 0.44, 0.85)
+_ANALYSIS_YELLOW = (0.96, 0.83, 0.18)
+_ANALYSIS_WHITE  = (1.0,  1.0,  1.0)
 
 CURVE_SEGMENTS = 48
 
@@ -292,6 +306,10 @@ class PortWidget(Gtk.Widget):
         snapshot.restore()
 
 
+def _is_analysis_node(node) -> bool:
+    return isinstance(node, _ANALYSIS_NODE_TYPES)
+
+
 class NodeWidget(Gtk.Box):
     __gtype_name__ = "NodeWidget"
 
@@ -308,6 +326,8 @@ class NodeWidget(Gtk.Box):
         self._port_spin_buttons: dict[str, Gtk.SpinButton] = {}
         self._thumb_box: Optional[Gtk.Box] = None
         self._thumb_picture: Optional[Gtk.Picture] = None
+        self._analysis_area: Optional[Gtk.DrawingArea] = None
+        self._analysis_data: Optional[dict] = None
         self._image_aspect: Optional[float] = None
         self._resize_start_w = 0
         self._resize_start_h = 0
@@ -450,21 +470,31 @@ class NodeWidget(Gtk.Box):
         ports_box.append(self._right_box)
         self.append(ports_box)
 
+        is_analysis = _is_analysis_node(self._node)
+
         self._thumb_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self._thumb_box.set_hexpand(True)
         self._thumb_box.set_vexpand(True)
-        self._thumb_box.set_visible(False)
+        self._thumb_box.set_visible(is_analysis)
 
         self._thumb_overlay = Gtk.Overlay()
         self._thumb_overlay.set_hexpand(True)
         self._thumb_overlay.set_vexpand(True)
 
-        self._thumb_picture = Gtk.Picture()
-        self._thumb_picture.set_hexpand(True)
-        self._thumb_picture.set_vexpand(True)
-        self._thumb_picture.set_keep_aspect_ratio(True)
-        self._thumb_picture.set_can_shrink(True)
-        self._thumb_overlay.set_child(self._thumb_picture)
+        if is_analysis:
+            self._analysis_area = Gtk.DrawingArea()
+            self._analysis_area.set_hexpand(True)
+            self._analysis_area.set_vexpand(True)
+            self._analysis_area.set_draw_func(self._on_analysis_draw)
+            self._thumb_overlay.set_child(self._analysis_area)
+            self._thumb_picture = None
+        else:
+            self._thumb_picture = Gtk.Picture()
+            self._thumb_picture.set_hexpand(True)
+            self._thumb_picture.set_vexpand(True)
+            self._thumb_picture.set_keep_aspect_ratio(True)
+            self._thumb_picture.set_can_shrink(True)
+            self._thumb_overlay.set_child(self._thumb_picture)
 
         self._resize_handle = Gtk.Box()
         self._resize_handle.set_size_request(12, 12)
@@ -1275,6 +1305,271 @@ class NodeWidget(Gtk.Box):
             self._node.width = self._logical_w
             self._node.height = self._logical_h
             self.set_size_request(-1, -1)
+        elif self._analysis_area:
+            self._analysis_data = None
+            self._has_image = False
+            self._resize_handle.set_visible(False)
+            self._analysis_area.queue_draw()
+
+    def set_analysis_data(self, data: dict):
+        self._analysis_data = data
+        if self._analysis_area:
+            self._thumb_box.set_visible(True)
+            self._has_image = True
+            self._resize_handle.set_visible(True)
+            self._logical_w = max(220, int(self._node.width or 220))
+            self._logical_h = max(200, int(self._node.height or 200))
+            self._node.width = self._logical_w
+            self._node.height = self._logical_h
+            self._analysis_area.queue_draw()
+            self.apply_zoom(self._canvas._zoom)
+
+    # ─── Cairo analysis drawing ─────────────────────────────────────────────
+
+    def _theme_colors(self, area):
+        style = area.get_style_context()
+        is_dark = True
+        found, bg = style.lookup_color('theme_bg_color')
+        if found:
+            luminance = 0.299 * bg.red + 0.587 * bg.green + 0.114 * bg.blue
+            is_dark = luminance < 0.5
+        if is_dark:
+            card = (0.13, 0.13, 0.14, 1.0)
+            grid = (0.40, 0.40, 0.40)
+            axis = (0.65, 0.65, 0.64)
+        else:
+            card = (0.91, 0.91, 0.92, 1.0)
+            grid = (0.55, 0.55, 0.55)
+            axis = (0.40, 0.40, 0.40)
+        return card, grid, axis, is_dark
+
+    def _on_analysis_draw(self, area: Gtk.DrawingArea, cr, w: int, h: int):
+        card, grid, axis, is_dark = self._theme_colors(area)
+        if isinstance(self._node, HistogramNode):
+            self._draw_histogram(cr, w, h, card, grid, axis)
+        elif isinstance(self._node, WaveformMonitorNode):
+            self._draw_waveform(cr, w, h, card, grid, axis)
+        elif isinstance(self._node, VectorscopeNode):
+            self._draw_vectorscope(cr, w, h, card, grid, axis)
+        elif isinstance(self._node, FrequencyDomainNode):
+            self._draw_frequency_domain(cr, w, h, card, grid, is_dark)
+
+    def _card_bg(self, cr, w: int, h: int, card):
+        cr.set_source_rgba(*card)
+        cr.rectangle(0, 0, w, h)
+        cr.fill()
+
+    def _draw_histogram(self, cr, w: int, h: int, card, grid, axis):
+        self._card_bg(cr, w, h, card)
+        data = self._analysis_data
+        if not data:
+            return
+
+        ml = int(w * 0.08)
+        mr = int(w * 0.03)
+        mt = int(h * 0.1)
+        mb = int(h * 0.15)
+        pw = w - ml - mr
+        ph = h - mt - mb
+        if pw < 8 or ph < 8:
+            return
+
+        cr.set_source_rgba(*grid, 0.3)
+        cr.set_line_width(1)
+        for i in range(1, 4):
+            y = mt + int(ph * i / 4)
+            cr.move_to(ml, y)
+            cr.line_to(w - mr, y)
+            cr.stroke()
+
+        cr.set_source_rgba(*axis, 0.5)
+        cr.set_font_size(min(8, w // 28))
+        for i in range(1, 4):
+            y = mt + int(ph * i / 4)
+            cr.move_to(2, y + 3)
+            cr.show_text(f"{25 * i}")
+
+        cr.set_source_rgba(*axis, 0.4)
+        cr.set_font_size(min(7, w // 30))
+        cr.move_to(ml - 3, h - mb + 10)
+        cr.show_text("0")
+        cr.move_to(w - mr - 12, h - mb + 10)
+        cr.show_text("255")
+
+        def _draw_channel(hist, color, fill_a=0.12, line_a=0.85):
+            bins = len(hist)
+            max_val = max(hist) or 0.01
+            cr.move_to(ml, h - mb)
+            for i in range(bins):
+                x = ml + (i / bins) * pw
+                y = h - mb - (hist[i] / max_val) * ph
+                cr.line_to(x, y)
+            cr.line_to(ml + pw, h - mb)
+            cr.close_path()
+            cr.set_source_rgba(*color, fill_a)
+            cr.fill()
+            cr.move_to(ml, h - mb - (hist[0] / max_val) * ph)
+            for i in range(1, bins):
+                x = ml + (i / bins) * pw
+                y = h - mb - (hist[i] / max_val) * ph
+                cr.line_to(x, y)
+            cr.set_source_rgba(*color, line_a)
+            cr.set_line_width(1.2)
+            cr.stroke()
+
+        _draw_channel(data["r"], _ANALYSIS_RED)
+        _draw_channel(data["g"], _ANALYSIS_GREEN)
+        _draw_channel(data["b"], _ANALYSIS_BLUE)
+        _draw_channel(data["l"], _ANALYSIS_YELLOW, 0.08, 0.7)
+
+        legend = [
+            ("R", _ANALYSIS_RED), ("G", _ANALYSIS_GREEN),
+            ("B", _ANALYSIS_BLUE), ("Y", _ANALYSIS_YELLOW),
+        ]
+        lx = ml + 4
+        ly = mt - 16
+        cr.set_font_size(min(8, w // 28))
+        for txt, clr in legend:
+            cr.set_source_rgba(*clr, 0.85)
+            cr.rectangle(lx, ly, 7, 7)
+            cr.fill()
+            cr.set_source_rgba(*axis, 0.7)
+            cr.move_to(lx + 10, ly + 6)
+            cr.show_text(txt)
+            lx += 22 * (w / 260) + 4
+
+    def _draw_waveform(self, cr, w: int, h: int, card, grid, axis):
+        self._card_bg(cr, w, h, card)
+        data = self._analysis_data
+        if not data:
+            return
+
+        margin = 6
+        pw = w - 2 * margin
+        ph = h - 2 * margin
+        if pw < 4 or ph < 4:
+            return
+
+        cr.set_source_rgba(*grid, 0.2)
+        cr.set_line_width(1)
+        for i in range(1, 4):
+            y = margin + int(ph * i / 4)
+            cr.move_to(margin, y)
+            cr.line_to(margin + pw, y)
+            cr.stroke()
+
+        env_low = data.get("envelope_low", [])
+        env_high = data.get("envelope_high", [])
+        avg = data.get("average", [])
+        nc = len(env_low)
+        if nc == 0:
+            return
+
+        cr.move_to(margin, margin + ph)
+        for i, v in enumerate(env_low):
+            x = margin + (i / nc) * pw
+            y = margin + ph - v * ph
+            cr.line_to(x, y)
+        for i in range(nc - 1, -1, -1):
+            x = margin + (i / nc) * pw
+            y = margin + ph - env_high[i] * ph
+            cr.line_to(x, y)
+        cr.close_path()
+        cr.set_source_rgba(*_ANALYSIS_GREEN, 0.06)
+        cr.fill()
+
+        cr.move_to(margin, margin + ph - avg[0] * ph)
+        for i in range(1, nc):
+            x = margin + (i / nc) * pw
+            y = margin + ph - avg[i] * ph
+            cr.line_to(x, y)
+        cr.set_source_rgba(*_ANALYSIS_GREEN, 0.8)
+        cr.set_line_width(1.2)
+        cr.stroke()
+
+    def _draw_vectorscope(self, cr, w: int, h: int, card, grid, axis):
+        self._card_bg(cr, w, h, card)
+        data = self._analysis_data
+        if not data:
+            return
+
+        cx = w / 2
+        cy = h / 2
+        radius = min(w, h) / 2 - 10
+        if radius < 4:
+            return
+
+        cr.set_source_rgba(*grid, 0.4)
+        cr.set_line_width(1)
+        cr.arc(cx, cy, radius, 0, 2 * math.pi)
+        cr.stroke()
+        cr.set_source_rgba(*grid, 0.15)
+        cr.arc(cx, cy, radius / 2, 0, 2 * math.pi)
+        cr.stroke()
+
+        cr.set_source_rgba(*grid, 0.25)
+        cr.set_line_width(1)
+        cr.move_to(cx - radius, cy)
+        cr.line_to(cx + radius, cy)
+        cr.stroke()
+        cr.move_to(cx, cy - radius)
+        cr.line_to(cx, cy + radius)
+        cr.stroke()
+
+        labels = [("R", 0), ("G", 120), ("B", 240), ("Y", 300)]
+        cr.set_font_size(min(8, w // 26))
+        for txt, deg in labels:
+            a = math.radians(deg)
+            lx = cx + (radius + 8) * math.cos(a)
+            ly = cy + (radius + 8) * math.sin(a)
+            cr.set_source_rgba(*axis, 0.6)
+            cr.move_to(lx - 4, ly + 3)
+            cr.show_text(txt)
+
+        points = data.get("points", [])
+        if not points:
+            return
+
+        s = radius / 128.0
+        for qx, qy, weight in points:
+            dx = cx + (qx - 128) * s
+            dy = cy + (128 - qy) * s
+            if 0 <= dx < w and 0 <= dy < h:
+                alpha = 0.08 + 0.6 * (weight ** 0.5)
+                r = max(0.8, 1.3 * (weight ** 0.4))
+                cr.set_source_rgba(*_ANALYSIS_WHITE, alpha)
+                cr.arc(dx, dy, r, 0, 2 * math.pi)
+                cr.fill()
+
+    def _draw_frequency_domain(self, cr, w: int, h: int, card, _grid, is_dark):
+        self._card_bg(cr, w, h, card)
+        data = self._analysis_data
+        if not data:
+            return
+
+        grid = data.get("mag_grid", [])
+        if not grid:
+            return
+
+        fh = len(grid)
+        fw = len(grid[0])
+        if fw == 0 or fh == 0:
+            return
+
+        def _turbo(v):
+            r = 0.5 + 0.5 * math.sin(2.0 * math.pi * (v * 0.85 - 0.5)) ** 8
+            g = 0.3 + 0.7 * math.sin(2.0 * math.pi * (v * 0.70 + 0.1))
+            b = 0.8 - 0.6 * math.sin(2.0 * math.pi * (v * 0.60 + 0.3))
+            return (max(0, min(1, r)), max(0, min(1, g)), max(0, min(1, b)))
+
+        cell_w = w / fw
+        cell_h = h / fh
+        for y in range(fh):
+            for x in range(fw):
+                r, g, b = _turbo(grid[y][x])
+                cr.set_source_rgba(r, g, b, 1)
+                cr.rectangle(x * cell_w, y * cell_h, cell_w + 0.5, cell_h + 0.5)
+                cr.fill()
 
     # ─── Zoom scaling ─────────────────────────────────────────────────
 
@@ -2104,7 +2399,9 @@ class NodeCanvas(Gtk.Overlay):
         if not node:
             return
 
-        if isinstance(node, InputNode):
+        if _is_analysis_node(node) and hasattr(node, 'analysis_data') and node.analysis_data:
+            w.set_analysis_data(node.analysis_data)
+        elif isinstance(node, InputNode):
             path = node.file_path
             if path:
                 try:
@@ -2128,13 +2425,16 @@ class NodeCanvas(Gtk.Overlay):
             return
         w = self._node_widgets.get(node_id)
         if w:
-            wgt = pixbuf.get_width()
-            hgt = pixbuf.get_height()
-            max_long = 4096
-            if max(wgt, hgt) > max_long:
-                scale = max_long / max(wgt, hgt)
-                pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.TILES)
-            w.set_thumbnail(pixbuf)
+            if _is_analysis_node(node) and hasattr(node, 'analysis_data') and node.analysis_data:
+                w.set_analysis_data(node.analysis_data)
+            else:
+                wgt = pixbuf.get_width()
+                hgt = pixbuf.get_height()
+                max_long = 4096
+                if max(wgt, hgt) > max_long:
+                    scale = max_long / max(wgt, hgt)
+                    pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.TILES)
+                w.set_thumbnail(pixbuf)
             self.queue_gl_render()
 
     def set_filter_defs(self, defs: list["FilterDef"]):
@@ -2195,7 +2495,7 @@ class NodeCanvas(Gtk.Overlay):
 
     # ─── Wire-insert helpers ───────────────────────────────────────────────────
 
-    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:", "color_source:", "gradient:", "noise:", "color_balance:", "exposure_gamma:", "curves:", "crop:", "resize:", "rotate:", "flip:", "distort:", "blur:", "sharpen:", "edge_detect:"})
+    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:", "color_source:", "gradient:", "noise:", "color_balance:", "exposure_gamma:", "curves:", "crop:", "resize:", "rotate:", "flip:", "distort:", "blur:", "sharpen:", "edge_detect:", "histogram:", "waveform_monitor:", "vectorscope:", "frequency_domain:"})
 
     def _is_insertable_node(self, text: str) -> bool:
         return any(text.startswith(p) for p in self._INSERTABLE_PREFIXES)
@@ -2576,6 +2876,46 @@ class NodeCanvas(Gtk.Overlay):
             if w:
                 self.select_node(w)
             return True
+        elif text and text.startswith("histogram:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "histogram_" + str(GLib.get_monotonic_time())
+            node = HistogramNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("waveform_monitor:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "waveform_" + str(GLib.get_monotonic_time())
+            node = WaveformMonitorNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("vectorscope:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "vectorscope_" + str(GLib.get_monotonic_time())
+            node = VectorscopeNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("frequency_domain:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "freq_domain_" + str(GLib.get_monotonic_time())
+            node = FrequencyDomainNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
         elif text and text.startswith("color_balance:"):
             gx = (x - self._pan_x) / self._zoom
             gy = (y - self._pan_y) / self._zoom
@@ -2718,6 +3058,7 @@ class NodeCanvas(Gtk.Overlay):
                 self._update_all_port_colors()
                 self.emit("graph-changed")
                 self._maybe_add_blend_port(dst_nid, dst_pn)
+                self._maybe_process_analysis_node(dst_nid)
             self._clear_selected_port()
             self._wire_overlay.queue_draw()
 
@@ -2759,10 +3100,40 @@ class NodeCanvas(Gtk.Overlay):
                 self._update_all_port_colors()
                 self.emit("graph-changed")
                 self._maybe_add_blend_port(dst_nid, dst_pn)
+                self._maybe_process_analysis_node(dst_nid)
         self._clear_selected_port()
         self._drag_port = None
         self._drag_valid_target = None
         self.queue_gl_render()
+
+    def _maybe_process_analysis_node(self, node_id: str):
+        node = self._graph.get_node(node_id)
+        if not node or not _is_analysis_node(node):
+            return
+        from processing.analysis import (
+            compute_histogram_data, compute_waveform_data,
+            compute_vectorscope_data, compute_frequency_data,
+        )
+        for e in self._graph.edges:
+            if e.dst_node == node_id:
+                src = self._graph.get_node(e.src_node)
+                if src:
+                    path = getattr(src, 'file_path', None) or getattr(src, 'cached_output_path', None)
+                    if path and os.path.isfile(path):
+                        if isinstance(node, HistogramNode):
+                            node.analysis_data = compute_histogram_data(path)
+                        elif isinstance(node, WaveformMonitorNode):
+                            node.analysis_data = compute_waveform_data(path)
+                        elif isinstance(node, VectorscopeNode):
+                            node.analysis_data = compute_vectorscope_data(path)
+                        elif isinstance(node, FrequencyDomainNode):
+                            node.analysis_data = compute_frequency_data(path)
+                        self.update_node_display(node_id)
+                        return
+        node.analysis_data = None
+        w = self._node_widgets.get(node_id)
+        if w:
+            w.clear_thumbnail()
 
     def _maybe_add_blend_port(self, node_id: str, port_name: str):
         node = self._graph.get_node(node_id)
@@ -2928,10 +3299,12 @@ class NodeCanvas(Gtk.Overlay):
     def _on_canvas_right_click(self, gesture, n_press, x, y):
         edge = self._find_edge_at(x, y)
         if edge:
+            dst_id = edge.dst_node
             self._graph.remove_edge(edge.id)
             self._update_all_port_colors()
             self.queue_gl_render()
             self.emit("graph-changed")
+            self._maybe_process_analysis_node(dst_id)
 
     def set_extended_zoom(self, enabled: bool):
         self._extended_zoom = enabled
@@ -3325,6 +3698,7 @@ class NodeCanvas(Gtk.Overlay):
                 self._update_all_port_colors()
                 self.queue_gl_render()
                 self.emit("graph-changed")
+                self._maybe_process_analysis_node(node_id)
                 return True
             if self._selected_widgets:
                 for w in list(self._selected_widgets):

@@ -22,6 +22,7 @@ from imagemagick.cli import ImageMagickCLI
 from imagemagick.filters import get_builtin_filters as get_im_filters
 from nodes import (
     NodeGraph, InputNode, OutputNode, Node,
+    HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
 )
 from widgets.node_editor import NodeCanvas
 from widgets.filter_browser import FilterBrowser, set_pending_drag_text
@@ -850,6 +851,13 @@ class RingWindow(Adw.ApplicationWindow):
             self._result_pixbuf = pixbuf
             if self._export_button:
                 self._export_button.set_sensitive(True)
+
+            # Update analysis node displays (no output port — must be done separately)
+            if self._canvas and self._graph:
+                for n in list(self._graph.nodes.values()):
+                    if isinstance(n, (HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode)):
+                        self._canvas.update_node_display(n.id)
+
             self._set_status(_("Render complete"))
             toast = Adw.Toast(title=_("Render complete"), timeout=2)
             if self._toast_overlay:

@@ -254,6 +254,7 @@ class NodeGraph:
                 ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
                 CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
                 LabelNode, CommentNode,
+                HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
             )
             if isinstance(n, InputNode):
                 nd["params"]["file_path"] = n.file_path
@@ -374,6 +375,7 @@ class NodeGraph:
             ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
             CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
             LabelNode, CommentNode,
+            HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
         )
         graph = NodeGraph()
         for nd in data.get("nodes", []):
@@ -515,6 +517,14 @@ class NodeGraph:
                 node = CommentNode(nid, x, y)
                 node.text = params.get("text", _("Comment"))
                 node.color = params.get("color")
+            elif typ == "histogram":
+                node = HistogramNode(nid, x, y)
+            elif typ == "waveform_monitor":
+                node = WaveformMonitorNode(nid, x, y)
+            elif typ == "vectorscope":
+                node = VectorscopeNode(nid, x, y)
+            elif typ == "frequency_domain":
+                node = FrequencyDomainNode(nid, x, y)
             if node:
                 node.width = nd.get("width", node.width)
                 node.height = nd.get("height", node.height)
