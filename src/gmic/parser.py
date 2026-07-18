@@ -155,6 +155,13 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
     is_disabled = type_name.endswith("_1")
     type_name = re.sub(r"_[012]$", "", type_name)
 
+    # Also check for suffix after closing brace (e.g. choice{...}_0)
+    _sm = re.match(r"^_([012])\b", after_close)
+    if _sm:
+        is_hidden = is_hidden or _sm.group(1) == "0"
+        is_disabled = is_disabled or _sm.group(1) == "1"
+        after_close = after_close[_sm.end():].strip()
+
     kind = _PARAM_TYPES.get(type_name)
     if kind is None:
         return None, after_close
