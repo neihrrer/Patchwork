@@ -2353,6 +2353,7 @@ class NodeCanvas(Gtk.Overlay):
         self._drag_preview: Optional[DragPreview] = None
         self._drag_insert_edge: Optional[Edge] = None
         self._drag_insert_pos: tuple[float, float] = (0.0, 0.0)
+        self._highlighted_replace_node: Optional[NodeWidget] = None
 
         self._zoom_css = Gtk.CssProvider()
         self._zoom_css.load_from_data(b"")
@@ -2431,6 +2432,25 @@ class NodeCanvas(Gtk.Overlay):
 
     def get_node_widget(self, node_id: str) -> Optional[NodeWidget]:
         return self._node_widgets.get(node_id)
+
+    def _find_node_widget_at(self, screen_x: float, screen_y: float) -> Optional[NodeWidget]:
+        zoom = self._zoom
+        for nid, w in reversed(list(self._node_widgets.items())):
+            if not w.get_visible():
+                continue
+            node = self._graph.get_node(nid)
+            if node is None:
+                continue
+            sx = int(node.x * zoom + self._pan_x)
+            sy = int(node.y * zoom + self._pan_y)
+            ww = w.get_width()
+            wh = w.get_height()
+            if ww < 1 or wh < 1:
+                ww = max(1, int(w._logical_w * zoom))
+                wh = max(1, int(w._logical_h * zoom))
+            if sx <= screen_x <= sx + ww and sy <= screen_y <= sy + wh:
+                return w
+        return None
 
     def _clear_selection(self):
         for w in list(self._selected_widgets):
@@ -2744,12 +2764,28 @@ class NodeCanvas(Gtk.Overlay):
         if text:
             self._show_drag_preview(text, x, y)
             self._update_drag_insert_edge(text, x, y)
+
+            widget = self._find_node_widget_at(x, y)
+            if widget:
+                new_node = self._build_node_from_drag_text(text, 0, 0)
+                if not new_node or not self._can_replace_node(widget, new_node):
+                    widget = None
+            if widget != self._highlighted_replace_node:
+                if self._highlighted_replace_node:
+                    self._highlighted_replace_node.set_selected(False)
+                self._highlighted_replace_node = widget
+                if widget:
+                    widget.set_selected(True)
+
             return Gdk.DragAction.COPY
         return Gdk.DragAction.COPY
 
     def _on_drag_leave(self, target):
         self._hide_drag_preview()
         self._clear_drag_insert_edge()
+        if self._highlighted_replace_node:
+            self._highlighted_replace_node.set_selected(False)
+            self._highlighted_replace_node = None
 
     # ─── Drop from sidebar ───────────────────────────────────────────────────────
 
@@ -2883,10 +2919,309 @@ class NodeCanvas(Gtk.Overlay):
             return
         self._insert_new_node_into_edge(edge, new_node_id)
 
+    def _build_node_from_drag_text(self, text: str, gx: float, gy: float) -> Optional[Node]:
+        node = None
+        if text.startswith("filter:"):
+            parts = text.split(":", 2)
+            if len(parts) == 3:
+                key = f"{parts[1]}:{parts[2]}"
+                fd = self._filter_def_map.get(key)
+                if fd:
+                    nid = "filter_" + str(GLib.get_monotonic_time())
+                    node = FilterNode(nid, fd, gx, gy)
+        elif text.startswith("blend:"):
+            parts = text.split(":", 1)
+            mode = parts[1] if len(parts) == 2 else "over"
+            nid = "blend_" + mode + "_" + str(GLib.get_monotonic_time())
+            node = BlendNode(nid, mode, gx, gy)
+        elif text.startswith("opacity:"):
+            nid = "opacity_" + str(GLib.get_monotonic_time())
+            node = OpacityNode(nid, gx, gy)
+        elif text.startswith("brightness_contrast:"):
+            nid = "bc_" + str(GLib.get_monotonic_time())
+            node = BrightnessContrastNode(nid, gx, gy)
+        elif text.startswith("levels:"):
+            nid = "levels_" + str(GLib.get_monotonic_time())
+            node = LevelsNode(nid, gx, gy)
+        elif text.startswith("hsl:"):
+            nid = "hsl_" + str(GLib.get_monotonic_time())
+            node = HSLNode(nid, gx, gy)
+        elif text.startswith("raw_input:"):
+            nid = "raw_input_" + str(GLib.get_monotonic_time())
+            node = RawInputNode(nid, gx, gy)
+        elif text.startswith("raw_decode:"):
+            nid = "raw_decode_" + str(GLib.get_monotonic_time())
+            node = RawDecodeNode(nid, gx, gy)
+        elif text.startswith("input:"):
+            nid = "input_" + str(GLib.get_monotonic_time())
+            node = InputNode(nid, gx, gy)
+        elif text.startswith("output:"):
+            nid = "output_" + str(GLib.get_monotonic_time())
+            node = OutputNode(nid, gx, gy)
+        elif text.startswith("mask:"):
+            nid = "mask_" + str(GLib.get_monotonic_time())
+            node = MaskNode(nid, gx, gy)
+        elif text.startswith("constant:"):
+            nid = "constant_" + str(GLib.get_monotonic_time())
+            node = ConstantNode(nid, gx, gy)
+        elif text.startswith("add:"):
+            nid = "add_" + str(GLib.get_monotonic_time())
+            node = AddNode(nid, gx, gy)
+        elif text.startswith("subtract:"):
+            nid = "subtract_" + str(GLib.get_monotonic_time())
+            node = SubtractNode(nid, gx, gy)
+        elif text.startswith("multiply:"):
+            nid = "multiply_" + str(GLib.get_monotonic_time())
+            node = MultiplyNode(nid, gx, gy)
+        elif text.startswith("divide:"):
+            nid = "divide_" + str(GLib.get_monotonic_time())
+            node = DivideNode(nid, gx, gy)
+        elif text.startswith("ceil:"):
+            nid = "ceil_" + str(GLib.get_monotonic_time())
+            node = CeilNode(nid, gx, gy)
+        elif text.startswith("floor:"):
+            nid = "floor_" + str(GLib.get_monotonic_time())
+            node = FloorNode(nid, gx, gy)
+        elif text.startswith("round:"):
+            nid = "round_" + str(GLib.get_monotonic_time())
+            node = RoundNode(nid, gx, gy)
+        elif text.startswith("sum:"):
+            nid = "sum_" + str(GLib.get_monotonic_time())
+            node = SumNode(nid, gx, gy)
+        elif text.startswith("product:"):
+            nid = "product_" + str(GLib.get_monotonic_time())
+            node = ProductNode(nid, gx, gy)
+        elif text.startswith("not:"):
+            nid = "not_" + str(GLib.get_monotonic_time())
+            node = NotNode(nid, gx, gy)
+        elif text.startswith("and:"):
+            nid = "and_" + str(GLib.get_monotonic_time())
+            node = AndNode(nid, gx, gy)
+        elif text.startswith("or:"):
+            nid = "or_" + str(GLib.get_monotonic_time())
+            node = OrNode(nid, gx, gy)
+        elif text.startswith("nand:"):
+            nid = "nand_" + str(GLib.get_monotonic_time())
+            node = NandNode(nid, gx, gy)
+        elif text.startswith("nor:"):
+            nid = "nor_" + str(GLib.get_monotonic_time())
+            node = NorNode(nid, gx, gy)
+        elif text.startswith("xor:"):
+            nid = "xor_" + str(GLib.get_monotonic_time())
+            node = XorNode(nid, gx, gy)
+        elif text.startswith("xnor:"):
+            nid = "xnor_" + str(GLib.get_monotonic_time())
+            node = XnorNode(nid, gx, gy)
+        elif text.startswith("compare:"):
+            nid = "compare_" + str(GLib.get_monotonic_time())
+            node = CompareNode(nid, gx, gy)
+        elif text.startswith("clamp:"):
+            nid = "clamp_" + str(GLib.get_monotonic_time())
+            node = ClampNode(nid, gx, gy)
+        elif text.startswith("map_range:"):
+            nid = "map_range_" + str(GLib.get_monotonic_time())
+            node = MapRangeNode(nid, gx, gy)
+        elif text.startswith("modulo:"):
+            nid = "modulo_" + str(GLib.get_monotonic_time())
+            node = ModuloNode(nid, gx, gy)
+        elif text.startswith("power:"):
+            nid = "power_" + str(GLib.get_monotonic_time())
+            node = PowerNode(nid, gx, gy)
+        elif text.startswith("square_root:"):
+            nid = "sqrt_" + str(GLib.get_monotonic_time())
+            node = SquareRootNode(nid, gx, gy)
+        elif text.startswith("absolute:"):
+            nid = "abs_" + str(GLib.get_monotonic_time())
+            node = AbsoluteNode(nid, gx, gy)
+        elif text.startswith("log:"):
+            nid = "log_" + str(GLib.get_monotonic_time())
+            node = LogNode(nid, gx, gy)
+        elif text.startswith("exp:"):
+            nid = "exp_" + str(GLib.get_monotonic_time())
+            node = ExpNode(nid, gx, gy)
+        elif text.startswith("random:"):
+            nid = "random_" + str(GLib.get_monotonic_time())
+            node = RandomNode(nid, gx, gy)
+        elif text.startswith("label:"):
+            nid = "label_" + str(GLib.get_monotonic_time())
+            node = LabelNode(nid, gx, gy)
+        elif text.startswith("comment:"):
+            nid = "comment_" + str(GLib.get_monotonic_time())
+            node = CommentNode(nid, gx, gy)
+        elif text.startswith("color_source:"):
+            nid = "color_source_" + str(GLib.get_monotonic_time())
+            node = ColorSourceNode(nid, gx, gy)
+        elif text.startswith("gradient:"):
+            nid = "gradient_" + str(GLib.get_monotonic_time())
+            node = GradientNode(nid, gx, gy)
+        elif text.startswith("noise:"):
+            nid = "noise_" + str(GLib.get_monotonic_time())
+            node = NoiseNode(nid, gx, gy)
+        elif text.startswith("histogram:"):
+            nid = "histogram_" + str(GLib.get_monotonic_time())
+            node = HistogramNode(nid, gx, gy)
+        elif text.startswith("waveform_monitor:"):
+            nid = "waveform_" + str(GLib.get_monotonic_time())
+            node = WaveformMonitorNode(nid, gx, gy)
+        elif text.startswith("vectorscope:"):
+            nid = "vectorscope_" + str(GLib.get_monotonic_time())
+            node = VectorscopeNode(nid, gx, gy)
+        elif text.startswith("frequency_domain:"):
+            nid = "freq_domain_" + str(GLib.get_monotonic_time())
+            node = FrequencyDomainNode(nid, gx, gy)
+        elif text.startswith("color_balance:"):
+            nid = "color_balance_" + str(GLib.get_monotonic_time())
+            node = ColorBalanceNode(nid, gx, gy)
+        elif text.startswith("exposure_gamma:"):
+            nid = "exposure_gamma_" + str(GLib.get_monotonic_time())
+            node = ExposureGammaNode(nid, gx, gy)
+        elif text.startswith("curves:"):
+            nid = "curves_" + str(GLib.get_monotonic_time())
+            node = CurvesNode(nid, gx, gy)
+        elif text.startswith("crop:"):
+            nid = "crop_" + str(GLib.get_monotonic_time())
+            node = CropNode(nid, gx, gy)
+        elif text.startswith("resize:"):
+            nid = "resize_" + str(GLib.get_monotonic_time())
+            node = ResizeNode(nid, gx, gy)
+        elif text.startswith("rotate:"):
+            nid = "rotate_" + str(GLib.get_monotonic_time())
+            node = RotateNode(nid, gx, gy)
+        elif text.startswith("flip:"):
+            nid = "flip_" + str(GLib.get_monotonic_time())
+            node = FlipNode(nid, gx, gy)
+        elif text.startswith("distort:"):
+            nid = "distort_" + str(GLib.get_monotonic_time())
+            node = DistortNode(nid, gx, gy)
+        elif text.startswith("blur:"):
+            nid = "blur_" + str(GLib.get_monotonic_time())
+            node = BlurNode(nid, gx, gy)
+        elif text.startswith("sharpen:"):
+            nid = "sharpen_" + str(GLib.get_monotonic_time())
+            node = SharpenNode(nid, gx, gy)
+        elif text.startswith("edge_detect:"):
+            nid = "edge_detect_" + str(GLib.get_monotonic_time())
+            node = EdgeDetectNode(nid, gx, gy)
+        return node
+
+    def _can_replace_node(self, old_widget: NodeWidget, new_node: Node) -> bool:
+        old_node = old_widget.graph_node
+
+        old_has_image = any(p.port_type == PortType.IMAGE for p in old_node.inputs) or any(p.port_type == PortType.IMAGE for p in old_node.outputs)
+        new_has_image = any(p.port_type == PortType.IMAGE for p in new_node.inputs) or any(p.port_type == PortType.IMAGE for p in new_node.outputs)
+        if old_has_image != new_has_image:
+            return False
+        old_has_raw = any(p.port_type == PortType.RAW for p in old_node.inputs) or any(p.port_type == PortType.RAW for p in old_node.outputs)
+        new_has_raw = any(p.port_type == PortType.RAW for p in new_node.inputs) or any(p.port_type == PortType.RAW for p in new_node.outputs)
+        if old_has_raw != new_has_raw:
+            return False
+
+        old_in_types = {p.port_type for p in old_node.inputs}
+        old_out_types = {p.port_type for p in old_node.outputs}
+        new_in_types = {p.port_type for p in new_node.inputs}
+        new_out_types = {p.port_type for p in new_node.outputs}
+
+        old_has_in = len(old_node.inputs) > 0
+        old_has_out = len(old_node.outputs) > 0
+        new_has_in = len(new_node.inputs) > 0
+        new_has_out = len(new_node.outputs) > 0
+        old_is_decor = not old_has_in and not old_has_out
+        new_is_decor = not new_has_in and not new_has_out
+        old_is_gen = not old_has_in and old_has_out
+        new_is_gen = not new_has_in and new_has_out
+
+        if old_is_decor or new_is_decor:
+            if not (old_is_decor and new_is_decor):
+                return False
+        elif old_is_gen or new_is_gen:
+            if not (old_is_gen and new_is_gen):
+                return False
+            if old_out_types != new_out_types:
+                return False
+        else:
+            if not (old_in_types & new_in_types or old_out_types & new_out_types):
+                return False
+        return True
+
+    def _do_replace_node(self, old_widget: NodeWidget, text: str, x: float, y: float) -> bool:
+        old_node = old_widget.graph_node
+        gx, gy = old_node.x, old_node.y
+
+        new_node = self._build_node_from_drag_text(text, gx, gy)
+        if not new_node or not self._can_replace_node(old_widget, new_node):
+            return False
+
+        incoming = list(self._graph.get_incoming_edges(old_node.id))
+        outgoing = list(self._graph.get_outgoing_edges(old_node.id))
+
+        nid = new_node.id
+        self.add_node(new_node)
+
+        self._graph.remove_node(old_node.id)
+        self._node_widgets.pop(old_node.id, None)
+        self._fixed.remove(old_widget)
+        self._selected_widgets.discard(old_widget)
+
+        new_ins_by_name = {p.name: p for p in new_node.inputs}
+        new_outs_by_name = {p.name: p for p in new_node.outputs}
+        new_ins_by_type = {}
+        for p in new_node.inputs:
+            new_ins_by_type.setdefault(p.port_type, []).append(p.name)
+        new_outs_by_type = {}
+        for p in new_node.outputs:
+            new_outs_by_type.setdefault(p.port_type, []).append(p.name)
+        used_ins = set()
+        used_outs = set()
+
+        for edge in incoming:
+            name = edge.dst_port
+            if name in new_ins_by_name and name not in used_ins:
+                used_ins.add(name)
+                self._graph.add_edge(edge.src_node, edge.src_port, nid, name)
+            else:
+                ptype = old_node.get_input_port(name).port_type if old_node.get_input_port(name) else PortType.IMAGE
+                avail = [n for n in new_ins_by_type.get(ptype, []) if n not in used_ins]
+                if avail:
+                    used_ins.add(avail[0])
+                    self._graph.add_edge(edge.src_node, edge.src_port, nid, avail[0])
+
+        for edge in outgoing:
+            name = edge.src_port
+            if name in new_outs_by_name and name not in used_outs:
+                used_outs.add(name)
+                self._graph.add_edge(nid, name, edge.dst_node, edge.dst_port)
+            else:
+                ptype = old_node.get_output_port(name).port_type if old_node.get_output_port(name) else PortType.IMAGE
+                avail = [n for n in new_outs_by_type.get(ptype, []) if n not in used_outs]
+                if avail:
+                    used_outs.add(avail[0])
+                    self._graph.add_edge(nid, avail[0], edge.dst_node, edge.dst_port)
+
+        w = self._node_widgets.get(nid)
+        if w:
+            self.select_node(w)
+
+        self._update_all_port_colors()
+        self.emit("graph-changed")
+        return True
+
     def _on_drop(self, target, value, x, y):
         self._hide_drag_preview()
+        self._clear_drag_insert_edge()
+        if self._highlighted_replace_node:
+            self._highlighted_replace_node.set_selected(False)
+            self._highlighted_replace_node = None
         text = get_pending_drag_text()
-        if text and text.startswith("filter:"):
+        if not text:
+            return False
+
+        old_widget = self._find_node_widget_at(x, y)
+        if old_widget:
+            if self._do_replace_node(old_widget, text, x, y):
+                return True
+            return False
+
+        if text.startswith("filter:"):
             parts = text.split(":", 2)
             if len(parts) == 3:
                 key = f"{parts[1]}:{parts[2]}"
