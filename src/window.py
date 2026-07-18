@@ -75,6 +75,8 @@ class RingWindow(Adw.ApplicationWindow):
         self._result_pixbufs: dict[str, GdkPixbuf.Pixbuf] = {}
         self._minimap_switch: Optional[Adw.SwitchRow] = None
         self._auto_save_id: Optional[int] = None
+        self._pending_graph: Optional["NodeGraph"] = None
+        self._missing_images: list["InputNode"] = []
 
         self._light_header_css = Gtk.CssProvider()
         self._light_header_css.load_from_data(b"""
@@ -395,13 +397,10 @@ class RingWindow(Adw.ApplicationWindow):
             )
 
     def _do_auto_save(self) -> bool:
-        import json
         auto_path = Path.home() / ".cache" / "ring" / "autosave.ring"
         try:
             auto_path.parent.mkdir(parents=True, exist_ok=True)
-            data = self._graph.to_dict()
-            with open(auto_path, "w") as f:
-                json.dump(data, f, indent=2)
+            self._save_ring_to_path(str(auto_path), self._graph)
         except OSError:
             pass
         self._auto_save_id = GLib.timeout_add_seconds(
@@ -603,6 +602,44 @@ class RingWindow(Adw.ApplicationWindow):
 
     # ─── Project save / load ─────────────────────────────────────────────────
 
+    @staticmethod
+    def _save_ring_to_path(path: str, graph):
+        import json, zipfile, io
+        data = graph.to_dict()
+        input_nodes = [n for n in graph.nodes.values()
+                       if isinstance(n, InputNode) and n.file_path]
+        if input_nodes:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("graph.json", json.dumps(data, indent=2))
+                for n in input_nodes:
+                    p = Path(n.file_path)
+                    if p.exists():
+                        zf.write(str(p), f"images/{n.id}{p.suffix}")
+            with open(path, "wb") as f:
+                f.write(buf.getvalue())
+        else:
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+
+    @staticmethod
+    def _load_ring_from_path(path: str) -> tuple:
+        import json, zipfile
+        if zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path, "r") as zf:
+                data = json.loads(zf.read("graph.json"))
+                stem = Path(path).stem
+                cache_dir = Path.home() / ".cache" / "ring" / "packed" / stem
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                for name in zf.namelist():
+                    if name.startswith("images/") and not name.endswith("/"):
+                        (cache_dir / Path(name).name).write_bytes(zf.read(name))
+                return data, cache_dir
+        else:
+            with open(path, "r") as f:
+                data = json.load(f)
+            return data, None
+
     def _on_open_project(self, action, param):
         file_filter = Gtk.FileFilter()
         file_filter.set_name(_("Ring Projects"))
@@ -620,30 +657,84 @@ class RingWindow(Adw.ApplicationWindow):
             file = dialog.open_finish(result)
             if not file:
                 return
-            import json
-            data = json.loads(file.get_path() and open(file.get_path(), "r").read() or "{}")
+            data, pack_dir = self._load_ring_from_path(file.get_path())
             if not isinstance(data, dict) or data.get("version") != 1:
                 self._show_error(_("Invalid project file"))
                 return
             graph = NodeGraph.from_dict(data, self._filter_def_map)
-            if self._canvas:
-                self._canvas.clear_all()
+
+            if pack_dir:
                 for n in graph.nodes.values():
-                    self._canvas.add_node(n)
-                for e in graph.edges:
-                    self._canvas._graph._edges.append(e)
-                    if hasattr(self._canvas, "_update_all_port_colors"):
-                        self._canvas._update_all_port_colors()
-                self._canvas._fit_content()
-                self._canvas.queue_gl_render()
-                self._canvas.emit("graph-changed")
-            self._set_status(_("Project loaded"))
-            self._update_render_button()
+                    if isinstance(n, InputNode) and n.file_path:
+                        cached = pack_dir / f"{n.id}{Path(n.file_path).suffix}"
+                        if cached.exists():
+                            n.file_path = str(cached)
+
+            missing = [
+                n for n in graph.nodes.values()
+                if isinstance(n, InputNode) and n.file_path and not os.path.exists(n.file_path)
+            ]
+
+            if missing:
+                self._pending_graph = graph
+                self._missing_images = missing
+                self._prompt_next_missing_image()
+            else:
+                self._apply_loaded_graph(graph)
+
         except GLib.Error as e:
             if e.domain != "gtk-dialog-error-quark":
                 self._show_error(str(e))
         except Exception as e:
             self._show_error(str(e))
+
+    def _apply_loaded_graph(self, graph):
+        if self._canvas:
+            self._canvas.clear_all()
+            for n in graph.nodes.values():
+                self._canvas.add_node(n)
+            for e in graph.edges:
+                self._canvas._graph._edges.append(e)
+            self._canvas._update_all_port_colors()
+            self._canvas._fit_content()
+            self._canvas.queue_gl_render()
+            self._canvas.emit("graph-changed")
+        self._set_status(_("Project loaded"))
+        self._update_render_button()
+
+    def _prompt_next_missing_image(self):
+        if not self._missing_images:
+            self._apply_loaded_graph(self._pending_graph)
+            self._pending_graph = None
+            return
+        node = self._missing_images[0]
+        file_filter = Gtk.FileFilter()
+        file_filter.set_name(_("Images"))
+        for ext in [
+            "image/png", "image/jpeg", "image/tiff", "image/bmp",
+            "image/webp", "image/gif", "image/x-portable-pixmap",
+        ]:
+            file_filter.add_mime_type(ext)
+        dialog = Gtk.FileDialog(
+            title=_("Locate image for '{0}'").format(Path(node.file_path).name),
+            default_filter=file_filter,
+            modal=True,
+        )
+        dialog.open(self, None, self._on_locate_image_response)
+
+    def _on_locate_image_response(self, dlg, result):
+        try:
+            file = dlg.open_finish(result)
+            if file:
+                node = self._missing_images[0]
+                node.file_path = file.get_path()
+                self._missing_images.pop(0)
+            else:
+                self._missing_images.pop(0)
+        except GLib.Error:
+            if self._missing_images:
+                self._missing_images.pop(0)
+        self._prompt_next_missing_image()
 
     def _on_save_project(self, action, param):
         file_filter = Gtk.FileFilter()
@@ -662,13 +753,10 @@ class RingWindow(Adw.ApplicationWindow):
             file = dialog.save_finish(result)
             if not file:
                 return
-            import json
-            data = self._graph.to_dict()
             path = file.get_path()
             if not path.endswith(".ring"):
                 path += ".ring"
-            with open(path, "w") as f:
-                json.dump(data, f, indent=2)
+            self._save_ring_to_path(path, self._graph)
             self._set_status(_("Project saved"))
         except GLib.Error as e:
             if e.domain != "gtk-dialog-error-quark":

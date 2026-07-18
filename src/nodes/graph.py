@@ -335,7 +335,7 @@ class NodeGraph:
                 mode = params.get("mode", "over")
                 node = BlendNode(nid, mode, x, y)
                 extra = params.get("extra_ports", 0)
-                for _ in range(extra):
+                for _i in range(extra):
                     node.add_input_port()
             elif typ == "color":
                 node = ColorNode(nid, x, y)
