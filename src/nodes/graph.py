@@ -141,9 +141,9 @@ class NodeGraph:
             return None
         if self._would_create_cycle(src_node, dst_node):
             return None
-        for e in self._edges:
-            if e.dst_node == dst_node and e.dst_port == dst_port:
-                return None
+        existing = self.get_connected_input(dst_node, dst_port)
+        if existing:
+            self.remove_edge(existing.id)
         src_n = self._nodes.get(src_node)
         dst_n = self._nodes.get(dst_node)
         if not src_n or not dst_n:

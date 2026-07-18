@@ -122,7 +122,8 @@ class TestEdges:
         e1 = empty_graph.add_edge("n1", "image", "out", "image")
         assert e1 is not None
         e2 = empty_graph.add_edge("n2", "image", "out", "image")
-        assert e2 is None
+        assert e2 is not None
+        assert empty_graph.get_connected_input("out", "image") == e2
 
     def test_add_edge_nonexistent_node(self, empty_graph):
         e = empty_graph.add_edge("nope", "image", "nope2", "image")
