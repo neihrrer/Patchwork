@@ -3129,6 +3129,8 @@ class NodeCanvas(Gtk.Overlay):
         new_is_decor = not new_has_in and not new_has_out
         old_is_gen = not old_has_in and old_has_out
         new_is_gen = not new_has_in and new_has_out
+        old_is_sink = old_has_in and not old_has_out
+        new_is_sink = new_has_in and not new_has_out
 
         if old_is_decor or new_is_decor:
             if not (old_is_decor and new_is_decor):
@@ -3137,6 +3139,11 @@ class NodeCanvas(Gtk.Overlay):
             if not (old_is_gen and new_is_gen):
                 return False
             if old_out_types != new_out_types:
+                return False
+        elif old_is_sink or new_is_sink:
+            if not (old_is_sink and new_is_sink):
+                return False
+            if old_in_types != new_in_types:
                 return False
         else:
             if not (old_in_types & new_in_types or old_out_types & new_out_types):
