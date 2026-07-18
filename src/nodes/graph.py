@@ -16,6 +16,7 @@ class PortDirection(Enum):
 class PortType(Enum):
     IMAGE = auto()
     NUMERIC = auto()
+    RAW = auto()
 
 
 class Port:
@@ -244,7 +245,7 @@ class NodeGraph:
                 "params": {},
             }
             from nodes.node_types import (
-                InputNode, FilterNode, BlendNode,
+                InputNode, RawInputNode, RawDecodeNode, FilterNode, BlendNode,
                 OpacityNode, MaskNode,
                 BrightnessContrastNode, LevelsNode, HSLNode,
                 ColorSourceNode, GradientNode, NoiseNode,
@@ -261,6 +262,13 @@ class NodeGraph:
             )
             if isinstance(n, InputNode):
                 nd["params"]["file_path"] = n.file_path
+            elif isinstance(n, RawInputNode):
+                nd["params"]["file_path"] = n.file_path
+            elif isinstance(n, RawDecodeNode):
+                nd["params"]["decode_method"] = n.decode_method
+                nd["params"]["decode_width"] = n.decode_width
+                nd["params"]["decode_height"] = n.decode_height
+                nd["params"]["byte_offset"] = n.byte_offset
             elif isinstance(n, FilterNode):
                 nd["params"]["filter_key"] = f"{n.filter_def.engine}:{n.filter_def.name}"
                 nd["params"]["param_values"] = dict(n.param_values)
@@ -382,7 +390,7 @@ class NodeGraph:
     @staticmethod
     def from_dict(data: dict, filter_def_map: dict[str, "FilterDef"] = {}) -> "NodeGraph":
         from nodes.node_types import (
-            InputNode, OutputNode, FilterNode, BlendNode,
+            InputNode, RawInputNode, RawDecodeNode, OutputNode, FilterNode, BlendNode,
             OpacityNode, MaskNode,
             BrightnessContrastNode, LevelsNode, HSLNode,
             ColorSourceNode, GradientNode, NoiseNode,
@@ -406,6 +414,17 @@ class NodeGraph:
                 fp = params.get("file_path")
                 if fp:
                     node.file_path = fp
+            elif typ == "raw_input":
+                node = RawInputNode(nid, x, y)
+                fp = params.get("file_path")
+                if fp:
+                    node.file_path = fp
+            elif typ == "raw_decode":
+                node = RawDecodeNode(nid, x, y)
+                node.decode_method = params.get("decode_method", "8-bit grayscale")
+                node.decode_width = params.get("decode_width", 512)
+                node.decode_height = params.get("decode_height", 512)
+                node.byte_offset = params.get("byte_offset", 0)
             elif typ == "output":
                 node = OutputNode(nid, x, y)
             elif typ == "filter":
@@ -573,7 +592,7 @@ class NodeGraph:
                 node.width = nd.get("width", node.width)
                 node.height = nd.get("height", node.height)
                 label = nd.get("label")
-                if label and typ != "input":
+                if label and typ not in ("input", "raw_input"):
                     node.label = label
                 graph._nodes[node.id] = node
 

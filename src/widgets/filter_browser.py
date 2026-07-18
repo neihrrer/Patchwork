@@ -111,6 +111,10 @@ _MATH_ITEMS = [
 ]
 
 _ADVANCED_SUBCATEGORIES = {
+    "Input": [
+        ("raw_input", "Raw Input", "raw_input"),
+        ("raw_decode", "Raw Decode", "raw_decode"),
+    ],
     "Analysis": [
         ("histogram", "Histogram", "histogram"),
         ("waveform_monitor", "Waveform Monitor", "waveform_monitor"),
@@ -531,12 +535,15 @@ class FilterBrowser(GObject.Object):
             "gradient": "gradient:",
             "noise": "noise:",
             "input": "input:",
+            "raw_input": "raw_input:",
+            "raw_decode": "raw_decode:",
             "output": "output:",
         }
         if node.node_type in text_map:
             return text_map[node.node_type]
         if node.node_type in ("constant", "add", "subtract", "multiply",
                                "divide", "ceil", "floor", "round",
+                               "raw_input", "raw_decode",
                                "sum", "product",
                                "modulo", "power", "square_root", "absolute",
                                "log", "exp", "random",

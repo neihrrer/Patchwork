@@ -1,6 +1,7 @@
 import math
 import os
 import random
+import struct
 import tempfile
 from typing import Optional
 
@@ -581,6 +582,99 @@ def edge_detect(image_path: str, threshold: float, fmt: str) -> ProcessResult:
             edges = edges.point(lambda x: 255 if x > thresh_val else 0)
         edges = edges.convert("RGBA")
         out_path = _save(edges, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+_DECODE_FORMATS = {
+    "1-bit (monochrome)":     {"bpp": 0.125, "mode": "1"},
+    "8-bit grayscale":        {"bpp": 1,     "mode": "L"},
+    "8-bit RGB (24-bit)":     {"bpp": 3,     "mode": "RGB"},
+    "8-bit RGBA (32-bit)":    {"bpp": 4,     "mode": "RGBA"},
+    "16-bit grayscale LE":    {"bpp": 2,     "mode": "I;16"},
+    "16-bit grayscale BE":    {"bpp": 2,     "mode": "I;16B"},
+    "16-bit RGB (48-bit) LE": {"bpp": 6,     "mode": "RGB",   "bit16": True, "little": True},
+    "16-bit RGB (48-bit) BE": {"bpp": 6,     "mode": "RGB",   "bit16": True, "little": False},
+    "16-bit RGBA (64-bit) LE":{"bpp": 8,     "mode": "RGBA",  "bit16": True, "little": True},
+    "16-bit RGBA (64-bit) BE":{"bpp": 8,     "mode": "RGBA",  "bit16": True, "little": False},
+    "32-bit float grayscale": {"bpp": 4,     "mode": "F"},
+    "32-bit float RGB":       {"bpp": 12,    "mode": "RGB",   "float32": True},
+    "32-bit float RGBA":      {"bpp": 16,    "mode": "RGBA",  "float32": True},
+}
+
+
+def decode_raw(raw_path: str, method: str, width: int, height: int, offset: int, fmt: str) -> ProcessResult:
+    try:
+        finfo = _DECODE_FORMATS.get(method)
+        if not finfo:
+            return ProcessResult(error=f"Unknown decode method: {method}")
+
+        total_pixels = width * height
+        if total_pixels == 0:
+            return ProcessResult(error="Width and height must be greater than 0")
+
+        with open(raw_path, "rb") as f:
+            if offset > 0:
+                f.seek(offset)
+
+            if method == "1-bit (monochrome)":
+                byte_count = (total_pixels + 7) // 8
+                data = f.read(byte_count)
+                if len(data) < byte_count:
+                    return ProcessResult(error=f"File too small: need {byte_count} bytes, got {len(data)}")
+                pixels = bytearray()
+                for byte in data:
+                    for b in range(8):
+                        pixels.append(0xFF if (byte >> (7 - b)) & 1 else 0x00)
+                pixels = bytes(pixels[:total_pixels])
+                img = Image.frombytes("1", (width, height), pixels)
+            elif finfo.get("bit16"):
+                bpp = int(finfo["bpp"])
+                byte_count = total_pixels * bpp
+                data = f.read(byte_count)
+                if len(data) < byte_count:
+                    return ProcessResult(error=f"File too small: need {byte_count} bytes, got {len(data)}")
+                channels = 3 if finfo["mode"] == "RGB" else 4
+                pix_per_channel = total_pixels
+                ch_data = []
+                for c in range(channels):
+                    ch_bytes = bytearray()
+                    for i in range(pix_per_channel):
+                        lo = data[(i * channels + c) * 2]
+                        hi = data[(i * channels + c) * 2 + 1]
+                        if finfo["little"]:
+                            val = lo | (hi << 8)
+                        else:
+                            val = hi | (lo << 8)
+                        ch_bytes.append(val >> 8)
+                    ch_data.append(bytes(ch_bytes))
+                raw = b"".join(
+                    bytes([ch_data[c][i] for c in range(channels)])
+                    for i in range(pix_per_channel)
+                )
+                img = Image.frombytes(finfo["mode"], (width, height), raw)
+            elif finfo.get("float32"):
+                bpp = int(finfo["bpp"])
+                channels = width * height
+                total_floats = channels if finfo["mode"] == "F" else channels * (3 if finfo["mode"] == "RGB" else 4)
+                data = f.read(total_floats * 4)
+                if len(data) < total_floats * 4:
+                    return ProcessResult(error=f"File too small")
+                vals = struct.unpack(f"<{total_floats}f", data[:total_floats * 4])
+                clamped = bytes(max(0, min(255, int(v * 255.0))) for v in vals)
+                img = Image.frombytes(finfo["mode"], (width, height), clamped)
+            else:
+                bpp = int(finfo["bpp"])
+                byte_count = total_pixels * bpp
+                data = f.read(byte_count)
+                if len(data) < byte_count:
+                    return ProcessResult(error=f"File too small: need {byte_count} bytes, got {len(data)}")
+                img = Image.frombytes(finfo["mode"], (width, height), data)
+
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+        out_path = _save(img, fmt)
         return ProcessResult(output_path=out_path)
     except Exception as e:
         return ProcessResult(error=str(e))

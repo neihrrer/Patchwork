@@ -1,6 +1,6 @@
 from nodes.graph import Port, PortDirection, PortType, Edge, Node, NodeGraph
 from nodes.node_types import (
-    InputNode, OutputNode, FilterNode, BlendNode, OpacityNode, MaskNode,
+    InputNode, RawInputNode, RawDecodeNode, OutputNode, FilterNode, BlendNode, OpacityNode, MaskNode,
     BrightnessContrastNode, LevelsNode, HSLNode,
     ColorSourceNode, GradientNode, NoiseNode,
     ColorBalanceNode, ExposureGammaNode, CurvesNode,

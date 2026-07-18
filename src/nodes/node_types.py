@@ -35,6 +35,61 @@ class InputNode(Node):
         self.cache_dirty = True
 
 
+class RawInputNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        outputs = [
+            Port(id, "raw", "Raw Data", PortDirection.OUTPUT, PortType.RAW),
+        ]
+        super().__init__(id, "Raw Input", "raw_input", [], outputs, x, y)
+        self.width = 180
+        self.height = 80
+        self._file_path: Optional[str] = None
+
+    @property
+    def file_path(self) -> Optional[str]:
+        return self._file_path
+
+    @file_path.setter
+    def file_path(self, value: Optional[str]):
+        self._file_path = value
+        if value:
+            self.label = os.path.basename(value)
+        self.cache_dirty = True
+
+
+class RawDecodeNode(Node):
+    DECODE_METHODS = [
+        "1-bit (monochrome)",
+        "8-bit grayscale",
+        "8-bit RGB (24-bit)",
+        "8-bit RGBA (32-bit)",
+        "16-bit grayscale LE",
+        "16-bit grayscale BE",
+        "16-bit RGB (48-bit) LE",
+        "16-bit RGB (48-bit) BE",
+        "16-bit RGBA (64-bit) LE",
+        "16-bit RGBA (64-bit) BE",
+        "32-bit float grayscale",
+        "32-bit float RGB",
+        "32-bit float RGBA",
+    ]
+
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "raw", "Raw Data", PortDirection.INPUT, PortType.RAW),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Raw Decode", "raw_decode", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 200
+        self.decode_method: str = "8-bit grayscale"
+        self.decode_width: int = 512
+        self.decode_height: int = 512
+        self.byte_offset: int = 0
+
+
 class OutputNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
         inputs = [

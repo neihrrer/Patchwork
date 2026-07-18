@@ -17,7 +17,7 @@ except Exception:
     _ = lambda s: s
 
 from nodes import (
-    Node, NodeGraph, Edge, Port, PortDirection, PortType, FilterNode, InputNode, OutputNode, BlendNode,
+    Node, NodeGraph, Edge, Port, PortDirection, PortType, FilterNode, InputNode, RawInputNode, RawDecodeNode, OutputNode, BlendNode,
     OpacityNode, MaskNode,
     BrightnessContrastNode, LevelsNode, HSLNode,
     ColorSourceNode, GradientNode, NoiseNode,
@@ -270,6 +270,8 @@ _NODE_PREVIEW_INFO = {
     "log:": (_("Log"), "log"),
     "exp:": (_("Exp"), "exp"),
     "random:": (_("Random"), "random"),
+    "raw_input:": (_("Raw Input"), "raw_input"),
+    "raw_decode:": (_("Raw Decode"), "raw_decode"),
 }
 
 
@@ -905,6 +907,8 @@ class NodeWidget(Gtk.Box):
             self._build_map_range_params()
         elif isinstance(self._node, RandomNode):
             self._build_random_params()
+        elif isinstance(self._node, RawDecodeNode):
+            self._build_raw_decode_params()
 
     def _build_filter_params(self):
         fd = self._node.filter_def
@@ -1408,6 +1412,40 @@ class NodeWidget(Gtk.Box):
     def _on_randomize_clicked(self, node: RandomNode):
         node.randomize()
         self._canvas._update_all_port_colors()
+
+    def _build_raw_decode_params(self):
+        node: RawDecodeNode = self._node
+
+        dd = Gtk.DropDown()
+        dd.set_model(Gtk.StringList.new(node.DECODE_METHODS))
+        idx = node.DECODE_METHODS.index(node.decode_method) if node.decode_method in node.DECODE_METHODS else 0
+        dd.set_selected(idx)
+        dd.set_halign(Gtk.Align.START)
+        dd.connect("notify::selected", lambda d, ps: setattr(node, "decode_method", node.DECODE_METHODS[d.get_selected()]))
+        dd.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(dd)
+        self._make_control_row("Method", "decode_method", dd)
+
+        adj_w = Gtk.Adjustment(value=node.decode_width, lower=1, upper=100000, step_increment=1)
+        spin_w = Gtk.SpinButton(adjustment=adj_w, climb_rate=1, digits=0)
+        spin_w.connect("value-changed", lambda s: setattr(node, "decode_width", int(s.get_value())))
+        spin_w.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_w)
+        self._make_control_row("Width", "decode_width", spin_w)
+
+        adj_h = Gtk.Adjustment(value=node.decode_height, lower=1, upper=100000, step_increment=1)
+        spin_h = Gtk.SpinButton(adjustment=adj_h, climb_rate=1, digits=0)
+        spin_h.connect("value-changed", lambda s: setattr(node, "decode_height", int(s.get_value())))
+        spin_h.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_h)
+        self._make_control_row("Height", "decode_height", spin_h)
+
+        adj_o = Gtk.Adjustment(value=node.byte_offset, lower=0, upper=10000000, step_increment=1)
+        spin_o = Gtk.SpinButton(adjustment=adj_o, climb_rate=1, digits=0)
+        spin_o.connect("value-changed", lambda s: setattr(node, "byte_offset", int(s.get_value())))
+        spin_o.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_o)
+        self._make_control_row("Offset", "byte_offset", spin_o)
 
     def _get_local_numeric_value(self, port_name: str) -> Optional[float]:
         node = self._node
@@ -1925,7 +1963,7 @@ class NodeWidget(Gtk.Box):
         elif not self._selected:
             self._canvas.select_node(self)
         self._canvas.grab_focus()
-        if isinstance(self._node, InputNode) and not self._node.file_path:
+        if isinstance(self._node, (InputNode, RawInputNode)) and not self._node.file_path:
             if hasattr(self, '_header') and self._header:
                 h = self._header.get_allocation().height
                 if 0 <= y < h:
@@ -2118,6 +2156,8 @@ class Minimap(Gtk.Widget):
         "log": Gdk.RGBA(0.15, 0.60, 0.55, 1.0),
         "exp": Gdk.RGBA(0.72, 0.30, 0.20, 1.0),
         "random": Gdk.RGBA(0.30, 0.30, 0.70, 1.0),
+        "raw_input": Gdk.RGBA(0.55, 0.25, 0.15, 1.0),
+        "raw_decode": Gdk.RGBA(0.15, 0.55, 0.45, 1.0),
     }
 
     SIZE = (180, 130)
@@ -2918,6 +2958,26 @@ class NodeCanvas(Gtk.Overlay):
             if w:
                 self.select_node(w)
             self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("raw_input:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "raw_input_" + str(GLib.get_monotonic_time())
+            node = RawInputNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("raw_decode:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "raw_decode_" + str(GLib.get_monotonic_time())
+            node = RawDecodeNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
             return True
         elif text and text.startswith("input:"):
             gx = (x - self._pan_x) / self._zoom

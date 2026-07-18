@@ -21,7 +21,7 @@ from gmic.cli import GmicCLI
 from imagemagick.cli import ImageMagickCLI
 from imagemagick.filters import get_builtin_filters as get_im_filters
 from nodes import (
-    NodeGraph, InputNode, OutputNode, Node,
+    NodeGraph, InputNode, RawInputNode, RawDecodeNode, OutputNode, Node,
     HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
 )
 from widgets.node_editor import NodeCanvas
@@ -133,6 +133,14 @@ class RingWindow(Adw.ApplicationWindow):
             .node-header.log { background: #00838F; }
             .node-header.exp { background: #E64A19; }
             .node-header.random { background: #3949AB; }
+            .node-header.raw_input { background: #B0BEC5; }
+            .node-header.raw_decode { background: #90A4AE; }
+        """)
+
+        self._dark_header_css = Gtk.CssProvider()
+        self._dark_header_css.load_from_data(b"""
+            .node-header.raw_input { background: #78909C; }
+            .node-header.raw_decode { background: #546E7A; }
         """)
 
         self._setup_ui()
@@ -248,7 +256,11 @@ class RingWindow(Adw.ApplicationWindow):
             return
         if manager.get_dark():
             Gtk.StyleContext.remove_provider_for_display(display, self._light_header_css)
+            Gtk.StyleContext.add_provider_for_display(
+                display, self._dark_header_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
         else:
+            Gtk.StyleContext.remove_provider_for_display(display, self._dark_header_css)
             Gtk.StyleContext.add_provider_for_display(
                 display, self._light_header_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
@@ -596,34 +608,42 @@ class RingWindow(Adw.ApplicationWindow):
 
     def _on_input_node_open(self, canvas, node_id: str):
         node = self._graph.get_node(node_id)
-        if not node or not isinstance(node, InputNode):
+        if not node or not isinstance(node, (InputNode, RawInputNode)):
             return
-        file_filter = Gtk.FileFilter()
-        file_filter.set_name(_("Images"))
-        for ext in [
-            "image/png", "image/jpeg", "image/tiff", "image/bmp",
-            "image/webp", "image/gif", "image/x-portable-pixmap",
-        ]:
-            file_filter.add_mime_type(ext)
-        dialog = Gtk.FileDialog(
-            title=_("Select Image for Input"),
-            default_filter=file_filter,
-            modal=True,
-        )
+        is_raw = isinstance(node, RawInputNode)
+        if is_raw:
+            dialog = Gtk.FileDialog(
+                title=_("Select Raw File"),
+                modal=True,
+            )
+        else:
+            file_filter = Gtk.FileFilter()
+            file_filter.set_name(_("Images"))
+            for ext in [
+                "image/png", "image/jpeg", "image/tiff", "image/bmp",
+                "image/webp", "image/gif", "image/x-portable-pixmap",
+            ]:
+                file_filter.add_mime_type(ext)
+            dialog = Gtk.FileDialog(
+                title=_("Select Image for Input"),
+                default_filter=file_filter,
+                modal=True,
+            )
         dialog.open(self, None, lambda d, r: self._on_input_node_response(node, d, r))
 
-    def _on_input_node_response(self, node: InputNode, dialog, result):
+    def _on_input_node_response(self, node, dialog, result):
         try:
             file = dialog.open_finish(result)
             if file:
                 path = file.get_path()
-                try:
-                    pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
-                except Exception as e:
-                    self._show_error(str(e))
-                    return
-                if self._export_button:
-                    self._export_button.set_sensitive(False)
+                if isinstance(node, InputNode):
+                    try:
+                        pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
+                    except Exception as e:
+                        self._show_error(str(e))
+                        return
+                    if self._export_button:
+                        self._export_button.set_sensitive(False)
                 node.file_path = path
                 if self._canvas:
                     self._canvas.update_node_display(node.id)

@@ -4,7 +4,7 @@ import tempfile
 from typing import Optional, Callable
 
 from nodes import (
-    NodeGraph, InputNode, OutputNode, FilterNode, BlendNode,
+    NodeGraph, InputNode, RawInputNode, RawDecodeNode, OutputNode, FilterNode, BlendNode,
     OpacityNode, MaskNode,
     BrightnessContrastNode, LevelsNode, HSLNode,
     ColorSourceNode, GradientNode, NoiseNode,
@@ -30,6 +30,7 @@ from processing.pillow_ops import (
     adjust_color_balance, adjust_exposure_gamma, adjust_curves,
     crop_image, resize_image, rotate_image, flip_image, distort_image,
     blur_image, sharpen_image, edge_detect,
+    decode_raw,
 )
 from processing.analysis import (
     compute_histogram_data, compute_waveform_data, compute_vectorscope_data,
@@ -68,6 +69,29 @@ class GraphExecutor:
                     node.cache_dirty = False
                 else:
                     return ProcessResult(error=f"Input node '{node.label}' has no file set")
+
+            elif isinstance(node, RawInputNode):
+                if node.file_path and os.path.isfile(node.file_path):
+                    node_outputs[node.id] = node.file_path
+                    node.cached_output_path = node.file_path
+                    node.cache_dirty = False
+                else:
+                    return ProcessResult(error=f"Raw Input node '{node.label}' has no file set")
+
+            elif isinstance(node, RawDecodeNode):
+                was_processed = node.cache_dirty or not node.cached_output_path
+                if was_processed:
+                    inp = self._first_raw_input(node, graph, node_outputs)
+                    if not inp:
+                        return ProcessResult(error=f"Raw Decode '{node.label}' has no input")
+                    result = decode_raw(inp, node.decode_method,
+                                        node.decode_width, node.decode_height,
+                                        node.byte_offset, output_format)
+                    if not result.success:
+                        return result
+                    node.cached_output_path = result.output_path
+                    node.cache_dirty = False
+                node_outputs[node.id] = node.cached_output_path
 
             elif isinstance(node, FilterNode):
                 was_processed = node.cache_dirty or not node.cached_output_path
@@ -505,6 +529,14 @@ class GraphExecutor:
             if e.dst_node == node.id:
                 path = outputs.get(e.src_node)
                 if path and os.path.isfile(path):
+                    return path
+        return None
+
+    def _first_raw_input(self, node, graph: NodeGraph, outputs: dict[str, str]) -> Optional[str]:
+        for e in graph.edges:
+            if e.dst_node == node.id:
+                path = outputs.get(e.src_node)
+                if path:
                     return path
         return None
 
