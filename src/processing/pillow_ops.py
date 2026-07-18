@@ -23,6 +23,18 @@ def _save(img: Image.Image, fmt: str) -> str:
     return out_path
 
 
+def _match_size(im1: Image.Image, im2: Image.Image) -> tuple[Image.Image, Image.Image]:
+    if im1.size == im2.size:
+        return im1, im2
+    w = max(im1.width, im2.width)
+    h = max(im1.height, im2.height)
+    c1 = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    c1.paste(im1, (0, 0))
+    c2 = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    c2.paste(im2, (0, 0))
+    return c1, c2
+
+
 def _blend_channel(base_ch, blend_ch, op):
     return op(base_ch, blend_ch)
 
@@ -84,7 +96,7 @@ def _blend_color_dodge(base: Image.Image, blend: Image.Image) -> Image.Image:
     base_r, base_g, base_b, base_a = base.split()
     blend_r, blend_g, blend_b, blend_a = blend.split()
     def dodge(a, b):
-        return ImageMath.eval("convert((a * 256) / (256 - b + 1), 'L')", a=a, b=b)
+        return ImageMath.unsafe_eval("convert((a * 256) / (256 - b + 1), 'L')", a=a, b=b)
     r = dodge(base_r, blend_r)
     g = dodge(base_g, blend_g)
     b = dodge(base_b, blend_b)
@@ -98,8 +110,8 @@ def _blend_color_burn(base: Image.Image, blend: Image.Image) -> Image.Image:
     base_r, base_g, base_b, base_a = base.split()
     blend_r, blend_g, blend_b, blend_a = blend.split()
     def burn(a, b):
-        inv_b = ImageMath.eval("convert(255 - b, 'L')", b=b)
-        return ImageMath.eval("convert(255 - (255 - a) * 256 / (b + 1), 'L')", a=a, b=inv_b)
+        inv_b = ImageMath.unsafe_eval("convert(255 - b, 'L')", b=b)
+        return ImageMath.unsafe_eval("convert(255 - (255 - a) * 256 / (b + 1), 'L')", a=a, b=inv_b)
     r = burn(base_r, blend_r)
     g = burn(base_g, blend_g)
     b = burn(base_b, blend_b)
@@ -113,9 +125,9 @@ def _blend_hard_light(base: Image.Image, blend: Image.Image) -> Image.Image:
     base_r, base_g, base_b, base_a = base.split()
     blend_r, blend_g, blend_b, blend_a = blend.split()
     def hard(a, b):
-        half = ImageMath.eval("convert(b * 2, 'L')", b=b)
-        double = ImageMath.eval("convert(b * 2 - 256, 'L')", b=b)
-        mask = ImageMath.eval("convert(b < 128 ? 255 : 0, 'L')", b=b)
+        half = ImageMath.unsafe_eval("convert(b * 2, 'L')", b=b)
+        double = ImageMath.unsafe_eval("convert(b * 2 - 256, 'L')", b=b)
+        mask = ImageMath.unsafe_eval("convert(b < 128 ? 255 : 0, 'L')", b=b)
         mult = ImageChops.multiply(a, half)
         screen = ImageChops.screen(a, double)
         return Image.composite(mult, screen, mask)
@@ -132,13 +144,13 @@ def _blend_soft_light(base: Image.Image, blend: Image.Image) -> Image.Image:
     base_r, base_g, base_b, base_a = base.split()
     blend_r, blend_g, blend_b, blend_a = blend.split()
     def soft(a, b):
-        b2 = ImageMath.eval("convert(b * 2, 'L')", b=b)
-        b2m256 = ImageMath.eval("convert(b * 2 - 256, 'L')", b=b)
-        mask = ImageMath.eval("convert(b < 128 ? 255 : 0, 'L')", b=b)
+        b2 = ImageMath.unsafe_eval("convert(b * 2, 'L')", b=b)
+        b2m256 = ImageMath.unsafe_eval("convert(b * 2 - 256, 'L')", b=b)
+        mask = ImageMath.unsafe_eval("convert(b < 128 ? 255 : 0, 'L')", b=b)
         term1 = ImageChops.multiply(a, b2)
         term2 = ImageChops.screen(a, b2m256)
         raw = Image.composite(term1, term2, mask)
-        return ImageMath.eval("convert(a - (1 - 2 * b / 256) * (a - a * a / 256), 'L')", a=base_r, b=blend_r)
+        return ImageMath.unsafe_eval("convert(a - (1 - 2 * b / 256) * (a - a * a / 256), 'L')", a=base_r, b=blend_r)
     r = soft(base_r, blend_r)
     g = soft(base_g, blend_g)
     b = soft(base_b, blend_b)
@@ -156,7 +168,7 @@ def _blend_exclusion(base: Image.Image, blend: Image.Image) -> Image.Image:
     base_r, base_g, base_b, base_a = base.split()
     blend_r, blend_g, blend_b, blend_a = blend.split()
     def excl(a, b):
-        return ImageMath.eval("convert(a + b - 2 * a * b / 256, 'L')", a=a, b=b)
+        return ImageMath.unsafe_eval("convert(a + b - 2 * a * b / 256, 'L')", a=a, b=b)
     r = excl(base_r, blend_r)
     g = excl(base_g, blend_g)
     b = excl(base_b, blend_b)
@@ -185,9 +197,10 @@ def blend_images(inputs: list[str], mode: str, fmt: str) -> ProcessResult:
         fn = _BLEND_FUNCS.get(mode)
         if fn is None:
             return ProcessResult(error=f"Unknown blend mode: {mode}")
-        current = _load(inputs[0])
-        for path in inputs[1:]:
-            blend = _load(path)
+        images = [_load(p) for p in inputs]
+        current = images[0]
+        for blend in images[1:]:
+            current, blend = _match_size(current, blend)
             current = fn(current, blend)
         out_path = _save(current, fmt)
         return ProcessResult(output_path=out_path)
