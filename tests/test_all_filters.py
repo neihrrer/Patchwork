@@ -78,100 +78,10 @@ INTERACTIVE_FILTERS = {
     "samj_test_tout_interactif",
 }
 
-STDLIB_BUG_FILTERS = {
-    "fx_colorful_blobs", "fx_heightfield_warp", "fx_project_stereographic",
-    "fx_speech_bubble", "cl_tangentialCircle", "cl_colorWheel",
-    "cl_implicitEqua", "gtutor_abn", "mc_film_grain",
-    "fx_karo_cimg_skel", "fx_karo_cimg_nlmeans", "fx_karo_pink_bianca",
-    "fx_generate_random_portrait",
-    "fx_droste", "fx_spherize", "fx_blur_motion", "fx_distort_rbf",
-    "fx_warp_perspective", "fx_twisted_rays", "fx_quadrangle",
-    "fx_ultrawarp4plus", "fx_self_glitching_cascade",
-    "fx_apply_haldclut", "fx_illuminate_shape2d", "fx_random_pattern",
-    "fx_spline_spirograph", "fx_crazy_texture", "fx_jr_deform",
-    "fx_buffer_destroyer", "fx_shifter", "fx_jfif_bomb",
-    "fx_jr_multi_mosaic_preview", "fx_fourier_picture_watermark",
-    "fx_layer_cake_2", "fx_gcd_crmt_tile",
-    "fx_euclidean2polar", "fx_for_littbarski", "fx_fire_edges",
-    "fx_cupid", "fx_intarsia", "fx_lightning",
-    "fx_import_image_16", "fx_ExposureWeightMap", "fx_SmoothSketch",
-    "fx_MorphoPaint", "pat_rgb", "gcd_layers", "gcd_stereo_vid",
-    "iain_savenoiseprint", "iain_fast_formula", "jeje_render3d",
-    "mc_film_grain", "fx_karo_pink", "fx_karo_pink_bin",
-    # animated/generative — produce multiple frames, not single-image output
-    "fx_animate_cartoon", "fx_animate_edges", "fx_animate_elevation3d",
-    "fx_animate_extrude3d", "fx_animate_glow", "fx_animate_imageobject3d",
-    "fx_animate_lissajous", "fx_animate_pencilbw", "fx_animate_rodilius",
-    "fx_animate_stencilbw", "fx_lavalampbw", "fx_moire",
-    "fx_spatial_transition", "fx_text_pointcloud3d",
-    # builtin filters with wrong command names in parser.py
-    "oilpaint", "boost_chroma", "light_balance", "retinex",
-    "colorize", "fx_cpencil", "watercolor",
-    # remaining "Undefined argument" — parameter count mismatch after parser fix
-    "fx_custom_transform", "fx_morphological", "fx_conformal_maps",
-    "fx_transform_polar", "fx_watermark_visible", "fx_watermark_fourier",
-    "fx_blend_fade", "fx_blend", "fx_equation_plot", "fx_newton_fractal",
-    "fx_quick_copyright", "fx_denoise", "fx_custom_code", "fx_output_565",
-    "fx_import_image", "fx_ultrawarptwo", "fx_shredder",
-    "fx_rep_premade_palette", "fx_rep_transfer_color_reduced",
-    "fx_rep_bitplane_shuffle", "fx_rep_tco", "fx_rep_serendipitous_circle",
-    "fx_rep_lavander_binary_map", "samj_Filtres_Sur_Tuiles_V2",
-    "samj_Filtres_Sur_Tuiles", "samj_CeKoaSa_013", "fx_tk_video3D",
-    "cl_comic",
-    # Unknown command — filter name not in G'MIC stdlib
-    "fx_transfer_colors", "fx_pixel_stretch", "jdoe_toyfilter",
-    "jdoe_xtrartistic",
-    # output too small — generative / multi-layer / need special setup
-    "fx_extract_objects", "fx_stylize", "fx_autofill_lineart",
-    "fx_colorize_lineart", "fx_colorize_lineart_smart", "fx_channels2layers",
-    "fx_clut_from_ab", "fx_drop_water", "fx_rain",
-    "fx_split_details_alpha", "fx_split_details_gaussian",
-    "fx_split_details_wavelets", "fx_align_layers", "fx_split_colors",
-    "fx_fade_layers", "fx_morph_layers", "fx_apply_multiscale", "fx_stroke",
-    "fx_tiles2layers", "fx_tones2layers", "fx_drop_shadow",
-    "fx_drop_shadow3d", "fx_light_leaks", "fx_slice_luminosity",
-    "fx_pack_sprites", "fx_ball", "fx_sine_curve", "fx_symmetric_shape2d",
-    "fx_tree", "fx_gear", "fx_heart", "fx_barnsley_fern",
-    "fx_image_sample", "fx_solve_maze", "afre_details",
-    "fx_gcd_transfer_colors_patch", "fx_transfer_histogram",
-    "fx_transfer_pca", "fx_fourier_old", "fx_neon_alpha", "fx_layer_cake",
-    "fx_bitplane8", "mc_dragonfly", "mc_kookaburra", "mc_rooster",
-    "mc_paw", "mc_maple_leaf", "mc_gum_leaf", "mc_australia",
-    "mc_paint_splat", "mc_barbed_wire", "mc_crosshair", "mc_phone",
-    "mc_shopping_cart", "mc_mail", "mc_information", "mc_flip",
-    "fx_hue_overlay_masks", "pr_papercuts", "pr_scpat",
-    "samj_Moirage_Spline_XY", "samj_Moirage_Spline", "samj_reptile",
-    "samj_Masques_Noir_Et_Blanc", "samj_Valeur_Moyenne_LCH",
-    "samj_Lignes_H_ou_V_Colorees", "samj_Engrenages_Laser_LED",
-    "samj_Palette_De_Degrades", "samj_Splines_Test",
-    "Triangles_Shades_Adjacents", "samj_CorLine_B", "samj_CorLine",
-    "samj_transition_H_V_to_PNG", "samj_Layers_To_PNG",
-    "samj_test_B", "samj_test_C", "fx_tk_deana",
-    # Script internal errors — G'MIC stdlib bugs
-    "fx_rep_cstdmap", "fx_rep_array_random_jumble_by_px",
-    "fx_array_fade", "fx_adjust_colors", "fx_apply_Labcurve",
-    "fx_apply_YCbCrcurve", "fx_simulate_grain", "fx_split_luminance",
-    "fx_jfif_fake", "fx_jfif", "fx_vibrato", "fx_ncee",
-    "fx_rep_trsa", "fx_rep_rd", "fx_rep_shear",
-    "fx_rep_vibrance_ych", "fx_rep_self_referential_formula",
-    "pr_underwoods", "pr_nonwoods", "pr_fluffcloud",
-    "samj_Dorure", "samj_Courtepointe", "samj_Motifs_Rapides",
-    "fx_tk_retouch",
-    # Builtin filters that need fixing
-    "sketchbw", "cartoon", "normalize", "resize", "unsharp",
-    "frame", "polaroid", "warp", "mirror", "invert",
-    # timed out
-    "jeje_turing_pattern",
-    # stdlib filters with argument incompatibilities
-    "apply_from_clut_set",
-}
-
-
 def _quick_sample(filters, n_per_category=2, total_cap=15):
     """Stratified sample: up to n_per_category per category, capped at total_cap."""
     candidates = [f for f in filters
-                  if f.name not in INTERACTIVE_FILTERS
-                  and f.name not in STDLIB_BUG_FILTERS]
+                  if f.name not in INTERACTIVE_FILTERS]
     groups = OrderedDict()
     for f in candidates:
         cat = f.category[0] if f.category else "Other"
@@ -278,10 +188,6 @@ def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
     for i, fd in enumerate(filters):
         if fd.name in INTERACTIVE_FILTERS:
             results.append(FilterTestResult(fd.name, fd.engine, True, 0.0, "skipped (interactive)"))
-            skipped_count += 1
-            continue
-        if fd.name in STDLIB_BUG_FILTERS:
-            results.append(FilterTestResult(fd.name, fd.engine, True, 0.0, "skipped (known stdlib bug)"))
             skipped_count += 1
             continue
         r = test_filter(gmic, imagemagick, test_image, fd, timeout)

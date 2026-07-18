@@ -38,43 +38,9 @@ INTERACTIVE_FILTERS = {
     "samj_Selection_Hermite_Spline", "samj_diaporama", "samj_test_tout_interactif",
 }
 
-STDLIB_BUG_FILTERS = {
-    "fx_colorful_blobs", "fx_heightfield_warp", "fx_project_stereographic",
-    "fx_speech_bubble", "cl_tangentialCircle", "cl_colorWheel",
-    "cl_implicitEqua", "gtutor_abn", "mc_film_grain",
-    "fx_karo_cimg_skel", "fx_karo_cimg_nlmeans", "fx_karo_pink_bianca",
-    "fx_generate_random_portrait",
-    "fx_droste", "fx_spherize", "fx_blur_motion", "fx_distort_rbf",
-    "fx_warp_perspective", "fx_twisted_rays", "fx_quadrangle",
-    "fx_ultrawarp4plus", "fx_self_glitching_cascade",
-    "fx_apply_haldclut", "fx_illuminate_shape2d", "fx_random_pattern",
-    "fx_spline_spirograph", "fx_crazy_texture", "fx_jr_deform",
-    "fx_buffer_destroyer", "fx_shifter", "fx_jfif_bomb",
-    "fx_jr_multi_mosaic_preview", "fx_fourier_picture_watermark",
-    "fx_layer_cake_2", "fx_gcd_crmt_tile",
-    "fx_euclidean2polar", "fx_for_littbarski", "fx_fire_edges",
-    "fx_cupid", "fx_intarsia", "fx_lightning",
-    "fx_import_image_16", "fx_ExposureWeightMap", "fx_SmoothSketch",
-    "fx_MorphoPaint", "pat_rgb", "gcd_layers", "gcd_stereo_vid",
-    "iain_savenoiseprint", "iain_fast_formula", "jeje_render3d",
-    "fx_karo_pink", "fx_karo_pink_bin",
-    "fx_animate_cartoon", "fx_animate_edges", "fx_animate_elevation3d",
-    "fx_animate_extrude3d", "fx_animate_glow", "fx_animate_imageobject3d",
-    "fx_animate_lissajous", "fx_animate_pencilbw", "fx_animate_rodilius",
-    "fx_animate_stencilbw", "fx_lavalampbw", "fx_moire",
-    "fx_spatial_transition", "fx_text_pointcloud3d",
-    # builtin filters with wrong command names in parser.py
-    "oilpaint", "boost_chroma", "light_balance", "retinex",
-    "colorize", "fx_cpencil", "watercolor",
-    # stdlib filters with argument incompatibilities
-    "apply_from_clut_set",
-}
-
-
 def _quick_sample(filters, n_per_category=2, total_cap=15):
     candidates = [f for f in filters
-                  if f.name not in INTERACTIVE_FILTERS
-                  and f.name not in STDLIB_BUG_FILTERS]
+                  if f.name not in INTERACTIVE_FILTERS]
     groups = OrderedDict()
     for f in candidates:
         cat = f.category[0] if f.category else "Other"
