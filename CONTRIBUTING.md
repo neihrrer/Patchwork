@@ -61,4 +61,4 @@ Report bugs and feature requests at the project's issue tracker.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the GNU General Public License v3.0.

@@ -133,4 +133,4 @@ Ring/
 
 ## License
 
-Ring is distributed under the MIT License. See the [LICENSE](LICENSE) file for details.
+Ring is distributed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.

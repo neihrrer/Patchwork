@@ -64,7 +64,7 @@ class RingApplication(Adw.Application):
             application_icon="io.github.neihrrer.Ring",
             developer_name="Ring Team",
             version="0.1.0",
-            license_type=Gtk.License.MIT_X11,
+            license_type=Gtk.License.GPL_3_0,
             comments="GTK4/Libadwaita frontend for the G'MIC image processing framework",
             website="https://github.com/anomalyco/opencode",
             issue_url="https://github.com/anomalyco/opencode/issues",

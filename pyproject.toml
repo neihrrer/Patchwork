@@ -3,6 +3,7 @@ name = "ring"
 version = "0.1.0"
 description = "Node-based image processing environment with a modern GTK4 interface"
 requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
 dependencies = [
     "PyGObject>=3.50",
     "Pillow>=10.0",
