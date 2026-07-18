@@ -404,3 +404,258 @@ class CommentNode(Node):
     @text.setter
     def text(self, value):
         self._text = value
+
+
+# --- Source nodes ---
+
+class ColorSourceNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Color Source", "color_source", [], outputs, x, y)
+        self.width = 180
+        self.height = 160
+        self.source_width: int = 512
+        self.source_height: int = 512
+        self.color: str = "#FFFFFFFF"
+
+
+class GradientNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Gradient", "gradient", [], outputs, x, y)
+        self.width = 180
+        self.height = 180
+        self.source_width: int = 512
+        self.source_height: int = 512
+        self.gradient_type: str = "linear"
+        self.start_color: str = "#000000FF"
+        self.end_color: str = "#FFFFFFFF"
+        self.angle: float = 0.0
+
+
+class NoiseNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Noise", "noise", [], outputs, x, y)
+        self.width = 180
+        self.height = 160
+        self.source_width: int = 512
+        self.source_height: int = 512
+        self.noise_type: str = "gaussian"
+        self.scale: float = 64.0
+        self.seed: int = -1
+
+
+# --- Adjust nodes ---
+
+class ColorBalanceNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "cyan_red", "Cyan/Red", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "magenta_green", "Magenta/Green", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "yellow_blue", "Yellow/Blue", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Color Balance", "color_balance", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 180
+        self.cyan_red: float = 0.0
+        self.magenta_green: float = 0.0
+        self.yellow_blue: float = 0.0
+
+
+class ExposureGammaNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "exposure", "Exposure", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "gamma", "Gamma", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Exposure/Gamma", "exposure_gamma", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 160
+        self.exposure: float = 0.0
+        self.gamma: float = 1.0
+
+
+class CurvesNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "shadows", "Shadows", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "dark_midtones", "Dark Midtones", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "midtones", "Midtones", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "light_midtones", "Light Midtones", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "highlights", "Highlights", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Curves", "curves", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 220
+        self.shadows: float = 0.0
+        self.dark_midtones: float = 64.0
+        self.midtones: float = 128.0
+        self.light_midtones: float = 192.0
+        self.highlights: float = 255.0
+
+
+# --- Transform nodes ---
+
+class CropNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "crop_x", "X", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "crop_y", "Y", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "crop_width", "Width", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "crop_height", "Height", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Crop", "crop", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 200
+        self.crop_x: float = 0.0
+        self.crop_y: float = 0.0
+        self.crop_width: float = 256.0
+        self.crop_height: float = 256.0
+
+
+class ResizeNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "resize_width", "Width", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "resize_height", "Height", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Resize", "resize", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 180
+        self.resize_width: float = 512.0
+        self.resize_height: float = 512.0
+        self.resize_mode: str = "stretch"
+
+
+class RotateNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "angle", "Angle", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Rotate", "rotate", inputs, outputs, x, y)
+        self.width = 180
+        self.height = 140
+        self.angle: float = 0.0
+
+
+class FlipNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Flip", "flip", inputs, outputs, x, y)
+        self.width = 180
+        self.height = 120
+        self.direction: str = "horizontal"
+
+
+class DistortNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "dist_x0", "Top-Left X", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "dist_y0", "Top-Left Y", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "dist_x1", "Top-Right X", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "dist_y1", "Top-Right Y", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "dist_x2", "Bottom-Right X", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "dist_y2", "Bottom-Right Y", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "dist_x3", "Bottom-Left X", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "dist_y3", "Bottom-Left Y", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Distort", "distort", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 280
+        self.dist_x0: float = 0.0
+        self.dist_y0: float = 0.0
+        self.dist_x1: float = 512.0
+        self.dist_y1: float = 0.0
+        self.dist_x2: float = 512.0
+        self.dist_y2: float = 512.0
+        self.dist_x3: float = 0.0
+        self.dist_y3: float = 512.0
+
+
+# --- Filter nodes ---
+
+class BlurNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "radius", "Radius", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Blur", "blur", inputs, outputs, x, y)
+        self.width = 180
+        self.height = 140
+        self.radius: float = 5.0
+
+
+class SharpenNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "amount", "Amount", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "radius", "Radius", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Sharpen", "sharpen", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 170
+        self.amount: float = 1.0
+        self.radius: float = 2.0
+
+
+class EdgeDetectNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "image", "Image", PortDirection.INPUT, PortType.IMAGE),
+            Port(id, "threshold", "Threshold", PortDirection.INPUT, PortType.NUMERIC),
+        ]
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Edge Detect", "edge_detect", inputs, outputs, x, y)
+        self.width = 200
+        self.height = 140
+        self.threshold: float = 0.0

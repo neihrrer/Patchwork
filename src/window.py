@@ -89,6 +89,20 @@ class RingWindow(Adw.ApplicationWindow):
             .node-header.brightness_contrast { background: #00BCD4; }
             .node-header.levels { background: #4DD0E1; }
             .node-header.hsl { background: #29B6F6; }
+            .node-header.color_source { background: #7E57C2; }
+            .node-header.gradient { background: #9575CD; }
+            .node-header.noise { background: #B39DDB; }
+            .node-header.color_balance { background: #26A69A; }
+            .node-header.exposure_gamma { background: #A1887F; }
+            .node-header.curves { background: #EF5350; }
+            .node-header.crop { background: #66BB6A; }
+            .node-header.resize { background: #42A5F5; }
+            .node-header.rotate { background: #D4E157; }
+            .node-header.flip { background: #9CCC65; }
+            .node-header.distort { background: #FF7043; }
+            .node-header.blur { background: #4FC3F7; }
+            .node-header.sharpen { background: #AB47BC; }
+            .node-header.edge_detect { background: #E91E63; }
             .node-header.constant { background: #FFC107; }
             .node-header.add { background: #66BB6A; }
             .node-header.subtract { background: #E91E63; }

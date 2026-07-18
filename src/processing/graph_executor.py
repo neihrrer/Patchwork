@@ -5,7 +5,12 @@ from typing import Optional, Callable
 
 from nodes import (
     NodeGraph, InputNode, OutputNode, FilterNode, BlendNode,
-    OpacityNode, MaskNode, BrightnessContrastNode, LevelsNode, HSLNode,
+    OpacityNode, MaskNode,
+    BrightnessContrastNode, LevelsNode, HSLNode,
+    ColorSourceNode, GradientNode, NoiseNode,
+    ColorBalanceNode, ExposureGammaNode, CurvesNode,
+    CropNode, ResizeNode, RotateNode, FlipNode, DistortNode,
+    BlurNode, SharpenNode, EdgeDetectNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
 )
@@ -17,6 +22,10 @@ from processing.runner import ProcessResult
 from processing.pillow_ops import (
     blend_images, adjust_opacity, adjust_hsl,
     adjust_brightness_contrast, adjust_levels, apply_mask,
+    generate_color_source, generate_gradient, generate_noise,
+    adjust_color_balance, adjust_exposure_gamma, adjust_curves,
+    crop_image, resize_image, rotate_image, flip_image, distort_image,
+    blur_image, sharpen_image, edge_detect,
 )
 
 
@@ -127,6 +136,154 @@ class GraphExecutor:
                     return ProcessResult(error=f"Mask '{node.label}' needs 2 inputs, got {len(inputs)}")
                 threshold = self._get_numeric_input(node, "threshold", graph, numeric_outputs) or node.threshold
                 result = apply_mask(inputs[0], inputs[1], node.invert, threshold, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, ColorSourceNode):
+                result = generate_color_source(node.source_width, node.source_height, node.color, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, GradientNode):
+                result = generate_gradient(node.source_width, node.source_height, node.gradient_type,
+                                           node.start_color, node.end_color, node.angle, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, NoiseNode):
+                result = generate_noise(node.source_width, node.source_height, node.noise_type,
+                                        node.scale, node.seed if node.seed else None, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, ColorBalanceNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Color Balance '{node.label}' has no input")
+                cr = self._get_numeric_input(node, "cyan_red", graph, numeric_outputs) or node.cyan_red
+                mg = self._get_numeric_input(node, "magenta_green", graph, numeric_outputs) or node.magenta_green
+                yb = self._get_numeric_input(node, "yellow_blue", graph, numeric_outputs) or node.yellow_blue
+                result = adjust_color_balance(inp, cr, mg, yb, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, ExposureGammaNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Exposure/Gamma '{node.label}' has no input")
+                exposure = self._get_numeric_input(node, "exposure", graph, numeric_outputs) or node.exposure
+                gamma = self._get_numeric_input(node, "gamma", graph, numeric_outputs) or node.gamma
+                result = adjust_exposure_gamma(inp, exposure, gamma, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, CurvesNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Curves '{node.label}' has no input")
+                shadows = self._get_numeric_input(node, "shadows", graph, numeric_outputs) or node.shadows
+                dark_mid = self._get_numeric_input(node, "dark_midtones", graph, numeric_outputs) or node.dark_midtones
+                midtones = self._get_numeric_input(node, "midtones", graph, numeric_outputs) or node.midtones
+                light_mid = self._get_numeric_input(node, "light_midtones", graph, numeric_outputs) or node.light_midtones
+                highlights = self._get_numeric_input(node, "highlights", graph, numeric_outputs) or node.highlights
+                result = adjust_curves(inp, shadows, dark_mid, midtones, light_mid, highlights, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, CropNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Crop '{node.label}' has no input")
+                cx = self._get_numeric_input(node, "x", graph, numeric_outputs) or node.crop_x
+                cy = self._get_numeric_input(node, "y", graph, numeric_outputs) or node.crop_y
+                cw = self._get_numeric_input(node, "width", graph, numeric_outputs) or node.crop_width
+                ch = self._get_numeric_input(node, "height", graph, numeric_outputs) or node.crop_height
+                result = crop_image(inp, cx, cy, cw, ch, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, ResizeNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Resize '{node.label}' has no input")
+                rw = self._get_numeric_input(node, "width", graph, numeric_outputs) or node.resize_width
+                rh = self._get_numeric_input(node, "height", graph, numeric_outputs) or node.resize_height
+                result = resize_image(inp, rw, rh, node.resize_mode, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, RotateNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Rotate '{node.label}' has no input")
+                angle = self._get_numeric_input(node, "angle", graph, numeric_outputs) or node.angle
+                result = rotate_image(inp, angle, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, FlipNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Flip '{node.label}' has no input")
+                result = flip_image(inp, node.direction, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, DistortNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Distort '{node.label}' has no input")
+                x0 = self._get_numeric_input(node, "x0", graph, numeric_outputs) or node.dist_x0
+                y0 = self._get_numeric_input(node, "y0", graph, numeric_outputs) or node.dist_y0
+                x1 = self._get_numeric_input(node, "x1", graph, numeric_outputs) or node.dist_x1
+                y1 = self._get_numeric_input(node, "y1", graph, numeric_outputs) or node.dist_y1
+                x2 = self._get_numeric_input(node, "x2", graph, numeric_outputs) or node.dist_x2
+                y2 = self._get_numeric_input(node, "y2", graph, numeric_outputs) or node.dist_y2
+                x3 = self._get_numeric_input(node, "x3", graph, numeric_outputs) or node.dist_x3
+                y3 = self._get_numeric_input(node, "y3", graph, numeric_outputs) or node.dist_y3
+                result = distort_image(inp, x0, y0, x1, y1, x2, y2, x3, y3, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, BlurNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Blur '{node.label}' has no input")
+                radius = self._get_numeric_input(node, "radius", graph, numeric_outputs) or node.radius
+                result = blur_image(inp, radius, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, SharpenNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Sharpen '{node.label}' has no input")
+                amount = self._get_numeric_input(node, "amount", graph, numeric_outputs) or node.amount
+                radius = self._get_numeric_input(node, "radius", graph, numeric_outputs) or node.radius
+                result = sharpen_image(inp, amount, radius, output_format)
+                if not result.success:
+                    return result
+                node_outputs[node.id] = result.output_path
+
+            elif isinstance(node, EdgeDetectNode):
+                inp = self._first_input(node, graph, node_outputs)
+                if not inp:
+                    return ProcessResult(error=f"Edge Detect '{node.label}' has no input")
+                threshold = self._get_numeric_input(node, "threshold", graph, numeric_outputs) or node.threshold
+                result = edge_detect(inp, threshold, output_format)
                 if not result.success:
                     return result
                 node_outputs[node.id] = result.output_path

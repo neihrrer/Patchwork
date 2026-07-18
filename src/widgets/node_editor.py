@@ -17,7 +17,12 @@ except Exception:
 
 from nodes import (
     Node, NodeGraph, Edge, Port, PortDirection, PortType, FilterNode, InputNode, OutputNode, BlendNode,
-    OpacityNode, MaskNode, BrightnessContrastNode, LevelsNode, HSLNode,
+    OpacityNode, MaskNode,
+    BrightnessContrastNode, LevelsNode, HSLNode,
+    ColorSourceNode, GradientNode, NoiseNode,
+    ColorBalanceNode, ExposureGammaNode, CurvesNode,
+    CropNode, ResizeNode, RotateNode, FlipNode, DistortNode,
+    BlurNode, SharpenNode, EdgeDetectNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
     LabelNode, CommentNode,
@@ -99,6 +104,20 @@ _NODE_PREVIEW_INFO = {
     "brightness_contrast:": (_("Brightness/Contrast"), "brightness_contrast"),
     "levels:": (_("Levels"), "levels"),
     "hsl:": (_("HSL"), "hsl"),
+    "color_balance:": (_("Color Balance"), "color_balance"),
+    "exposure_gamma:": (_("Exposure/Gamma"), "exposure_gamma"),
+    "curves:": (_("Curves"), "curves"),
+    "crop:": (_("Crop"), "crop"),
+    "resize:": (_("Resize"), "resize"),
+    "rotate:": (_("Rotate"), "rotate"),
+    "flip:": (_("Flip"), "flip"),
+    "distort:": (_("Distort"), "distort"),
+    "blur:": (_("Blur"), "blur"),
+    "sharpen:": (_("Sharpen"), "sharpen"),
+    "edge_detect:": (_("Edge Detect"), "edge_detect"),
+    "color_source:": (_("Color Source"), "color_source"),
+    "gradient:": (_("Gradient"), "gradient"),
+    "noise:": (_("Noise"), "noise"),
     "input:": (_("Input"), "input"),
     "output:": (_("Output"), "output"),
     "constant:": (_("Constant"), "constant"),
@@ -694,6 +713,34 @@ class NodeWidget(Gtk.Box):
             self._build_levels_params()
         elif isinstance(self._node, HSLNode):
             self._build_hsl_params()
+        elif isinstance(self._node, ColorSourceNode):
+            self._build_color_source_params()
+        elif isinstance(self._node, GradientNode):
+            self._build_gradient_params()
+        elif isinstance(self._node, NoiseNode):
+            self._build_noise_params()
+        elif isinstance(self._node, ColorBalanceNode):
+            self._build_color_balance_params()
+        elif isinstance(self._node, ExposureGammaNode):
+            self._build_exposure_gamma_params()
+        elif isinstance(self._node, CurvesNode):
+            self._build_curves_params()
+        elif isinstance(self._node, CropNode):
+            self._build_crop_params()
+        elif isinstance(self._node, ResizeNode):
+            self._build_resize_params()
+        elif isinstance(self._node, RotateNode):
+            self._build_rotate_params()
+        elif isinstance(self._node, FlipNode):
+            self._build_flip_params()
+        elif isinstance(self._node, DistortNode):
+            self._build_distort_params()
+        elif isinstance(self._node, BlurNode):
+            self._build_blur_params()
+        elif isinstance(self._node, SharpenNode):
+            self._build_sharpen_params()
+        elif isinstance(self._node, EdgeDetectNode):
+            self._build_edge_detect_params()
         elif isinstance(self._node, ConstantNode):
             self._build_constant_params()
 
@@ -792,6 +839,273 @@ class NodeWidget(Gtk.Box):
             self._ctrl_widgets.append(spin)
             self._port_spin_buttons[attr] = spin
             self._make_control_row(label, attr, spin)
+
+    def _build_color_source_params(self):
+        node: ColorSourceNode = self._node
+        adj_w = Gtk.Adjustment(value=node.source_width, lower=1, upper=10000, step_increment=1)
+        spin_w = Gtk.SpinButton(adjustment=adj_w, climb_rate=1, digits=0)
+        spin_w.connect("value-changed", lambda s: setattr(node, "source_width", int(s.get_value())))
+        spin_w.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_w)
+        self._make_control_row("Width", "source_width", spin_w)
+        adj_h = Gtk.Adjustment(value=node.source_height, lower=1, upper=10000, step_increment=1)
+        spin_h = Gtk.SpinButton(adjustment=adj_h, climb_rate=1, digits=0)
+        spin_h.connect("value-changed", lambda s: setattr(node, "source_height", int(s.get_value())))
+        spin_h.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_h)
+        self._make_control_row("Height", "source_height", spin_h)
+        entry = Gtk.Entry(text=node.color)
+        entry.connect("changed", lambda e: setattr(node, "color", e.get_text()))
+        entry.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(entry)
+        self._make_control_row("Color", "color", entry)
+
+    def _build_gradient_params(self):
+        node: GradientNode = self._node
+        adj_w = Gtk.Adjustment(value=node.source_width, lower=1, upper=10000, step_increment=1)
+        spin_w = Gtk.SpinButton(adjustment=adj_w, climb_rate=1, digits=0)
+        spin_w.connect("value-changed", lambda s: setattr(node, "source_width", int(s.get_value())))
+        spin_w.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_w)
+        self._make_control_row("Width", "source_width", spin_w)
+        adj_h = Gtk.Adjustment(value=node.source_height, lower=1, upper=10000, step_increment=1)
+        spin_h = Gtk.SpinButton(adjustment=adj_h, climb_rate=1, digits=0)
+        spin_h.connect("value-changed", lambda s: setattr(node, "source_height", int(s.get_value())))
+        spin_h.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_h)
+        self._make_control_row("Height", "source_height", spin_h)
+        dd = Gtk.DropDown()
+        dd.set_model(Gtk.StringList.new(["Linear", "Radial"]))
+        idx = 0 if node.gradient_type == "linear" else 1
+        dd.set_selected(idx)
+        dd.set_valign(Gtk.Align.CENTER)
+        dd.connect("notify::selected", lambda d, ps: setattr(node, "gradient_type",
+                    "linear" if d.get_selected() == 0 else "radial"))
+        dd.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(dd)
+        self._make_control_row("Type", "gradient_type", dd)
+        for label, attr in [("Start Color", "start_color"), ("End Color", "end_color")]:
+            entry = Gtk.Entry(text=getattr(node, attr))
+            entry.connect("changed", lambda e, a=attr: setattr(node, a, e.get_text()))
+            entry.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(entry)
+            self._make_control_row(label, attr, entry)
+        adj_a = Gtk.Adjustment(value=node.angle, lower=0.0, upper=360.0, step_increment=1)
+        spin_a = Gtk.SpinButton(adjustment=adj_a, climb_rate=1, digits=1)
+        spin_a.connect("value-changed", lambda s: setattr(node, "angle", s.get_value()))
+        spin_a.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_a)
+        self._port_spin_buttons["angle"] = spin_a
+        self._make_control_row("Angle", "angle", spin_a)
+
+    def _build_noise_params(self):
+        node: NoiseNode = self._node
+        adj_w = Gtk.Adjustment(value=node.source_width, lower=1, upper=10000, step_increment=1)
+        spin_w = Gtk.SpinButton(adjustment=adj_w, climb_rate=1, digits=0)
+        spin_w.connect("value-changed", lambda s: setattr(node, "source_width", int(s.get_value())))
+        spin_w.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_w)
+        self._make_control_row("Width", "source_width", spin_w)
+        adj_h = Gtk.Adjustment(value=node.source_height, lower=1, upper=10000, step_increment=1)
+        spin_h = Gtk.SpinButton(adjustment=adj_h, climb_rate=1, digits=0)
+        spin_h.connect("value-changed", lambda s: setattr(node, "source_height", int(s.get_value())))
+        spin_h.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_h)
+        self._make_control_row("Height", "source_height", spin_h)
+        dd = Gtk.DropDown()
+        dd.set_model(Gtk.StringList.new(["Gaussian", "Uniform"]))
+        idx = 0 if node.noise_type == "gaussian" else 1
+        dd.set_selected(idx)
+        dd.set_valign(Gtk.Align.CENTER)
+        dd.connect("notify::selected", lambda d, ps: setattr(node, "noise_type",
+                    "gaussian" if d.get_selected() == 0 else "uniform"))
+        dd.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(dd)
+        self._make_control_row("Type", "noise_type", dd)
+        adj_s = Gtk.Adjustment(value=node.scale, lower=0.0, upper=255.0, step_increment=1)
+        spin_s = Gtk.SpinButton(adjustment=adj_s, climb_rate=1, digits=1)
+        spin_s.connect("value-changed", lambda s: setattr(node, "scale", s.get_value()))
+        spin_s.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_s)
+        self._make_control_row("Scale", "scale", spin_s)
+        adj_seed = Gtk.Adjustment(value=node.seed, lower=-1, upper=999999, step_increment=1)
+        spin_seed = Gtk.SpinButton(adjustment=adj_seed, climb_rate=1, digits=0)
+        spin_seed.connect("value-changed", lambda s: setattr(node, "seed", int(s.get_value())))
+        spin_seed.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_seed)
+        self._make_control_row("Seed", "seed", spin_seed)
+
+    def _build_color_balance_params(self):
+        node: ColorBalanceNode = self._node
+        for label, attr, lo, hi in [
+            ("Cyan/Red", "cyan_red", -100.0, 100.0),
+            ("Magenta/Green", "magenta_green", -100.0, 100.0),
+            ("Yellow/Blue", "yellow_blue", -100.0, 100.0),
+        ]:
+            adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
+            spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
+            spin.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[attr] = spin
+            self._make_control_row(label, attr, spin)
+
+    def _build_exposure_gamma_params(self):
+        node: ExposureGammaNode = self._node
+        adj_e = Gtk.Adjustment(value=node.exposure, lower=-5.0, upper=5.0, step_increment=0.1)
+        spin_e = Gtk.SpinButton(adjustment=adj_e, climb_rate=0.1, digits=2)
+        spin_e.connect("value-changed", lambda s: setattr(node, "exposure", s.get_value()))
+        spin_e.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_e)
+        self._port_spin_buttons["exposure"] = spin_e
+        self._make_control_row("Exposure", "exposure", spin_e)
+        adj_g = Gtk.Adjustment(value=node.gamma, lower=0.01, upper=10.0, step_increment=0.1)
+        spin_g = Gtk.SpinButton(adjustment=adj_g, climb_rate=0.1, digits=2)
+        spin_g.connect("value-changed", lambda s: setattr(node, "gamma", s.get_value()))
+        spin_g.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_g)
+        self._port_spin_buttons["gamma"] = spin_g
+        self._make_control_row("Gamma", "gamma", spin_g)
+
+    def _build_curves_params(self):
+        node: CurvesNode = self._node
+        for label, attr, lo, hi in [
+            ("Shadows", "shadows", 0.0, 255.0),
+            ("Dark Midtones", "dark_midtones", 0.0, 255.0),
+            ("Midtones", "midtones", 0.0, 255.0),
+            ("Light Midtones", "light_midtones", 0.0, 255.0),
+            ("Highlights", "highlights", 0.0, 255.0),
+        ]:
+            adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
+            spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
+            spin.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[attr] = spin
+            self._make_control_row(label, attr, spin)
+
+    def _build_crop_params(self):
+        node: CropNode = self._node
+        for label, attr, lo, hi in [
+            ("X", "crop_x", 0.0, 10000.0),
+            ("Y", "crop_y", 0.0, 10000.0),
+            ("Width", "crop_width", 1.0, 10000.0),
+            ("Height", "crop_height", 1.0, 10000.0),
+        ]:
+            adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
+            spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
+            spin.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[attr] = spin
+            self._make_control_row(label, attr, spin)
+
+    def _build_resize_params(self):
+        node: ResizeNode = self._node
+        adj_w = Gtk.Adjustment(value=node.resize_width, lower=1, upper=10000, step_increment=1)
+        spin_w = Gtk.SpinButton(adjustment=adj_w, climb_rate=1, digits=1)
+        spin_w.connect("value-changed", lambda s: setattr(node, "resize_width", s.get_value()))
+        spin_w.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_w)
+        self._port_spin_buttons["width"] = spin_w
+        self._make_control_row("Width", "resize_width", spin_w)
+        adj_h = Gtk.Adjustment(value=node.resize_height, lower=1, upper=10000, step_increment=1)
+        spin_h = Gtk.SpinButton(adjustment=adj_h, climb_rate=1, digits=1)
+        spin_h.connect("value-changed", lambda s: setattr(node, "resize_height", s.get_value()))
+        spin_h.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_h)
+        self._port_spin_buttons["height"] = spin_h
+        self._make_control_row("Height", "resize_height", spin_h)
+        dd = Gtk.DropDown()
+        dd.set_model(Gtk.StringList.new(["Stretch", "Fit", "Fill"]))
+        idx = {"stretch": 0, "fit": 1, "fill": 2}.get(node.resize_mode, 0)
+        dd.set_selected(idx)
+        dd.set_valign(Gtk.Align.CENTER)
+        dd.connect("notify::selected", lambda d, ps: setattr(node, "resize_mode",
+                    ["stretch", "fit", "fill"][d.get_selected()]))
+        dd.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(dd)
+        self._make_control_row("Mode", "resize_mode", dd)
+
+    def _build_rotate_params(self):
+        node: RotateNode = self._node
+        adj = Gtk.Adjustment(value=node.angle, lower=-360.0, upper=360.0, step_increment=1)
+        spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
+        spin.connect("value-changed", lambda s: setattr(node, "angle", s.get_value()))
+        spin.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin)
+        self._port_spin_buttons["angle"] = spin
+        self._make_control_row("Angle", "angle", spin)
+
+    def _build_flip_params(self):
+        node: FlipNode = self._node
+        dd = Gtk.DropDown()
+        dd.set_model(Gtk.StringList.new(["Horizontal", "Vertical"]))
+        idx = 0 if node.direction == "horizontal" else 1
+        dd.set_selected(idx)
+        dd.set_valign(Gtk.Align.CENTER)
+        dd.connect("notify::selected", lambda d, ps: setattr(node, "direction",
+                    "horizontal" if d.get_selected() == 0 else "vertical"))
+        dd.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(dd)
+        self._make_control_row("Direction", "direction", dd)
+
+    def _build_distort_params(self):
+        node: DistortNode = self._node
+        for label, attr, lo, hi in [
+            ("Top-Left X", "dist_x0", 0.0, 10000.0),
+            ("Top-Left Y", "dist_y0", 0.0, 10000.0),
+            ("Top-Right X", "dist_x1", 0.0, 10000.0),
+            ("Top-Right Y", "dist_y1", 0.0, 10000.0),
+            ("Bottom-Right X", "dist_x2", 0.0, 10000.0),
+            ("Bottom-Right Y", "dist_y2", 0.0, 10000.0),
+            ("Bottom-Left X", "dist_x3", 0.0, 10000.0),
+            ("Bottom-Left Y", "dist_y3", 0.0, 10000.0),
+        ]:
+            adj = Gtk.Adjustment(value=getattr(node, attr), lower=lo, upper=hi, step_increment=1)
+            spin = Gtk.SpinButton(adjustment=adj, climb_rate=1, digits=1)
+            spin.connect("value-changed", lambda s, a=attr: setattr(node, a, s.get_value()))
+            spin.set_css_classes(["node-param-control"])
+            self._ctrl_widgets.append(spin)
+            self._port_spin_buttons[attr] = spin
+            self._make_control_row(label, attr, spin)
+
+    def _build_blur_params(self):
+        node: BlurNode = self._node
+        adj = Gtk.Adjustment(value=node.radius, lower=0.0, upper=500.0, step_increment=0.5)
+        spin = Gtk.SpinButton(adjustment=adj, climb_rate=0.5, digits=1)
+        spin.connect("value-changed", lambda s: setattr(node, "radius", s.get_value()))
+        spin.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin)
+        self._port_spin_buttons["radius"] = spin
+        self._make_control_row("Radius", "radius", spin)
+
+    def _build_sharpen_params(self):
+        node: SharpenNode = self._node
+        adj_a = Gtk.Adjustment(value=node.amount, lower=0.0, upper=10.0, step_increment=0.1)
+        spin_a = Gtk.SpinButton(adjustment=adj_a, climb_rate=0.1, digits=2)
+        spin_a.connect("value-changed", lambda s: setattr(node, "amount", s.get_value()))
+        spin_a.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_a)
+        self._port_spin_buttons["amount"] = spin_a
+        self._make_control_row("Amount", "amount", spin_a)
+        adj_r = Gtk.Adjustment(value=node.radius, lower=0.0, upper=500.0, step_increment=0.5)
+        spin_r = Gtk.SpinButton(adjustment=adj_r, climb_rate=0.5, digits=1)
+        spin_r.connect("value-changed", lambda s: setattr(node, "radius", s.get_value()))
+        spin_r.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin_r)
+        self._port_spin_buttons["radius"] = spin_r
+        self._make_control_row("Radius", "radius", spin_r)
+
+    def _build_edge_detect_params(self):
+        node: EdgeDetectNode = self._node
+        adj = Gtk.Adjustment(value=node.threshold, lower=0.0, upper=1.0, step_increment=0.05)
+        spin = Gtk.SpinButton(adjustment=adj, climb_rate=0.05, digits=2)
+        spin.connect("value-changed", lambda s: setattr(node, "threshold", s.get_value()))
+        spin.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(spin)
+        self._port_spin_buttons["threshold"] = spin
+        self._make_control_row("Threshold", "threshold", spin)
 
     def _build_mask_params(self):
         node: MaskNode = self._node
@@ -1259,6 +1573,20 @@ class Minimap(Gtk.Widget):
         "levels": Gdk.RGBA(0.30, 0.50, 0.60, 1.0),
         "hsl": Gdk.RGBA(0.20, 0.55, 0.55, 1.0),
         "opacity": Gdk.RGBA(0.35, 0.23, 0.48, 1.0),
+        "color_source": Gdk.RGBA(0.40, 0.25, 0.60, 1.0),
+        "gradient": Gdk.RGBA(0.45, 0.30, 0.65, 1.0),
+        "noise": Gdk.RGBA(0.50, 0.35, 0.70, 1.0),
+        "color_balance": Gdk.RGBA(0.22, 0.55, 0.50, 1.0),
+        "exposure_gamma": Gdk.RGBA(0.55, 0.40, 0.20, 1.0),
+        "curves": Gdk.RGBA(0.60, 0.30, 0.30, 1.0),
+        "crop": Gdk.RGBA(0.25, 0.60, 0.40, 1.0),
+        "resize": Gdk.RGBA(0.30, 0.50, 0.70, 1.0),
+        "rotate": Gdk.RGBA(0.50, 0.50, 0.30, 1.0),
+        "flip": Gdk.RGBA(0.40, 0.60, 0.35, 1.0),
+        "distort": Gdk.RGBA(0.65, 0.35, 0.15, 1.0),
+        "blur": Gdk.RGBA(0.20, 0.45, 0.65, 1.0),
+        "sharpen": Gdk.RGBA(0.55, 0.25, 0.55, 1.0),
+        "edge_detect": Gdk.RGBA(0.70, 0.30, 0.40, 1.0),
         "constant": Gdk.RGBA(0.70, 0.50, 0.15, 1.0),
         "add": Gdk.RGBA(0.30, 0.60, 0.20, 1.0),
         "subtract": Gdk.RGBA(0.60, 0.20, 0.35, 1.0),
@@ -1867,7 +2195,7 @@ class NodeCanvas(Gtk.Overlay):
 
     # ─── Wire-insert helpers ───────────────────────────────────────────────────
 
-    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:"})
+    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:", "color_source:", "gradient:", "noise:", "color_balance:", "exposure_gamma:", "curves:", "crop:", "resize:", "rotate:", "flip:", "distort:", "blur:", "sharpen:", "edge_detect:"})
 
     def _is_insertable_node(self, text: str) -> bool:
         return any(text.startswith(p) for p in self._INSERTABLE_PREFIXES)
@@ -2218,6 +2546,157 @@ class NodeCanvas(Gtk.Overlay):
             if w:
                 self.select_node(w)
             return True
+        elif text and text.startswith("color_source:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "color_source_" + str(GLib.get_monotonic_time())
+            node = ColorSourceNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("gradient:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "gradient_" + str(GLib.get_monotonic_time())
+            node = GradientNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("noise:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "noise_" + str(GLib.get_monotonic_time())
+            node = NoiseNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("color_balance:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "color_balance_" + str(GLib.get_monotonic_time())
+            node = ColorBalanceNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("exposure_gamma:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "exposure_gamma_" + str(GLib.get_monotonic_time())
+            node = ExposureGammaNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("curves:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "curves_" + str(GLib.get_monotonic_time())
+            node = CurvesNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("crop:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "crop_" + str(GLib.get_monotonic_time())
+            node = CropNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("resize:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "resize_" + str(GLib.get_monotonic_time())
+            node = ResizeNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("rotate:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "rotate_" + str(GLib.get_monotonic_time())
+            node = RotateNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("flip:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "flip_" + str(GLib.get_monotonic_time())
+            node = FlipNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("distort:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "distort_" + str(GLib.get_monotonic_time())
+            node = DistortNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("blur:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "blur_" + str(GLib.get_monotonic_time())
+            node = BlurNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("sharpen:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "sharpen_" + str(GLib.get_monotonic_time())
+            node = SharpenNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
+        elif text and text.startswith("edge_detect:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "edge_detect_" + str(GLib.get_monotonic_time())
+            node = EdgeDetectNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            self._try_insert_at(x, y, nid)
+            return True
         return False
 
     # ─── Port click (connection creation) ─────────────────────────────────────
@@ -2508,6 +2987,10 @@ class NodeCanvas(Gtk.Overlay):
             from nodes.node_types import (
                 InputNode, FilterNode, BlendNode, OpacityNode, MaskNode,
                 BrightnessContrastNode, LevelsNode, HSLNode,
+                ColorSourceNode, GradientNode, NoiseNode,
+                ColorBalanceNode, ExposureGammaNode, CurvesNode,
+                CropNode, ResizeNode, RotateNode, FlipNode, DistortNode,
+                BlurNode, SharpenNode, EdgeDetectNode,
                 ConstantNode, LabelNode, CommentNode,
             )
             if isinstance(n, InputNode):
@@ -2529,6 +3012,59 @@ class NodeCanvas(Gtk.Overlay):
                 nd["params"]["hue"] = n.hue
                 nd["params"]["saturation"] = n.saturation
                 nd["params"]["lightness"] = n.lightness
+            elif isinstance(n, ColorSourceNode):
+                nd["params"]["color"] = n.color
+                nd["params"]["source_width"] = n.source_width
+                nd["params"]["source_height"] = n.source_height
+            elif isinstance(n, GradientNode):
+                nd["params"]["gradient_type"] = n.gradient_type
+                nd["params"]["start_color"] = n.start_color
+                nd["params"]["end_color"] = n.end_color
+                nd["params"]["angle"] = n.angle
+                nd["params"]["source_width"] = n.source_width
+                nd["params"]["source_height"] = n.source_height
+            elif isinstance(n, NoiseNode):
+                nd["params"]["noise_type"] = n.noise_type
+                nd["params"]["scale"] = n.scale
+                nd["params"]["seed"] = n.seed
+                nd["params"]["source_width"] = n.source_width
+                nd["params"]["source_height"] = n.source_height
+            elif isinstance(n, ColorBalanceNode):
+                nd["params"]["cyan_red"] = n.cyan_red
+                nd["params"]["magenta_green"] = n.magenta_green
+                nd["params"]["yellow_blue"] = n.yellow_blue
+            elif isinstance(n, ExposureGammaNode):
+                nd["params"]["exposure"] = n.exposure
+                nd["params"]["gamma"] = n.gamma
+            elif isinstance(n, CurvesNode):
+                nd["params"]["shadows"] = n.shadows
+                nd["params"]["dark_midtones"] = n.dark_midtones
+                nd["params"]["midtones"] = n.midtones
+                nd["params"]["light_midtones"] = n.light_midtones
+                nd["params"]["highlights"] = n.highlights
+            elif isinstance(n, CropNode):
+                nd["params"]["crop_x"] = n.crop_x
+                nd["params"]["crop_y"] = n.crop_y
+                nd["params"]["crop_width"] = n.crop_width
+                nd["params"]["crop_height"] = n.crop_height
+            elif isinstance(n, ResizeNode):
+                nd["params"]["resize_width"] = n.resize_width
+                nd["params"]["resize_height"] = n.resize_height
+                nd["params"]["resize_mode"] = n.resize_mode
+            elif isinstance(n, RotateNode):
+                nd["params"]["angle"] = n.angle
+            elif isinstance(n, FlipNode):
+                nd["params"]["direction"] = n.direction
+            elif isinstance(n, DistortNode):
+                for a in ("dist_x0","dist_y0","dist_x1","dist_y1","dist_x2","dist_y2","dist_x3","dist_y3"):
+                    nd["params"][a] = getattr(n, a)
+            elif isinstance(n, BlurNode):
+                nd["params"]["radius"] = n.radius
+            elif isinstance(n, SharpenNode):
+                nd["params"]["amount"] = n.amount
+                nd["params"]["radius"] = n.radius
+            elif isinstance(n, EdgeDetectNode):
+                nd["params"]["threshold"] = n.threshold
             elif isinstance(n, OpacityNode):
                 nd["params"]["opacity"] = n.opacity
             elif isinstance(n, MaskNode):
@@ -2560,6 +3096,10 @@ class NodeCanvas(Gtk.Overlay):
             InputNode, OutputNode, FilterNode, BlendNode,
             OpacityNode, MaskNode,
             BrightnessContrastNode, LevelsNode, HSLNode,
+            ColorSourceNode, GradientNode, NoiseNode,
+            ColorBalanceNode, ExposureGammaNode, CurvesNode,
+            CropNode, ResizeNode, RotateNode, FlipNode, DistortNode,
+            BlurNode, SharpenNode, EdgeDetectNode,
             ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
             CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
             LabelNode, CommentNode,
@@ -2634,6 +3174,73 @@ class NodeCanvas(Gtk.Overlay):
                 node.hue = params.get("hue", 0.0)
                 node.saturation = params.get("saturation", 0.0)
                 node.lightness = params.get("lightness", 0.0)
+            elif typ == "color_source":
+                node = ColorSourceNode(nid, x, y)
+                node.color = params.get("color", "#808080")
+                node.source_width = params.get("source_width", 512)
+                node.source_height = params.get("source_height", 512)
+            elif typ == "gradient":
+                node = GradientNode(nid, x, y)
+                node.gradient_type = params.get("gradient_type", "linear")
+                node.start_color = params.get("start_color", "#ffffff")
+                node.end_color = params.get("end_color", "#000000")
+                node.angle = params.get("angle", 0.0)
+                node.source_width = params.get("source_width", 512)
+                node.source_height = params.get("source_height", 512)
+            elif typ == "noise":
+                node = NoiseNode(nid, x, y)
+                node.noise_type = params.get("noise_type", "gaussian")
+                node.scale = params.get("scale", 64.0)
+                node.seed = params.get("seed", 0)
+                node.source_width = params.get("source_width", 512)
+                node.source_height = params.get("source_height", 512)
+            elif typ == "color_balance":
+                node = ColorBalanceNode(nid, x, y)
+                node.cyan_red = params.get("cyan_red", 0.0)
+                node.magenta_green = params.get("magenta_green", 0.0)
+                node.yellow_blue = params.get("yellow_blue", 0.0)
+            elif typ == "exposure_gamma":
+                node = ExposureGammaNode(nid, x, y)
+                node.exposure = params.get("exposure", 0.0)
+                node.gamma = params.get("gamma", 1.0)
+            elif typ == "curves":
+                node = CurvesNode(nid, x, y)
+                node.shadows = params.get("shadows", 0.0)
+                node.dark_midtones = params.get("dark_midtones", 64.0)
+                node.midtones = params.get("midtones", 128.0)
+                node.light_midtones = params.get("light_midtones", 192.0)
+                node.highlights = params.get("highlights", 255.0)
+            elif typ == "crop":
+                node = CropNode(nid, x, y)
+                node.crop_x = params.get("crop_x", 0.0)
+                node.crop_y = params.get("crop_y", 0.0)
+                node.crop_width = params.get("crop_width", 256.0)
+                node.crop_height = params.get("crop_height", 256.0)
+            elif typ == "resize":
+                node = ResizeNode(nid, x, y)
+                node.resize_width = params.get("resize_width", 512.0)
+                node.resize_height = params.get("resize_height", 512.0)
+                node.resize_mode = params.get("resize_mode", "stretch")
+            elif typ == "rotate":
+                node = RotateNode(nid, x, y)
+                node.angle = params.get("angle", 0.0)
+            elif typ == "flip":
+                node = FlipNode(nid, x, y)
+                node.direction = params.get("direction", "horizontal")
+            elif typ == "distort":
+                node = DistortNode(nid, x, y)
+                for a in ("dist_x0","dist_y0","dist_x1","dist_y1","dist_x2","dist_y2","dist_x3","dist_y3"):
+                    setattr(node, a, params.get(a, 0.0))
+            elif typ == "blur":
+                node = BlurNode(nid, x, y)
+                node.radius = params.get("radius", 5.0)
+            elif typ == "sharpen":
+                node = SharpenNode(nid, x, y)
+                node.amount = params.get("amount", 1.0)
+                node.radius = params.get("radius", 2.0)
+            elif typ == "edge_detect":
+                node = EdgeDetectNode(nid, x, y)
+                node.threshold = params.get("threshold", 0.5)
             elif typ == "opacity":
                 node = OpacityNode(nid, x, y)
                 node.opacity = params.get("opacity", 1.0)

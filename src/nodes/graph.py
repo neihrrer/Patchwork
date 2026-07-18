@@ -247,6 +247,10 @@ class NodeGraph:
                 InputNode, FilterNode, BlendNode,
                 OpacityNode, MaskNode,
                 BrightnessContrastNode, LevelsNode, HSLNode,
+                ColorSourceNode, GradientNode, NoiseNode,
+                ColorBalanceNode, ExposureGammaNode, CurvesNode,
+                CropNode, ResizeNode, RotateNode, FlipNode, DistortNode,
+                BlurNode, SharpenNode, EdgeDetectNode,
                 ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
                 CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
                 LabelNode, CommentNode,
@@ -270,6 +274,65 @@ class NodeGraph:
                 nd["params"]["hue"] = n.hue
                 nd["params"]["saturation"] = n.saturation
                 nd["params"]["lightness"] = n.lightness
+            elif isinstance(n, ColorSourceNode):
+                nd["params"]["source_width"] = n.source_width
+                nd["params"]["source_height"] = n.source_height
+                nd["params"]["color"] = n.color
+            elif isinstance(n, GradientNode):
+                nd["params"]["source_width"] = n.source_width
+                nd["params"]["source_height"] = n.source_height
+                nd["params"]["gradient_type"] = n.gradient_type
+                nd["params"]["start_color"] = n.start_color
+                nd["params"]["end_color"] = n.end_color
+                nd["params"]["angle"] = n.angle
+            elif isinstance(n, NoiseNode):
+                nd["params"]["source_width"] = n.source_width
+                nd["params"]["source_height"] = n.source_height
+                nd["params"]["noise_type"] = n.noise_type
+                nd["params"]["scale"] = n.scale
+                nd["params"]["seed"] = n.seed
+            elif isinstance(n, ColorBalanceNode):
+                nd["params"]["cyan_red"] = n.cyan_red
+                nd["params"]["magenta_green"] = n.magenta_green
+                nd["params"]["yellow_blue"] = n.yellow_blue
+            elif isinstance(n, ExposureGammaNode):
+                nd["params"]["exposure"] = n.exposure
+                nd["params"]["gamma"] = n.gamma
+            elif isinstance(n, CurvesNode):
+                nd["params"]["shadows"] = n.shadows
+                nd["params"]["dark_midtones"] = n.dark_midtones
+                nd["params"]["midtones"] = n.midtones
+                nd["params"]["light_midtones"] = n.light_midtones
+                nd["params"]["highlights"] = n.highlights
+            elif isinstance(n, CropNode):
+                nd["params"]["crop_x"] = n.crop_x
+                nd["params"]["crop_y"] = n.crop_y
+                nd["params"]["crop_width"] = n.crop_width
+                nd["params"]["crop_height"] = n.crop_height
+            elif isinstance(n, ResizeNode):
+                nd["params"]["resize_width"] = n.resize_width
+                nd["params"]["resize_height"] = n.resize_height
+                nd["params"]["resize_mode"] = n.resize_mode
+            elif isinstance(n, RotateNode):
+                nd["params"]["angle"] = n.angle
+            elif isinstance(n, FlipNode):
+                nd["params"]["direction"] = n.direction
+            elif isinstance(n, DistortNode):
+                nd["params"]["dist_x0"] = n.dist_x0
+                nd["params"]["dist_y0"] = n.dist_y0
+                nd["params"]["dist_x1"] = n.dist_x1
+                nd["params"]["dist_y1"] = n.dist_y1
+                nd["params"]["dist_x2"] = n.dist_x2
+                nd["params"]["dist_y2"] = n.dist_y2
+                nd["params"]["dist_x3"] = n.dist_x3
+                nd["params"]["dist_y3"] = n.dist_y3
+            elif isinstance(n, BlurNode):
+                nd["params"]["radius"] = n.radius
+            elif isinstance(n, SharpenNode):
+                nd["params"]["amount"] = n.amount
+                nd["params"]["radius"] = n.radius
+            elif isinstance(n, EdgeDetectNode):
+                nd["params"]["threshold"] = n.threshold
             elif isinstance(n, OpacityNode):
                 nd["params"]["opacity"] = n.opacity
             elif isinstance(n, MaskNode):
@@ -304,6 +367,10 @@ class NodeGraph:
             InputNode, OutputNode, FilterNode, BlendNode,
             OpacityNode, MaskNode,
             BrightnessContrastNode, LevelsNode, HSLNode,
+            ColorSourceNode, GradientNode, NoiseNode,
+            ColorBalanceNode, ExposureGammaNode, CurvesNode,
+            CropNode, ResizeNode, RotateNode, FlipNode, DistortNode,
+            BlurNode, SharpenNode, EdgeDetectNode,
             ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
             CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
             LabelNode, CommentNode,
@@ -351,6 +418,79 @@ class NodeGraph:
                 node.hue = params.get("hue", 0.0)
                 node.saturation = params.get("saturation", 0.0)
                 node.lightness = params.get("lightness", 0.0)
+            elif typ == "color_source":
+                node = ColorSourceNode(nid, x, y)
+                node.source_width = params.get("source_width", 512)
+                node.source_height = params.get("source_height", 512)
+                node.color = params.get("color", "#FFFFFFFF")
+            elif typ == "gradient":
+                node = GradientNode(nid, x, y)
+                node.source_width = params.get("source_width", 512)
+                node.source_height = params.get("source_height", 512)
+                node.gradient_type = params.get("gradient_type", "linear")
+                node.start_color = params.get("start_color", "#000000FF")
+                node.end_color = params.get("end_color", "#FFFFFFFF")
+                node.angle = params.get("angle", 0.0)
+            elif typ == "noise":
+                node = NoiseNode(nid, x, y)
+                node.source_width = params.get("source_width", 512)
+                node.source_height = params.get("source_height", 512)
+                node.noise_type = params.get("noise_type", "gaussian")
+                node.scale = params.get("scale", 64.0)
+                node.seed = params.get("seed", -1)
+            elif typ == "color_balance":
+                node = ColorBalanceNode(nid, x, y)
+                node.cyan_red = params.get("cyan_red", 0.0)
+                node.magenta_green = params.get("magenta_green", 0.0)
+                node.yellow_blue = params.get("yellow_blue", 0.0)
+            elif typ == "exposure_gamma":
+                node = ExposureGammaNode(nid, x, y)
+                node.exposure = params.get("exposure", 0.0)
+                node.gamma = params.get("gamma", 1.0)
+            elif typ == "curves":
+                node = CurvesNode(nid, x, y)
+                node.shadows = params.get("shadows", 0.0)
+                node.dark_midtones = params.get("dark_midtones", 64.0)
+                node.midtones = params.get("midtones", 128.0)
+                node.light_midtones = params.get("light_midtones", 192.0)
+                node.highlights = params.get("highlights", 255.0)
+            elif typ == "crop":
+                node = CropNode(nid, x, y)
+                node.crop_x = params.get("crop_x", 0.0)
+                node.crop_y = params.get("crop_y", 0.0)
+                node.crop_width = params.get("crop_width", 256.0)
+                node.crop_height = params.get("crop_height", 256.0)
+            elif typ == "resize":
+                node = ResizeNode(nid, x, y)
+                node.resize_width = params.get("resize_width", 512.0)
+                node.resize_height = params.get("resize_height", 512.0)
+                node.resize_mode = params.get("resize_mode", "stretch")
+            elif typ == "rotate":
+                node = RotateNode(nid, x, y)
+                node.angle = params.get("angle", 0.0)
+            elif typ == "flip":
+                node = FlipNode(nid, x, y)
+                node.direction = params.get("direction", "horizontal")
+            elif typ == "distort":
+                node = DistortNode(nid, x, y)
+                node.dist_x0 = params.get("dist_x0", 0.0)
+                node.dist_y0 = params.get("dist_y0", 0.0)
+                node.dist_x1 = params.get("dist_x1", 512.0)
+                node.dist_y1 = params.get("dist_y1", 0.0)
+                node.dist_x2 = params.get("dist_x2", 512.0)
+                node.dist_y2 = params.get("dist_y2", 512.0)
+                node.dist_x3 = params.get("dist_x3", 0.0)
+                node.dist_y3 = params.get("dist_y3", 512.0)
+            elif typ == "blur":
+                node = BlurNode(nid, x, y)
+                node.radius = params.get("radius", 5.0)
+            elif typ == "sharpen":
+                node = SharpenNode(nid, x, y)
+                node.amount = params.get("amount", 1.0)
+                node.radius = params.get("radius", 2.0)
+            elif typ == "edge_detect":
+                node = EdgeDetectNode(nid, x, y)
+                node.threshold = params.get("threshold", 0.0)
             elif typ == "opacity":
                 node = OpacityNode(nid, x, y)
                 node.opacity = params.get("opacity", 1.0)

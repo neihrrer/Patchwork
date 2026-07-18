@@ -1,8 +1,10 @@
+import math
 import os
+import random
 import tempfile
 from typing import Optional
 
-from PIL import Image, ImageChops, ImageOps, ImageMath
+from PIL import Image, ImageChops, ImageOps, ImageMath, ImageFilter
 
 from processing.runner import ProcessResult
 
@@ -292,6 +294,293 @@ def apply_mask(base_path: str, mask_path: str, invert: bool, threshold: float, f
 
         out = Image.composite(base, Image.new("RGBA", base.size, (0, 0, 0, 0)), mask.convert("L"))
         out_path = _save(out, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def _parse_color(hex_color: str):
+    if hex_color.startswith("#"):
+        hex_color = hex_color[1:]
+    if len(hex_color) == 6:
+        hex_color += "FF"
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4, 6))
+
+
+def generate_color_source(width: int, height: int, color: str, fmt: str) -> ProcessResult:
+    try:
+        rgba = _parse_color(color)
+        img = Image.new("RGBA", (width, height), rgba)
+        out_path = _save(img, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def generate_gradient(width: int, height: int, gradient_type: str,
+                      start_color: str, end_color: str, angle: float, fmt: str) -> ProcessResult:
+    try:
+        img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        sc = _parse_color(start_color)
+        ec = _parse_color(end_color)
+        pixels = img.load()
+        if gradient_type == "linear":
+            rad = math.radians(angle)
+            gx = math.cos(rad)
+            gy = math.sin(rad)
+            cx, cy = width / 2.0, height / 2.0
+            corners = [(0, 0), (width, 0), (0, height), (width, height)]
+            projs = [(x - cx) * gx + (y - cy) * gy for x, y in corners]
+            min_p, max_p = min(projs), max(projs)
+            span = max_p - min_p
+            if span < 1:
+                span = 1
+            for y in range(height):
+                for x in range(width):
+                    t = ((x - cx) * gx + (y - cy) * gy - min_p) / span
+                    t = max(0.0, min(1.0, t))
+                    pixels[x, y] = (
+                        int(sc[0] + (ec[0] - sc[0]) * t),
+                        int(sc[1] + (ec[1] - sc[1]) * t),
+                        int(sc[2] + (ec[2] - sc[2]) * t),
+                        int(sc[3] + (ec[3] - sc[3]) * t),
+                    )
+        else:
+            cx, cy = width / 2.0, height / 2.0
+            max_r = math.sqrt(cx * cx + cy * cy)
+            if max_r < 1:
+                max_r = 1
+            for y in range(height):
+                for x in range(width):
+                    dist = math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / max_r
+                    t = max(0.0, min(1.0, dist))
+                    pixels[x, y] = (
+                        int(sc[0] + (ec[0] - sc[0]) * t),
+                        int(sc[1] + (ec[1] - sc[1]) * t),
+                        int(sc[2] + (ec[2] - sc[2]) * t),
+                        int(sc[3] + (ec[3] - sc[3]) * t),
+                    )
+        out_path = _save(img, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def generate_noise(width: int, height: int, noise_type: str, scale: float, seed: Optional[int], fmt: str) -> ProcessResult:
+    try:
+        if seed is not None and seed >= 0:
+            random.seed(seed)
+        if noise_type == "gaussian":
+            img = Image.effect_noise((width, height), scale)
+            img = img.convert("RGBA")
+        else:
+            base = Image.new("L", (width, height), 128)
+            img = Image.effect_noise((width, height), scale)
+            img = ImageChops.add(base, img, scale=1.0, offset=-128)
+            img = img.convert("RGBA")
+        out_path = _save(img, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def adjust_color_balance(image_path: str, cyan_red: float, magenta_green: float,
+                         yellow_blue: float, fmt: str) -> ProcessResult:
+    try:
+        img = _load(image_path)
+        r, g, b, a = img.split()
+        rf = 1.0 + cyan_red / 100.0
+        gf = 1.0 + magenta_green / 100.0
+        bf = 1.0 + yellow_blue / 100.0
+        r = r.point(lambda x: max(0, min(255, int(x * rf))))
+        g = g.point(lambda x: max(0, min(255, int(x * gf))))
+        b = b.point(lambda x: max(0, min(255, int(x * bf))))
+        img = Image.merge("RGBA", (r, g, b, a))
+        out_path = _save(img, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def adjust_exposure_gamma(image_path: str, exposure: float, gamma: float, fmt: str) -> ProcessResult:
+    try:
+        img = _load(image_path)
+        r, g, b, a = img.split()
+        exp_factor = pow(2.0, exposure)
+        inv_gamma = 1.0 / max(gamma, 0.01)
+        def apply(x):
+            val = (x / 255.0) * exp_factor
+            val = pow(max(val, 0.0), inv_gamma)
+            return max(0, min(255, int(val * 255.0)))
+        r = r.point(apply)
+        g = g.point(apply)
+        b = b.point(apply)
+        img = Image.merge("RGBA", (r, g, b, a))
+        out_path = _save(img, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def adjust_curves(image_path: str, p0: float, p1: float, p2: float,
+                  p3: float, p4: float, fmt: str) -> ProcessResult:
+    try:
+        img = _load(image_path)
+        r, g, b, a = img.split()
+        anchors = [(0, max(0, min(255, int(p0)))),
+                    (64, max(0, min(255, int(p1)))),
+                    (128, max(0, min(255, int(p2)))),
+                    (192, max(0, min(255, int(p3)))),
+                    (255, max(0, min(255, int(p4))))]
+        lut = []
+        for x in range(256):
+            for i in range(len(anchors) - 1):
+                if anchors[i][0] <= x <= anchors[i + 1][0]:
+                    x1, y1 = anchors[i]
+                    x2, y2 = anchors[i + 1]
+                    t = (x - x1) / max(x2 - x1, 1)
+                    y = y1 + (y2 - y1) * t
+                    lut.append(max(0, min(255, int(y))))
+                    break
+            else:
+                lut.append(x)
+        r = r.point(lut)
+        g = g.point(lut)
+        b = b.point(lut)
+        img = Image.merge("RGBA", (r, g, b, a))
+        out_path = _save(img, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def crop_image(image_path: str, x: float, y: float, w: float, h: float, fmt: str) -> ProcessResult:
+    try:
+        img = Image.open(image_path)
+        xi, yi, wi, hi = int(x), int(y), int(w), int(h)
+        cropped = img.crop((xi, yi, xi + wi, yi + hi))
+        out_path = _save(cropped, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def resize_image(image_path: str, width: float, height: float, mode: str, fmt: str) -> ProcessResult:
+    try:
+        img = Image.open(image_path)
+        wi, hi = int(width), int(height)
+        if mode == "stretch":
+            resized = img.resize((wi, hi), Image.LANCZOS)
+        elif mode == "fit":
+            img.thumbnail((wi, hi), Image.LANCZOS)
+            resized = Image.new(img.mode, (wi, hi), (0, 0, 0, 0))
+            ox = (wi - img.width) // 2
+            oy = (hi - img.height) // 2
+            resized.paste(img, (ox, oy))
+        else:
+            img.thumbnail((wi, hi), Image.LANCZOS)
+            resized = Image.new(img.mode, (wi, hi), (0, 0, 0, 0))
+            ox = max(0, (wi - img.width) // 2)
+            oy = max(0, (hi - img.height) // 2)
+            sx = max(0, (img.width - wi) // 2)
+            sy = max(0, (img.height - hi) // 2)
+            resized.paste(img.crop((sx, sy, sx + min(wi, img.width), sy + min(hi, img.height))), (ox, oy))
+        out_path = _save(resized, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def rotate_image(image_path: str, angle: float, fmt: str) -> ProcessResult:
+    try:
+        img = Image.open(image_path)
+        rotated = img.rotate(angle, expand=True, resample=Image.BICUBIC)
+        out_path = _save(rotated, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def flip_image(image_path: str, direction: str, fmt: str) -> ProcessResult:
+    try:
+        img = Image.open(image_path)
+        if direction == "horizontal":
+            flipped = ImageOps.mirror(img)
+        else:
+            flipped = ImageOps.flip(img)
+        out_path = _save(flipped, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def distort_image(image_path: str, x0: float, y0: float, x1: float, y1: float,
+                  x2: float, y2: float, x3: float, y3: float, fmt: str) -> ProcessResult:
+    try:
+        img = Image.open(image_path)
+        w, h = img.size
+        src = [(0, 0), (w, 0), (w, h), (0, h)]
+        dst = [(x0, y0), (x1, y1), (x2, y2), (x3, y3)]
+        matrix = []
+        for (x, y), (xp, yp) in zip(src, dst):
+            matrix.append([x, y, 1, 0, 0, 0, -x * xp, -y * xp, xp])
+            matrix.append([0, 0, 0, x, y, 1, -x * yp, -y * yp, yp])
+        flat = [item for row in matrix for item in row]
+        A = [flat[i * 9:(i + 1) * 9] for i in range(8)]
+        for col in range(8):
+            pivot = None
+            for row in range(col, 8):
+                if abs(A[row][col]) > 1e-12:
+                    pivot = row
+                    break
+            if pivot is None:
+                continue
+            A[col], A[pivot] = A[pivot], A[col]
+            piv_val = A[col][col]
+            for j in range(9):
+                A[col][j] /= piv_val
+            for row in range(8):
+                if row != col:
+                    factor = A[row][col]
+                    for j in range(9):
+                        A[row][j] -= factor * A[col][j]
+        coeffs = tuple(A[i][8] for i in range(8))
+        distorted = img.transform(img.size, Image.PERSPECTIVE, coeffs, Image.BICUBIC)
+        out_path = _save(distorted, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def blur_image(image_path: str, radius: float, fmt: str) -> ProcessResult:
+    try:
+        img = Image.open(image_path)
+        blurred = img.filter(ImageFilter.GaussianBlur(radius=radius))
+        out_path = _save(blurred, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def sharpen_image(image_path: str, amount: float, radius: float, fmt: str) -> ProcessResult:
+    try:
+        img = Image.open(image_path)
+        sharpened = img.filter(ImageFilter.UnsharpMask(radius=radius, percent=int(amount * 100), threshold=0))
+        out_path = _save(sharpened, fmt)
+        return ProcessResult(output_path=out_path)
+    except Exception as e:
+        return ProcessResult(error=str(e))
+
+
+def edge_detect(image_path: str, threshold: float, fmt: str) -> ProcessResult:
+    try:
+        img = Image.open(image_path).convert("L")
+        edges = img.filter(ImageFilter.FIND_EDGES)
+        if threshold > 0.0:
+            thresh_val = int(threshold * 255.0)
+            edges = edges.point(lambda x: 255 if x > thresh_val else 0)
+        edges = edges.convert("RGBA")
+        out_path = _save(edges, fmt)
         return ProcessResult(output_path=out_path)
     except Exception as e:
         return ProcessResult(error=str(e))
