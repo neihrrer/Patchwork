@@ -35,10 +35,6 @@ def _match_size(im1: Image.Image, im2: Image.Image) -> tuple[Image.Image, Image.
     return c1, c2
 
 
-def _blend_channel(base_ch, blend_ch, op):
-    return op(base_ch, blend_ch)
-
-
 def _blend_over(base: Image.Image, blend: Image.Image) -> Image.Image:
     return Image.alpha_composite(base, blend)
 

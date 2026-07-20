@@ -42,7 +42,6 @@ _GUTTER_INDENT = 22
 _ROOT_GMIC = "G'mic"
 _ROOT_IMAGEMAGICK = "ImageMagick"
 _ROOT_BASIC = "Basic"
-_ROOT_MATH = "Math"
 _ROOT_ADVANCED = "Advanced"
 
 _BASIC_ROOT_ITEMS = [

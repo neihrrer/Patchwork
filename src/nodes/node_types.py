@@ -1,6 +1,4 @@
-import math
 import os
-import re
 import gettext
 from typing import Optional
 
@@ -543,17 +541,6 @@ NODE_CATEGORY_MAP = {
     "compare": "math", "clamp": "math", "map_range": "math",
     "not": "logic", "and": "logic", "or": "logic",
     "nand": "logic", "nor": "logic", "xor": "logic", "xnor": "logic",
-}
-
-CATEGORY_COLORS = {
-    "source": "#26a269",
-    "output": "#a51d2d",
-    "raw_input": "#865e3c",
-    "effect": "#1a5fb4",
-    "composite": "#2190a4",
-    "analysis": "#77767b",
-    "math": "#c88800",
-    "logic": "#813d9c",
 }
 
 CATEGORY_GDK_RGBA = {

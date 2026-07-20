@@ -1,11 +1,8 @@
 from gmic.parser import (
     _strip_html, _strip_name, _find_matching_close, _split_args,
-    _parse_param_value, _parse_param_def, _parse_params,
+    _parse_param_value, _parse_param_def,
     _join_continuations, _munge_gui_command, GmicFilterParser,
 )
-from models.filter import ParamKind
-
-import pytest
 
 
 class TestStripHtml:

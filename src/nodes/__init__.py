@@ -13,5 +13,5 @@ from nodes.node_types import (
     HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
     NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
     CompareNode, ClampNode, MapRangeNode,
-    NODE_CATEGORY_MAP, CATEGORY_COLORS, CATEGORY_GDK_RGBA,
+    NODE_CATEGORY_MAP, CATEGORY_GDK_RGBA,
 )

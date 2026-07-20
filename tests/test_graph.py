@@ -4,9 +4,9 @@ from nodes import (
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
     LabelNode, CommentNode,
-    Edge, Port, PortDirection, PortType, Node,
+    Edge, Port, PortDirection, PortType,
 )
-from models.filter import FilterDef, ParamDef
+from models.filter import FilterDef
 
 
 class TestPort:

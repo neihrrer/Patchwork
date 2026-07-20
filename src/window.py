@@ -8,10 +8,9 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 
-from gi.repository import GLib, Gio, Gtk, Gdk, Adw, GdkPixbuf
+from gi.repository import GLib, Gio, Gtk, Adw, GdkPixbuf
 from threading import Thread
 
 from config import AppConfig
@@ -21,7 +20,7 @@ from gmic.cli import GmicCLI
 from imagemagick.cli import ImageMagickCLI
 from imagemagick.filters import get_builtin_filters as get_im_filters
 from nodes import (
-    NodeGraph, InputNode, RawInputNode, RawDecodeNode, OutputNode, Node,
+    NodeGraph, InputNode, RawInputNode, OutputNode, Node,
     HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
 )
 from widgets.node_editor import NodeCanvas

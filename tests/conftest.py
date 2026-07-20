@@ -1,7 +1,5 @@
-import os
 import sys
 from pathlib import Path
-from typing import Optional
 from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -10,10 +8,8 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gio", "2.0")
 
-from gi.repository import GObject
-
 from models.filter import FilterDef, ParamDef
-from nodes import NodeGraph, InputNode, OutputNode, FilterNode, Edge, Port, PortDirection, PortType
+from nodes import NodeGraph, InputNode, OutputNode, FilterNode
 
 import pytest
 from PIL import Image, ImageDraw
