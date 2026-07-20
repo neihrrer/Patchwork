@@ -509,15 +509,63 @@ class RandomNode(Node):
 
 LABEL_COLORS = [
     ("None", None),
-    ("Blue", "#62a0ea"),
-    ("Green", "#2ec27e"),
-    ("Yellow", "#f6d32d"),
-    ("Orange", "#ffa348"),
-    ("Red", "#c01c28"),
+    ("Blue",  "#3584e4"),
+    ("Green", "#3a944a"),
+    ("Yellow", "#c88800"),
+    ("Orange", "#ed5b00"),
+    ("Red",   "#e62d42"),
     ("Purple", "#9141ac"),
-    ("Brown", "#b5835a"),
-    ("Grey", "#5e5c64"),
+    ("Brown", "#986a44"),
+    ("Grey",  "#5e5c64"),
 ]
+
+NODE_CATEGORY_MAP = {
+    "input": "source", "color_source": "source",
+    "gradient": "source", "noise": "source",
+    "output": "output",
+    "raw_input": "raw_input", "raw_decode": "raw_input",
+    "filter": "effect",
+    "brightness_contrast": "effect", "levels": "effect", "hsl": "effect",
+    "color_balance": "effect", "exposure_gamma": "effect", "curves": "effect",
+    "crop": "effect", "resize": "effect", "rotate": "effect",
+    "flip": "effect", "distort": "effect",
+    "blur": "effect", "sharpen": "effect", "edge_detect": "effect",
+    "opacity": "composite", "blend": "composite", "mask": "composite",
+    "histogram": "analysis", "waveform_monitor": "analysis",
+    "vectorscope": "analysis", "frequency_domain": "analysis",
+    "constant": "math", "add": "math", "subtract": "math",
+    "multiply": "math", "divide": "math",
+    "ceil": "math", "floor": "math", "round": "math",
+    "sum": "math", "product": "math",
+    "modulo": "math", "power": "math",
+    "square_root": "math", "absolute": "math",
+    "log": "math", "exp": "math", "random": "math",
+    "compare": "math", "clamp": "math", "map_range": "math",
+    "not": "logic", "and": "logic", "or": "logic",
+    "nand": "logic", "nor": "logic", "xor": "logic", "xnor": "logic",
+}
+
+CATEGORY_COLORS = {
+    "source": "#26a269",
+    "output": "#a51d2d",
+    "raw_input": "#865e3c",
+    "effect": "#1a5fb4",
+    "composite": "#2190a4",
+    "analysis": "#77767b",
+    "math": "#c88800",
+    "logic": "#813d9c",
+}
+
+CATEGORY_GDK_RGBA = {
+    "source": (0.15, 0.64, 0.41, 1.0),
+    "output": (0.65, 0.11, 0.18, 1.0),
+    "raw_input": (0.53, 0.37, 0.24, 1.0),
+    "effect": (0.10, 0.37, 0.71, 1.0),
+    "composite": (0.13, 0.56, 0.64, 1.0),
+    "analysis": (0.47, 0.46, 0.48, 1.0),
+    "math": (0.78, 0.53, 0.00, 1.0),
+    "logic": (0.51, 0.24, 0.61, 1.0),
+}
 
 
 class LabelNode(Node):

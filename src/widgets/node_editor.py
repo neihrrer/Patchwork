@@ -32,7 +32,7 @@ from nodes import (
     NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
     CompareNode, ClampNode, MapRangeNode,
 )
-from nodes.node_types import LABEL_COLORS, HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode
+from nodes.node_types import LABEL_COLORS, NODE_CATEGORY_MAP, CATEGORY_GDK_RGBA, HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode
 from models.filter import FilterDef, ParamKind
 from .filter_browser import get_pending_drag_text, peek_pending_drag_text
 
@@ -543,6 +543,9 @@ class NodeWidget(Gtk.Box):
         header.set_hexpand(True)
         ctx = header.get_style_context()
         ctx.add_class(self._node.node_type)
+        category = NODE_CATEGORY_MAP.get(self._node.node_type)
+        if category:
+            ctx.add_class(f"category-{category}")
         self._header = header
 
         self._title = Gtk.Label(label=self._node.label, xalign=0, hexpand=True)
@@ -857,7 +860,7 @@ class NodeWidget(Gtk.Box):
                 f" #node-body-{bid} textview text,"
                 f" #node-body-{bid} entry,"
                 f" #node-body-{bid} scrolledwindow"
-                f" {{ background: {hex_color}; }}\n"
+                f" {{ background: {hex_color}; color: rgba(0, 0, 0, 0.8); }}\n"
                 f"#node-body-{bid} {{ border-radius: 8px; }}"
             )
             provider = Gtk.CssProvider()
@@ -2212,60 +2215,8 @@ class Minimap(Gtk.Widget):
     __gtype_name__ = "Minimap"
 
     NODE_COLORS = {
-        "input": Gdk.RGBA(0.18, 0.42, 0.18, 1.0),
-        "output": Gdk.RGBA(0.48, 0.23, 0.23, 1.0),
-        "filter": Gdk.RGBA(0.04, 0.28, 0.44, 1.0),
-        "blend": Gdk.RGBA(0.42, 0.29, 0.18, 1.0),
-        "mask": Gdk.RGBA(0.18, 0.35, 0.42, 1.0),
-        "brightness_contrast": Gdk.RGBA(0.23, 0.42, 0.48, 1.0),
-        "levels": Gdk.RGBA(0.30, 0.50, 0.60, 1.0),
-        "hsl": Gdk.RGBA(0.20, 0.55, 0.55, 1.0),
-        "opacity": Gdk.RGBA(0.35, 0.23, 0.48, 1.0),
-        "color_source": Gdk.RGBA(0.40, 0.25, 0.60, 1.0),
-        "gradient": Gdk.RGBA(0.45, 0.30, 0.65, 1.0),
-        "noise": Gdk.RGBA(0.50, 0.35, 0.70, 1.0),
-        "color_balance": Gdk.RGBA(0.22, 0.55, 0.50, 1.0),
-        "exposure_gamma": Gdk.RGBA(0.55, 0.40, 0.20, 1.0),
-        "curves": Gdk.RGBA(0.60, 0.30, 0.30, 1.0),
-        "crop": Gdk.RGBA(0.25, 0.60, 0.40, 1.0),
-        "resize": Gdk.RGBA(0.30, 0.50, 0.70, 1.0),
-        "rotate": Gdk.RGBA(0.50, 0.50, 0.30, 1.0),
-        "flip": Gdk.RGBA(0.40, 0.60, 0.35, 1.0),
-        "distort": Gdk.RGBA(0.65, 0.35, 0.15, 1.0),
-        "blur": Gdk.RGBA(0.20, 0.45, 0.65, 1.0),
-        "sharpen": Gdk.RGBA(0.55, 0.25, 0.55, 1.0),
-        "edge_detect": Gdk.RGBA(0.70, 0.30, 0.40, 1.0),
-        "constant": Gdk.RGBA(0.70, 0.50, 0.15, 1.0),
-        "add": Gdk.RGBA(0.30, 0.60, 0.20, 1.0),
-        "subtract": Gdk.RGBA(0.60, 0.20, 0.35, 1.0),
-        "multiply": Gdk.RGBA(0.15, 0.40, 0.65, 1.0),
-        "divide": Gdk.RGBA(0.65, 0.15, 0.15, 1.0),
-        "ceil": Gdk.RGBA(0.50, 0.30, 0.70, 1.0),
-        "floor": Gdk.RGBA(0.30, 0.70, 0.50, 1.0),
-        "round": Gdk.RGBA(0.70, 0.50, 0.30, 1.0),
-        "sum": Gdk.RGBA(0.20, 0.70, 0.70, 1.0),
-        "product": Gdk.RGBA(0.70, 0.20, 0.50, 1.0),
-        "label": Gdk.RGBA(0.50, 0.50, 0.20, 1.0),
-        "comment": Gdk.RGBA(0.30, 0.60, 0.30, 1.0),
-        "not": Gdk.RGBA(0.90, 0.25, 0.50, 1.0),
-        "and": Gdk.RGBA(0.46, 0.83, 0.02, 1.0),
-        "or": Gdk.RGBA(1.00, 0.84, 0.00, 1.0),
-        "nand": Gdk.RGBA(0.67, 0.08, 0.08, 1.0),
-        "nor": Gdk.RGBA(0.85, 0.37, 0.01, 1.0),
-        "xor": Gdk.RGBA(0.00, 0.90, 0.96, 1.0),
-        "xnor": Gdk.RGBA(0.05, 0.55, 0.60, 1.0),
-        "compare": Gdk.RGBA(0.88, 0.25, 0.98, 1.0),
-        "clamp": Gdk.RGBA(0.26, 0.67, 0.32, 1.0),
-        "map_range": Gdk.RGBA(0.19, 0.54, 0.80, 1.0),
-        "modulo": Gdk.RGBA(0.67, 0.42, 0.18, 1.0),
-        "power": Gdk.RGBA(0.18, 0.54, 0.67, 1.0),
-        "square_root": Gdk.RGBA(0.22, 0.65, 0.42, 1.0),
-        "absolute": Gdk.RGBA(0.62, 0.28, 0.62, 1.0),
-        "log": Gdk.RGBA(0.15, 0.60, 0.55, 1.0),
-        "exp": Gdk.RGBA(0.72, 0.30, 0.20, 1.0),
-        "random": Gdk.RGBA(0.30, 0.30, 0.70, 1.0),
-        "raw_input": Gdk.RGBA(0.55, 0.25, 0.15, 1.0),
-        "raw_decode": Gdk.RGBA(0.15, 0.55, 0.45, 1.0),
+        nt: Gdk.RGBA(*CATEGORY_GDK_RGBA[cat])
+        for nt, cat in NODE_CATEGORY_MAP.items()
     }
 
     SIZE = (180, 130)

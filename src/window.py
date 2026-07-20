@@ -79,69 +79,7 @@ class RingWindow(Adw.ApplicationWindow):
         self._pending_graph: Optional["NodeGraph"] = None
         self._missing_images: list["InputNode"] = []
 
-        self._light_header_css = Gtk.CssProvider()
-        self._light_header_css.load_from_data(b"""
-            .node-header.input { background: #4CAF50; }
-            .node-header.output { background: #EF5350; }
-            .node-header.filter { background: #2196F3; }
-            .node-header.blend { background: #FF9800; }
-            .node-header.mask { background: #26A69A; }
-            .node-header.opacity { background: #AB47BC; }
-            .node-header.brightness_contrast { background: #00BCD4; }
-            .node-header.levels { background: #4DD0E1; }
-            .node-header.hsl { background: #29B6F6; }
-            .node-header.color_source { background: #7E57C2; }
-            .node-header.gradient { background: #9575CD; }
-            .node-header.noise { background: #B39DDB; }
-            .node-header.color_balance { background: #26A69A; }
-            .node-header.exposure_gamma { background: #A1887F; }
-            .node-header.curves { background: #EF5350; }
-            .node-header.crop { background: #66BB6A; }
-            .node-header.resize { background: #42A5F5; }
-            .node-header.rotate { background: #D4E157; }
-            .node-header.flip { background: #9CCC65; }
-            .node-header.distort { background: #FF7043; }
-            .node-header.blur { background: #4FC3F7; }
-            .node-header.sharpen { background: #AB47BC; }
-            .node-header.edge_detect { background: #E91E63; }
-            .node-header.constant { background: #FFC107; }
-            .node-header.add { background: #66BB6A; }
-            .node-header.subtract { background: #E91E63; }
-            .node-header.multiply { background: #1E88E5; }
-            .node-header.divide { background: #F44336; }
-            .node-header.ceil { background: #B39DDB; }
-            .node-header.floor { background: #80CBC4; }
-            .node-header.round { background: #FFCC80; }
-            .node-header.sum { background: #4DD0E1; }
-            .node-header.product { background: #F48FB1; }
-            .node-header.label { background: #E6EE9C; }
-            .node-header.comment { background: #A5D6A7; }
-            .node-header.not { background: #E040FB; }
-            .node-header.and { background: #76FF03; }
-            .node-header.or { background: #FFD600; }
-            .node-header.nand { background: #FF1744; }
-            .node-header.nor { background: #FF6D00; }
-            .node-header.xor { background: #00E5FF; }
-            .node-header.xnor { background: #18FFFF; }
-            .node-header.compare { background: #D500F9; }
-            .node-header.clamp { background: #00C853; }
-            .node-header.map_range { background: #2979FF; }
-            .node-header.modulo { background: #8D6E63; }
-            .node-header.power { background: #00897B; }
-            .node-header.square_root { background: #43A047; }
-            .node-header.absolute { background: #8E24AA; }
-            .node-header.log { background: #00838F; }
-            .node-header.exp { background: #E64A19; }
-            .node-header.random { background: #3949AB; }
-            .node-header.raw_input { background: #B0BEC5; }
-            .node-header.raw_decode { background: #90A4AE; }
-        """)
 
-        self._dark_header_css = Gtk.CssProvider()
-        self._dark_header_css.load_from_data(b"""
-            .node-header.raw_input { background: #78909C; }
-            .node-header.raw_decode { background: #546E7A; }
-        """)
 
         self._setup_ui()
         self._connect_signals()
@@ -243,27 +181,6 @@ class RingWindow(Adw.ApplicationWindow):
             _update_nav_buttons()
 
         self._setup_menu()
-        self._setup_node_header_theme()
-
-    def _setup_node_header_theme(self):
-        style_mgr = Adw.StyleManager.get_default()
-        self._update_node_header_theme(style_mgr)
-        style_mgr.connect("notify::dark", self._update_node_header_theme)
-
-    def _update_node_header_theme(self, manager, pspec=None):
-        display = Gdk.Display.get_default()
-        if not display:
-            return
-        if manager.get_dark():
-            Gtk.StyleContext.remove_provider_for_display(display, self._light_header_css)
-            Gtk.StyleContext.add_provider_for_display(
-                display, self._dark_header_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
-        else:
-            Gtk.StyleContext.remove_provider_for_display(display, self._dark_header_css)
-            Gtk.StyleContext.add_provider_for_display(
-                display, self._light_header_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
 
     def _connect_signals(self):
         if self._open_button:
