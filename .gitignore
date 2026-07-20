@@ -4,9 +4,8 @@ __pycache__/
 *.pyo
 *.egg-info/
 dist/
-build/
 
-# Meson build directory
+# Build output
 build/
 
 # IDE / editor
@@ -30,5 +29,3 @@ venv/
 
 # Runtime logs
 filter_errors.log
-
-negate
