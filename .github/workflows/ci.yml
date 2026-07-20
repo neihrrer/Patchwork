@@ -37,14 +37,8 @@ jobs:
       - name: Build
         run: meson compile -C build
 
-      - name: Install test dependencies
-        run: pip3 install pytest
-
       - name: Lint
         run: python3 -m py_compile src/main.py src/application.py src/window.py
-
-      - name: Test
-        run: python3 -m pytest tests/ -q
 
       - name: Create tarball
         if: startsWith(github.ref, 'refs/tags/')

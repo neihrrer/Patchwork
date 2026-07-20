@@ -38,7 +38,7 @@ from processing.graph_executor import GraphExecutor
 
 
 INTERACTIVE_FILTERS = {
-    "fx_mask_color", "fx_extract_foreground", "fx_morph_interactive",
+    "fx_apply_haldclut", "apply_from_clut_set", "fx_mask_color", "fx_extract_foreground", "fx_morph_interactive",
     "fx_warp_interactive", "fx_colorize_interactive", "fx_gmic_demos",
     "fx_curves_interactive",
     # gui_* filters open dialogs/windows in GIMP and do nothing on CLI

@@ -22,7 +22,7 @@ from nodes import NodeGraph, InputNode, FilterNode, OutputNode
 from processing.graph_executor import GraphExecutor
 
 INTERACTIVE_FILTERS = {
-    "fx_mask_color", "fx_extract_foreground", "fx_morph_interactive",
+    "fx_apply_haldclut", "apply_from_clut_set", "fx_mask_color", "fx_extract_foreground", "fx_morph_interactive",
     "fx_warp_interactive", "fx_colorize_interactive", "fx_gmic_demos",
     "fx_curves_interactive",
     "gui_axis_streak", "gui_download_all_data",

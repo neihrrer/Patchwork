@@ -453,7 +453,7 @@ class GmicFilterParser:
         categories = {
             _("Artistic"): [
                 ("sketchbw", _("Sketch (B&W)"), "sketchbw 50,0,0,0"),
-                ("fx_cpencil", _("Pencil Drawing"), "fx_cpencil 30,60,0,0,50,0,2,25"),
+                ("fx_cpencil", _("Pencil Drawing"), "fx_cpencil 1.3,50,20,2,2,1,0"),
                 ("cartoon", _("Cartoon"), "cartoon 3,10,10,1"),
                 ("cl_comic", _("Comic Book"), "cl_comic"),
             ],
@@ -475,7 +475,7 @@ class GmicFilterParser:
                 ("mirror", _("Mirror"), "mirror x"),
             ],
             _("Light & Shadows"): [
-                ("retinex", _("Retinex"), "retinex 100,2,0,200,1,5,15,80,250"),
+                ("retinex", _("Retinex"), "retinex 100,hsv,0,1,15,80,250"),
                 ("normalize_local", _("Local Normalization"), "normalize_local 10"),
             ],
             _("B&W"): [
