@@ -1,5 +1,5 @@
 blueprint_compiler = find_program('blueprint-compiler', required: true)
-ui_dir = join_paths(get_option('datadir'), 'ring')
+ui_dir = join_paths(get_option('datadir'), 'patchwork')
 
 # Compile blueprints to XML
 window_ui = custom_target(
@@ -26,7 +26,7 @@ python_sources = [
 foreach src : python_sources
   python3.install_sources(
     src,
-    subdir: 'ring',
+    subdir: 'patchwork',
   )
 endforeach
 

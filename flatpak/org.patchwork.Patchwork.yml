@@ -1,8 +1,8 @@
-id: io.github.neihrrer.Ring
+id: org.patchwork.Patchwork
 runtime: org.gnome.Platform
 runtime-version: '50'
 sdk: org.gnome.Sdk
-command: ring
+command: patchwork
 
 finish-args:
   - --share=ipc
@@ -38,7 +38,7 @@ modules:
         url: https://github.com/GreycLab/gmic.git
         tag: v3.4.3
 
-  - name: ring
+  - name: patchwork
     buildsystem: meson
     sources:
       - type: dir

@@ -72,7 +72,7 @@ def _build_filter_graph(test_image: str, filter_def):
 
 @pytest.fixture(scope="module")
 def test_image(tmp_path_factory):
-    img_dir = tmp_path_factory.mktemp("ring_test")
+    img_dir = tmp_path_factory.mktemp("patchwork_test")
     path = str(img_dir / "input.png")
     img = Image.new("RGB", (200, 200))
     for x in range(200):

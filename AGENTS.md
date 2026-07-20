@@ -1,4 +1,4 @@
-# Ring — Agent Guide
+# Patchwork — Agent Guide
 
 ## Quick start
 
@@ -58,7 +58,7 @@ Node types: `InputNode`, `OutputNode`, `FilterNode`, `BlendNode`, `ColorNode`, `
 
 - **GObject type system** — `FilterDef` is a `GObject.Object` with `@GObject.Property`; `gi.require_version` calls must precede any `gi.repository` import
 - **blueprint-compiler** — UI defined in `.blp` (Blueprint), compiled to `.ui` XML. Recompile after editing `.blp` files
-- **Project files** — `.ring` JSON format, schema version 1
+- **Project files** — `.patch` JSON format, schema version 1
 - **snake_case** for functions/variables, **PascalCase** for classes, **SCREAMING_SNAKE_CASE** for constants
 - **Import order**: stdlib, third-party (`gi.repository`, `PIL`), local
 - **4-space indent**, no trailing whitespace, ~100 char line limit
@@ -68,4 +68,4 @@ Node types: `InputNode`, `OutputNode`, `FilterNode`, `BlendNode`, `ColorNode`, `
 - `./run.sh` requires `blueprint-compiler` on `$PATH`; falls back to existing `build/resources/*.ui`
 - Rendering requires `gmic` and/or `magick` CLIs — tests do not
 - Only one branch: `master`; tags use `v*` pattern for releases
-- Flatpak manifest at `flatpak/io.github.neihrrer.Ring.yml`
+- Flatpak manifest at `flatpak/org.patchwork.Patchwork.yml`

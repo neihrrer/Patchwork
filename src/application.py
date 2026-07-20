@@ -7,21 +7,21 @@ gi.require_version("Gio", "2.0")
 
 from gi.repository import GLib, Gio, Gtk, Adw, Gdk
 from pathlib import Path
-from window import RingWindow
+from window import PatchworkWindow
 
 
-class RingApplication(Adw.Application):
+class PatchworkApplication(Adw.Application):
     def __init__(self):
         super().__init__(
-            application_id="io.github.neihrrer.Ring",
+            application_id="org.patchwork.Patchwork",
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
         self._window = None
 
-        GLib.set_application_name("Ring")
-        GLib.set_prgname("ring")
+        GLib.set_application_name("Patchwork")
+        GLib.set_prgname("patchwork")
 
-        self.set_resource_base_path("/io/github/neihrrer/Ring")
+        self.set_resource_base_path("/org/patchwork/Patchwork")
 
         self._setup_actions()
 
@@ -33,7 +33,7 @@ class RingApplication(Adw.Application):
         css_paths = [
             Path(__file__).parent / "style.css",
             Path(__file__).parent.parent / "build" / "resources" / "style.css",
-            Path("/app/share/ring") / "style.css",
+            Path("/app/share/patchwork") / "style.css",
         ]
         provider = Gtk.CssProvider()
         for p in css_paths:
@@ -60,9 +60,9 @@ class RingApplication(Adw.Application):
 
     def _show_about(self):
         about = Adw.AboutDialog(
-            application_name="Ring",
-            application_icon="io.github.neihrrer.Ring",
-            developer_name="Ring Team",
+            application_name="Patchwork",
+            application_icon="org.patchwork.Patchwork",
+            developer_name="Patchwork Team",
             version="0.1.0",
             license_type=Gtk.License.GPL_3_0,
             comments="GTK4/Libadwaita frontend for the G'MIC image processing framework",
@@ -73,7 +73,7 @@ class RingApplication(Adw.Application):
 
     def do_activate(self):
         if not self._window:
-            self._window = RingWindow(application=self)
+            self._window = PatchworkWindow(application=self)
             self._window.connect("close-request", lambda *_: self._cleanup())
         self._window.present()
 

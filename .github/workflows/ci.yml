@@ -50,8 +50,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          tar czf "ring-$VERSION.tar.gz" \
-            --transform "s,^,ring-$VERSION/," \
+          tar czf "patchwork-$VERSION.tar.gz" \
+            --transform "s,^,patchwork-$VERSION/," \
             --exclude=.git \
             --exclude=build \
             .
@@ -60,5 +60,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ring-*.tar.gz
+          files: patchwork-*.tar.gz
           generate_release_notes: true

@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=Ring
+Name=Patchwork
 Summary=Node-based image editor with G'MIC and ImageMagick
-Exec=ring
+Exec=patchwork
 Icon=@APP_ID@
 Type=Application
 Categories=Graphics;Photography;

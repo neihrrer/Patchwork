@@ -44,7 +44,7 @@ def _find_ui_file(name: str) -> str:
     paths = [
         Path(__file__).parent.parent / "build" / "resources" / name,
         Path(__file__).parent / "resources" / name,
-        Path("/app/share/ring") / name,
+        Path("/app/share/patchwork") / name,
     ]
     for p in paths:
         if p.exists():
@@ -57,7 +57,7 @@ def _generate_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
-class RingWindow(Adw.ApplicationWindow):
+class PatchworkWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -359,10 +359,10 @@ class RingWindow(Adw.ApplicationWindow):
             )
 
     def _do_auto_save(self) -> bool:
-        auto_path = Path.home() / ".cache" / "ring" / "autosave.ring"
+        auto_path = Path.home() / ".cache" / "patchwork" / "autosave.patch"
         try:
             auto_path.parent.mkdir(parents=True, exist_ok=True)
-            self._save_ring_to_path(str(auto_path), self._graph)
+            self._save_patchwork_to_path(str(auto_path), self._graph)
         except OSError:
             pass
         self._auto_save_id = GLib.timeout_add_seconds(
@@ -573,7 +573,7 @@ class RingWindow(Adw.ApplicationWindow):
     # ─── Project save / load ─────────────────────────────────────────────────
 
     @staticmethod
-    def _save_ring_to_path(path: str, graph):
+    def _save_patchwork_to_path(path: str, graph):
         import json, zipfile, io
         data = graph.to_dict()
         input_nodes = [n for n in graph.nodes.values()
@@ -593,13 +593,13 @@ class RingWindow(Adw.ApplicationWindow):
                 json.dump(data, f, indent=2)
 
     @staticmethod
-    def _load_ring_from_path(path: str) -> tuple:
+    def _load_patchwork_from_path(path: str) -> tuple:
         import json, zipfile
         if zipfile.is_zipfile(path):
             with zipfile.ZipFile(path, "r") as zf:
                 data = json.loads(zf.read("graph.json"))
                 stem = Path(path).stem
-                cache_dir = Path.home() / ".cache" / "ring" / "packed" / stem
+                cache_dir = Path.home() / ".cache" / "patchwork" / "packed" / stem
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 for name in zf.namelist():
                     if name.startswith("images/") and not name.endswith("/"):
@@ -612,8 +612,8 @@ class RingWindow(Adw.ApplicationWindow):
 
     def _on_open_project(self, action, param):
         file_filter = Gtk.FileFilter()
-        file_filter.set_name(_("Ring Projects"))
-        file_filter.add_suffix("ring")
+        file_filter.set_name(_("Patchwork Projects"))
+        file_filter.add_suffix("patch")
 
         dialog = Gtk.FileDialog(
             title=_("Open Project"),
@@ -627,7 +627,7 @@ class RingWindow(Adw.ApplicationWindow):
             file = dialog.open_finish(result)
             if not file:
                 return
-            data, pack_dir = self._load_ring_from_path(file.get_path())
+            data, pack_dir = self._load_patchwork_from_path(file.get_path())
             if not isinstance(data, dict) or data.get("version") != 1:
                 self._show_error(_("Invalid project file"))
                 return
@@ -708,8 +708,8 @@ class RingWindow(Adw.ApplicationWindow):
 
     def _on_save_project(self, action, param):
         file_filter = Gtk.FileFilter()
-        file_filter.set_name(_("Ring Projects"))
-        file_filter.add_suffix("ring")
+        file_filter.set_name(_("Patchwork Projects"))
+        file_filter.add_suffix("patch")
 
         dialog = Gtk.FileDialog(
             title=_("Save Project"),
@@ -724,9 +724,9 @@ class RingWindow(Adw.ApplicationWindow):
             if not file:
                 return
             path = file.get_path()
-            if not path.endswith(".ring"):
-                path += ".ring"
-            self._save_ring_to_path(path, self._graph)
+            if not path.endswith(".patch"):
+                path += ".patch"
+            self._save_patchwork_to_path(path, self._graph)
             self._set_status(_("Project saved"))
         except GLib.Error as e:
             if e.domain != "gtk-dialog-error-quark":

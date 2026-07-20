@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 __test__ = False
-"""Test all filters in Ring.
+"""Test all filters in Patchwork.
 
 Tests each filter by building a minimal InputNode -> FilterNode -> OutputNode
 graph and executing it through the full GraphExecutor pipeline.
@@ -228,7 +228,7 @@ def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Test all Ring filters for basic execution",
+        description="Test all Patchwork filters for basic execution",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Examples:
@@ -251,7 +251,7 @@ def main():
                         help="file to write full error details (default: filter_errors.log)")
     args = parser.parse_args()
 
-    print("Ring Filter Test Suite")
+    print("Patchwork Filter Test Suite")
     print("\u2550" * 60)
 
     gmic_ok = shutil.which("gmic") is not None
@@ -264,7 +264,7 @@ def main():
         print("\nERROR: neither gmic nor magick found on PATH.")
         sys.exit(1)
 
-    img_dir = tempfile.mkdtemp(prefix="ring_test_")
+    img_dir = tempfile.mkdtemp(prefix="patchwork_test_")
     test_image = os.path.join(img_dir, "input.png")
     generate_test_image(test_image)
     print(f"\n  Test image: 200x200 PNG ({os.path.getsize(test_image)} bytes)")
@@ -302,7 +302,7 @@ def main():
         sys.exit(0)
 
     error_log = open(args.error_log, "w")
-    error_log.write("Ring Filter Test — Error Details\n")
+    error_log.write("Patchwork Filter Test — Error Details\n")
     error_log.write("\u2550" * 60 + "\n\n")
 
     total_ok = 0

@@ -1,6 +1,6 @@
-# Ring
+# Patchwork
 
-**Ring** is a modern, node-based image editor for Linux. Think of it as a visual patcher for the [G'MIC](https://gmic.eu) image processing framework — you load an image, connect processing nodes, and render the result. No coding required.
+**Patchwork** is a modern, node-based image editor for Linux. Think of it as a visual patcher for the [G'MIC](https://gmic.eu) image processing framework — you load an image, connect processing nodes, and render the result. No coding required.
 
 ## Features
 
@@ -9,7 +9,7 @@
 - **ImageMagick operations** — blur, sharpen, resize, rotate, color adjustments, edge detection, morphology, and more
 - **Built-in node types** — Input, Output, Filter, Blend (12 modes), Color Adjust, Opacity, Coloring (HSL), and Mask
 - **Live preview** — compare original vs. result with split-view before/after
-- **Project save/load** — save your node graphs as `.ring` files and reopen them later
+- **Project save/load** — save your node graphs as `.patch` files and reopen them later
 - **Export** — PNG, JPEG, TIFF, BMP, WebP
 - **Keyboard shortcuts** — quick access to all common operations
 - **Adaptive UI** — responsive layout that works on narrow windows (thanks to Libadwaita)
@@ -35,8 +35,8 @@
 
 ```bash
 # Once published on Flathub:
-flatpak install flathub io.github.neihrrer.Ring
-flatpak run io.github.neihrrer.Ring
+flatpak install flathub org.patchwork.Patchwork
+flatpak run org.patchwork.Patchwork
 ```
 
 ### From source (Meson)
@@ -67,7 +67,7 @@ sudo meson install -C build
 ./run.sh
 ```
 
-This compiles the UI blueprints on the fly and launches Ring directly from the source tree.
+This compiles the UI blueprints on the fly and launches Patchwork directly from the source tree.
 
 ## Getting started
 
@@ -109,7 +109,7 @@ This compiles the UI blueprints on the fly and launches Ring directly from the s
 ## Project structure
 
 ```
-Ring/
+Patchwork/
 ├── data/               # Desktop file, AppStream metadata, icons
 ├── src/
 │   ├── main.py         # Entry point
@@ -133,4 +133,4 @@ Ring/
 
 ## License
 
-Ring is distributed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+Patchwork is distributed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.

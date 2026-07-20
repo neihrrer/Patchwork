@@ -1,4 +1,4 @@
-# Contributing to Ring
+# Contributing to Patchwork
 
 Thank you for your interest in contributing! This document covers the development workflow.
 

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-CONFIG_DIR = Path.home() / ".config" / "ring"
+CONFIG_DIR = Path.home() / ".config" / "patchwork"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 DEFAULTS = {
