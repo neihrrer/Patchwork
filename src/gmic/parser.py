@@ -455,7 +455,7 @@ class GmicFilterParser:
                 ("sketchbw", _("Sketch (B&W)"), "sketchbw 50,0,0,0"),
                 ("fx_cpencil", _("Pencil Drawing"), "fx_cpencil 1.3,50,20,2,2,1,0"),
                 ("cartoon", _("Cartoon"), "cartoon 3,10,10,1"),
-                ("cl_comic", _("Comic Book"), "cl_comic"),
+                ("cl_comic", _("Comic Book"), "cl_comic 0,2,0,1,1,15,15,1,10,20,6,2,0,0,0,0,0"),
             ],
             _("Colors"): [
                 ("sepia", _("Sepia"), "sepia"),
@@ -471,7 +471,7 @@ class GmicFilterParser:
             _("Deformations"): [
                 ("rotate", _("Rotate"), "rotate 90"),
                 ("resize", _("Resize"), "resize 50%,50%"),
-                ("warp", _("Warp"), "warp 10"),
+                ("deform", _("Deform"), "deform 10"),
                 ("mirror", _("Mirror"), "mirror x"),
             ],
             _("Light & Shadows"): [
@@ -481,7 +481,7 @@ class GmicFilterParser:
             _("B&W"): [
                 ("to_gray", _("Grayscale"), "to_gray"),
                 ("threshold", _("Threshold"), "threshold 128"),
-                ("invert", _("Invert"), "invert"),
+                ("negate", _("Invert"), "negate"),
             ],
             _("Frames"): [
                 ("frame", _("Add Frame"), "frame 5,255,255,255"),
