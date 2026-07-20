@@ -626,6 +626,8 @@ class NodeWidget(Gtk.Box):
         self._thumb_overlay.set_hexpand(True)
         self._thumb_overlay.set_vexpand(True)
 
+        self._thumb_sizer: Optional[Gtk.Widget] = None
+
         if is_analysis:
             self._analysis_area = Gtk.DrawingArea()
             self._analysis_area.set_hexpand(True)
@@ -639,7 +641,10 @@ class NodeWidget(Gtk.Box):
             self._thumb_picture.set_vexpand(True)
             self._thumb_picture.set_keep_aspect_ratio(True)
             self._thumb_picture.set_can_shrink(True)
-            self._thumb_overlay.set_child(self._thumb_picture)
+
+            self._thumb_sizer = Gtk.Box()
+            self._thumb_overlay.set_child(self._thumb_sizer)
+            self._thumb_overlay.add_overlay(self._thumb_picture)
 
         self._resize_handle = Gtk.Box()
         self._resize_handle.set_size_request(12, 12)
@@ -1953,7 +1958,7 @@ class NodeWidget(Gtk.Box):
                 ctrl.set_size_request(max(60, int(120 * zoom)), max(20, int(28 * zoom)))
             elif isinstance(ctrl, Gtk.Switch):
                 ctrl.set_size_request(max(24, int(40 * zoom)), max(14, int(22 * zoom)))
-        if self._has_image or self._node.minimized:
+        if self._has_image or self._node.minimized or isinstance(self._node, (LabelNode, CommentNode)):
             w = -1 if self._node.minimized else max(1, int(self._logical_w * zoom))
             self.set_size_request(
                 w,
@@ -2347,6 +2352,70 @@ class Minimap(Gtk.Widget):
             snapshot.append_color(vpc, Graphene.Rect().init(vx2_mm, vy_mm, 1, vph))
 
 
+class FixedCanvas(Gtk.Widget):
+    __gtype_name__ = "FixedCanvas"
+
+    def __init__(self):
+        super().__init__()
+        self._children: list[Gtk.Widget] = []
+        self._positions: dict[Gtk.Widget, tuple[int, int]] = {}
+        self.set_overflow(Gtk.Overflow.VISIBLE)
+
+    def put(self, child: Gtk.Widget, x: int, y: int):
+        child.set_parent(self)
+        self._children.append(child)
+        self._positions[child] = (x, y)
+        self.queue_resize()
+
+    def move(self, child: Gtk.Widget, x: int, y: int):
+        self._positions[child] = (x, y)
+        child.set_child_visible(True)
+        self.queue_resize()
+
+    def remove(self, child: Gtk.Widget):
+        if child in self._positions:
+            del self._positions[child]
+            self._children.remove(child)
+            child.set_visible(False)
+            child.unparent()
+            self.queue_resize()
+
+    def pick(self, x: float, y: float, flags: Gtk.PickFlags) -> Gtk.Widget | None:
+        for child in reversed(self._children):
+            if not child.get_visible():
+                continue
+            pos = self._positions.get(child)
+            if pos is None:
+                continue
+            cx, cy = pos
+            cw = child.get_allocated_width()
+            ch = child.get_allocated_height()
+            if cx <= x <= cx + cw and cy <= y <= cy + ch:
+                return child
+        return None
+
+    def do_forall(self, include_internals: bool, callback: Callable):
+        for child in list(self._children):
+            callback(child)
+
+    def do_measure(self, orientation: Gtk.Orientation, for_size: int):
+        return 0, 100, -1, -1
+
+    def do_size_allocate(self, width: int, height: int, baseline: int):
+        for child in self._children:
+            if not child.get_visible():
+                continue
+            x, y = self._positions.get(child, (0, 0))
+            min_w, nat_w, _, _ = child.measure(Gtk.Orientation.HORIZONTAL, -1)
+            min_h, nat_h, _, _ = child.measure(Gtk.Orientation.VERTICAL, -1)
+            alloc = Gdk.Rectangle()
+            alloc.x = x
+            alloc.y = y
+            alloc.width = nat_w if nat_w >= min_w else min_w
+            alloc.height = nat_h if nat_h >= min_h else min_h
+            child.size_allocate(alloc, -1)
+
+
 class NodeCanvas(Gtk.Overlay):
     __gtype_name__ = "NodeCanvas"
 
@@ -2370,7 +2439,7 @@ class NodeCanvas(Gtk.Overlay):
         self._wire_overlay.connect("notify::width", lambda *_: self._on_overlay_resize())
         self._wire_overlay.connect("notify::height", lambda *_: self._on_overlay_resize())
 
-        self._fixed = Gtk.Fixed()
+        self._fixed = FixedCanvas()
         self._fixed.set_hexpand(True)
         self._fixed.set_vexpand(True)
         self.add_overlay(self._fixed)
@@ -2720,6 +2789,7 @@ class NodeCanvas(Gtk.Overlay):
             f".node-param-label {{ font-size: {lfs}px; min-width: 0; min-height: 0; }}\n"
             f".node-param-control {{ margin-bottom: {cm}px; min-width: 0; min-height: 0; }}\n"
             f".resize-handle {{ border-top-left-radius: {max(1, int(4 * zoom))}px; border-bottom-right-radius: {max(1, int(7 * zoom))}px; }}\n"
+            f".node-label-content, .node-comment-content {{ font-size: {tfs}px; min-width: 0; min-height: 0; }}\n"
         )
         self._zoom_css.load_from_data(css.encode())
 
