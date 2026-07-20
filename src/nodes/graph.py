@@ -56,6 +56,7 @@ class Node:
         self.y = y
         self.width: float = 200
         self.height: float = 120
+        self.minimized: bool = False
         self.cached_output_path: Optional[str] = None
         self.cache_dirty: bool = True
 
@@ -242,6 +243,7 @@ class NodeGraph:
                 "y": n.y,
                 "width": n.width,
                 "height": n.height,
+                "minimized": getattr(n, "minimized", False),
                 "params": {},
             }
             from nodes.node_types import (
@@ -591,6 +593,7 @@ class NodeGraph:
             if node:
                 node.width = nd.get("width", node.width)
                 node.height = nd.get("height", node.height)
+                node.minimized = nd.get("minimized", False)
                 label = nd.get("label")
                 if label and typ not in ("input", "raw_input"):
                     node.label = label

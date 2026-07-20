@@ -464,8 +464,13 @@ class NodeWidget(Gtk.Box):
         self._has_image = False
         self._logical_w = int(self._node.width or 240)
         self._logical_h = int(self._node.height or 200)
+        self._saved_logical_h: int = self._logical_h
+        self._saved_logical_w: int = self._logical_w
         self._screen_x = 0.0
         self._screen_y = 0.0
+        self._minimize_btn: Optional[Gtk.ToggleButton] = None
+        self._ports_box: Optional[Gtk.Box] = None
+        self._saved_port_offsets: dict[str, tuple[float, float]] = {}
 
         self.set_css_classes(["node-widget"])
         self._build_ui()
@@ -540,12 +545,23 @@ class NodeWidget(Gtk.Box):
         ctx.add_class(self._node.node_type)
         self._header = header
 
-        title = Gtk.Label(label=self._node.label, xalign=0, hexpand=True)
-        title.set_css_classes(["node-title"])
-        header.append(title)
+        self._title = Gtk.Label(label=self._node.label, xalign=0, hexpand=True)
+        self._title.set_css_classes(["node-title"])
+        header.append(self._title)
+
+        self._minimize_btn = Gtk.ToggleButton()
+        self._minimize_btn.set_css_classes(["node-minimize-btn"])
+        self._minimize_btn.set_active(self._node.minimized)
+        self._minimize_btn.connect("toggled", self._on_minimize_toggled)
+        icon_name = "window-restore-symbolic" if self._node.minimized else "window-minimize-symbolic"
+        self._minimize_icon = Gtk.Image.new_from_icon_name(icon_name)
+        self._minimize_btn.set_child(self._minimize_icon)
+        header.append(self._minimize_btn)
+
         self.append(header)
 
-        ports_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self._ports_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        ports_box = self._ports_box
         ports_box.set_hexpand(True)
 
         self._left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -635,6 +651,9 @@ class NodeWidget(Gtk.Box):
         self.append(self._thumb_box)
 
         self._build_params()
+
+        if self._node.minimized:
+            self._apply_minimize_state()
 
         for inp in self._node.inputs:
             if inp.port_type == PortType.NUMERIC and inp.name not in self._inline_numeric_ports:
@@ -853,6 +872,89 @@ class NodeWidget(Gtk.Box):
             except Exception:
                 self._bg_css_provider = None
         self.queue_draw()
+
+    # ─── Minimize / Expand ────────────────────────────────────────────
+
+    def _on_minimize_toggled(self, btn: Gtk.ToggleButton):
+        self._node.minimized = btn.get_active()
+        self._minimize_icon.set_from_icon_name(
+            "window-restore-symbolic" if self._node.minimized else "window-minimize-symbolic"
+        )
+        self._apply_minimize_state()
+        self._canvas._update_port_centers(self._node)
+        self._canvas.queue_gl_render()
+
+    def toggle_minimize(self):
+        if self._minimize_btn is None:
+            return
+        self._minimize_btn.set_active(not self._minimize_btn.get_active())
+
+    def _save_port_offsets(self):
+        for name, pw in self._input_port_widgets.items():
+            pw.update_center()
+            self._saved_port_offsets[name] = (pw._offset_x, pw._offset_y)
+        for name, pw in self._output_port_widgets.items():
+            pw.update_center()
+            self._saved_port_offsets[name] = (pw._offset_x, pw._offset_y)
+
+    def _apply_minimize_state(self):
+        minimized = self._node.minimized
+        zoom = self._canvas._zoom
+        if minimized:
+            self._saved_logical_h = self._logical_h
+            self._saved_logical_w = self._logical_w
+            self._save_port_offsets()
+            for pw in self._input_port_widgets.values():
+                pw.set_visible(False)
+            for pw in self._output_port_widgets.values():
+                pw.set_visible(False)
+            if self._ports_box:
+                self._ports_box.set_visible(False)
+            if self._thumb_box:
+                self._thumb_box.set_visible(False)
+            for row in self._param_controls:
+                row.set_visible(False)
+            if self._resize_handle:
+                self._resize_handle.set_visible(False)
+            self._logical_h = 30
+            self._title.set_hexpand(False)
+            self._header.add_css_class("minimized")
+            self.set_size_request(
+                -1,
+                max(1, int(30 * zoom)),
+            )
+        else:
+            self._logical_h = self._saved_logical_h
+            self._logical_w = self._saved_logical_w
+            for pw in self._input_port_widgets.values():
+                pw.set_visible(True)
+            for pw in self._output_port_widgets.values():
+                pw.set_visible(True)
+            if self._ports_box:
+                self._ports_box.set_visible(True)
+            if self._thumb_box:
+                self._thumb_box.set_visible(self._has_image or _is_analysis_node(self._node))
+            for row in self._param_controls:
+                row.set_visible(True)
+            self._resize_handle.set_visible(self._has_image)
+            self._saved_port_offsets.clear()
+            self._title.set_hexpand(True)
+            self._header.remove_css_class("minimized")
+            if self._has_image:
+                if self._image_aspect:
+                    self._logical_w = max(self._logical_w, 240)
+                    self._logical_h = max(self._logical_h, int(240 / self._image_aspect))
+                else:
+                    self._logical_w = max(self._logical_w, 220)
+                    self._logical_h = max(self._logical_h, 200)
+                self._node.width = self._logical_w
+                self._node.height = self._logical_h
+                self.apply_zoom(zoom)
+            else:
+                self.set_size_request(
+                    max(1, int(self._logical_w * zoom)),
+                    max(1, int(self._logical_h * zoom)),
+                )
 
     def _build_params(self):
         if isinstance(self._node, FilterNode):
@@ -1527,16 +1629,17 @@ class NodeWidget(Gtk.Box):
                 self._image_aspect = w / h
             texture = Gdk.Texture.new_for_pixbuf(pixbuf)
             self._thumb_picture.set_paintable(texture)
-            self._thumb_box.set_visible(True)
             self._has_image = True
-            self._resize_handle.set_visible(True)
-            cur_w, cur_h = self.get_size_request()
-            if cur_w < 0 or cur_h < 0:
-                self._logical_w = 240
-                self._logical_h = max(160, int(240 / self._image_aspect))
-            self._node.width = self._logical_w
-            self._node.height = self._logical_h
-            self.apply_zoom(self._canvas._zoom)
+            if not self._node.minimized:
+                self._thumb_box.set_visible(True)
+                self._resize_handle.set_visible(True)
+                cur_w, cur_h = self.get_size_request()
+                if cur_w < 0 or cur_h < 0:
+                    self._logical_w = 240
+                    self._logical_h = max(160, int(240 / self._image_aspect))
+                self._node.width = self._logical_w
+                self._node.height = self._logical_h
+                self.apply_zoom(self._canvas._zoom)
 
     def clear_thumbnail(self):
         if self._thumb_picture:
@@ -1544,6 +1647,8 @@ class NodeWidget(Gtk.Box):
             self._thumb_box.set_visible(False)
             self._has_image = False
             self._image_aspect = None
+            if not self._node.minimized:
+                self._resize_handle.set_visible(False)
             self._resize_handle.set_visible(False)
             self._logical_w = int(self._node.width or 240)
             self._logical_h = int(self._node.height or 200)
@@ -1559,15 +1664,17 @@ class NodeWidget(Gtk.Box):
     def set_analysis_data(self, data: dict):
         self._analysis_data = data
         if self._analysis_area:
-            self._thumb_box.set_visible(True)
             self._has_image = True
-            self._resize_handle.set_visible(True)
-            self._logical_w = max(220, int(self._node.width or 220))
-            self._logical_h = max(200, int(self._node.height or 200))
-            self._node.width = self._logical_w
-            self._node.height = self._logical_h
+            if not self._node.minimized:
+                self._thumb_box.set_visible(True)
+                self._resize_handle.set_visible(True)
+                self._logical_w = max(220, int(self._node.width or 220))
+                self._logical_h = max(200, int(self._node.height or 200))
+                self._node.width = self._logical_w
+                self._node.height = self._logical_h
+                self._analysis_area.queue_draw()
+                self.apply_zoom(self._canvas._zoom)
             self._analysis_area.queue_draw()
-            self.apply_zoom(self._canvas._zoom)
 
     # ─── Cairo analysis drawing ─────────────────────────────────────────────
 
@@ -1819,7 +1926,7 @@ class NodeWidget(Gtk.Box):
     # ─── Zoom scaling ─────────────────────────────────────────────────
 
     def apply_zoom(self, zoom: float):
-        if not self._has_image:
+        if not self._has_image and not self._node.minimized:
             self._logical_w = int(self._node.width)
             self._logical_h = int(self._node.height)
         for pw in self._input_port_widgets.values():
@@ -1843,9 +1950,10 @@ class NodeWidget(Gtk.Box):
                 ctrl.set_size_request(max(60, int(120 * zoom)), max(20, int(28 * zoom)))
             elif isinstance(ctrl, Gtk.Switch):
                 ctrl.set_size_request(max(24, int(40 * zoom)), max(14, int(22 * zoom)))
-        if self._has_image:
+        if self._has_image or self._node.minimized:
+            w = -1 if self._node.minimized else max(1, int(self._logical_w * zoom))
             self.set_size_request(
-                max(1, int(self._logical_w * zoom)),
+                w,
                 max(1, int(self._logical_h * zoom)),
             )
 
@@ -2593,6 +2701,21 @@ class NodeCanvas(Gtk.Overlay):
         w = self._node_widgets.get(node.id)
         if not w:
             return
+        if node.minimized:
+            zoom = self._zoom
+            header_cy = w._screen_y + 15 * zoom
+            nw = w.get_width()
+            for inp in node.inputs:
+                pw = w.get_input_port_widget(inp.name)
+                if pw:
+                    pw._center_x = w._screen_x + 3 * zoom
+                    pw._center_y = header_cy
+            for out in node.outputs:
+                pw = w.get_output_port_widget(out.name)
+                if pw:
+                    pw._center_x = w._screen_x + nw - 3 * zoom
+                    pw._center_y = header_cy
+            return
         for inp in node.inputs:
             pw = w.get_input_port_widget(inp.name)
             if pw:
@@ -2638,6 +2761,7 @@ class NodeCanvas(Gtk.Overlay):
             f".node-widget switch slider {{ min-width: 0; min-height: 0; }}\n"
             f".node-widget dropdown button {{ min-width: 0; min-height: 0; }}\n"
             f".node-header {{ padding: {hp}px {max(1, int(10 * zoom))}px; border-radius: {hr}px {hr}px 0 0; min-width: 0; min-height: 0; }}\n"
+            f".node-header.minimized {{ border-radius: {hr}px; min-width: 0; min-height: 0; }}\n"
             f".port-label {{ font-size: {pfs}px; min-width: 0; min-height: 0; }}\n"
             f".node-title {{ font-size: {tfs}px; min-width: 0; min-height: 0; }}\n"
             f".node-param-row {{ padding: {rp}px 0px; min-width: 0; min-height: 0; }}\n"
@@ -2651,6 +2775,21 @@ class NodeCanvas(Gtk.Overlay):
     def _update_port_centers(self, node: Node):
         w = self._node_widgets.get(node.id)
         if not w:
+            return
+        if node.minimized:
+            zoom = self._zoom
+            header_cy = w._screen_y + 15 * zoom
+            nw = w.get_width()
+            for inp in node.inputs:
+                pw = w.get_input_port_widget(inp.name)
+                if pw:
+                    pw._center_x = w._screen_x + 3 * zoom
+                    pw._center_y = header_cy
+            for out in node.outputs:
+                pw = w.get_output_port_widget(out.name)
+                if pw:
+                    pw._center_x = w._screen_x + nw - 3 * zoom
+                    pw._center_y = header_cy
             return
         for inp in node.inputs:
             pw = w.get_input_port_widget(inp.name)
@@ -4475,7 +4614,11 @@ class NodeCanvas(Gtk.Overlay):
         if ctrl and keyval in (Gdk.KEY_A, Gdk.KEY_a):
             self._on_select_all()
             return True
-        if keyval in (Gdk.KEY_M, Gdk.KEY_m):
+        if ctrl and keyval in (Gdk.KEY_M, Gdk.KEY_m):
+            for w in list(self._selected_widgets):
+                w.toggle_minimize()
+            return True
+        if not ctrl and keyval in (Gdk.KEY_M, Gdk.KEY_m):
             self.toggle_minimap()
             return True
         if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
