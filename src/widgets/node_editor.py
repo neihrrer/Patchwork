@@ -557,7 +557,7 @@ class NodeWidget(Gtk.Box):
         self._minimize_btn.set_active(self._node.minimized)
         self._minimize_btn.connect("toggled", self._on_minimize_toggled)
         icon_name = "window-restore-symbolic" if self._node.minimized else "window-minimize-symbolic"
-        self._minimize_icon = Gtk.Image.new_from_icon_name(icon_name)
+        self._minimize_icon = Gtk.Image(icon_name=icon_name)
         self._minimize_btn.set_child(self._minimize_icon)
         header.append(self._minimize_btn)
 
@@ -880,7 +880,7 @@ class NodeWidget(Gtk.Box):
 
     def _on_minimize_toggled(self, btn: Gtk.ToggleButton):
         self._node.minimized = btn.get_active()
-        self._minimize_icon.set_from_icon_name(
+        self._minimize_icon.props.icon_name = (
             "window-restore-symbolic" if self._node.minimized else "window-minimize-symbolic"
         )
         self._apply_minimize_state()
