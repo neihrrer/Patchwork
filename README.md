@@ -1,20 +1,15 @@
 # Patchwork
 
-**Patchwork** is a modern, node-based image editor for Linux. Think of it as a visual patcher for the [G'MIC](https://gmic.eu) image processing framework — you load an image, connect processing nodes, and render the result. No coding required.
+**Patchwork** is a node-based image editor/patcher for Linux. It uses G'MIC and ImageMagick image processing frameworks. You load an image input, connect processing nodes using wires, and render the output.
 
 ## Features
 
-- **Node graph editor** — drag, drop, and connect nodes to build image processing pipelines visually
-- **600+ G'MIC filters** — auto-discovered from your local G'MIC installation (Sketch, Oil Painting, Denoise, Retinex, and hundreds more)
-- **ImageMagick operations** — blur, sharpen, resize, rotate, color adjustments, edge detection, morphology, and more
-- **Built-in node types** — Input, Output, Filter, Blend (12 modes), Color Adjust, Opacity, Coloring (HSL), and Mask
-- **Live preview** — compare original vs. result with split-view before/after
-- **Project save/load** — save your node graphs as `.patch` files and reopen them later
-- **Export** — PNG, JPEG, TIFF, BMP, WebP
-- **Keyboard shortcuts** — quick access to all common operations
-- **Adaptive UI** — responsive layout that works on narrow windows (thanks to Libadwaita)
-- **Dark & light themes** — follows your system preference
-- **No cloud, no accounts** — everything runs locally on your machine
+- **Node graph editor:** drag, drop, and connect nodes to build image processing pipelines visually
+- **G'MIC filters:** auto-discovered from your local G'MIC installation (Sketch, Oil Painting, Denoise, Retinex, and hundreds more)
+- **ImageMagick operations:** blur, sharpen, resize, rotate, color adjustments, edge detection, morphology, and more
+- **Built-in node types:** Input, Output, Filter, Blend (12 modes), Color Adjust, Opacity, Coloring (HSL), and Mask
+- **Math and logic nodes:** Basic math operators and logic gates
+- **Adaptive UI:** responsive layout that works on narrow windows and mobile (thanks to Libadwaita)
 
 ## Requirements
 
@@ -71,13 +66,13 @@ This compiles the UI blueprints on the fly and launches Patchwork directly from 
 
 ## Getting started
 
-1. **Open an image** — click the folder icon in the sidebar (or press Ctrl+O)
-2. **Browse filters** — the sidebar lists all available G'MIC filters organized by category
-3. **Add a filter** — drag a filter from the sidebar onto the canvas, or double-click it
-4. **Connect nodes** — click and drag from an output port (right side of a node) to an input port (left side of another node)
-5. **Tweak parameters** — click a filter node to adjust its parameters
-6. **Render** — click the **Render** button in the toolbar to process the graph
-7. **Export** — once rendered, click the save icon to export the result
+1. **Open an image:** click the folder icon in the sidebar (or press Ctrl+O)
+2. **Browse filters:** the sidebar lists all available filters and nodes organized by category
+3. **Add a filter:** drag a filter from the sidebar onto the canvas, or double-click it
+4. **Connect nodes:** click and drag from an output port (right side of a node) to an input port (left side of another node)
+5. **Tweak parameters:** click a filter node to adjust its parameters
+6. **Render:** click the **Render** button in the toolbar to process the graph
+7. **Export/Save:** once rendered, click the save icon to export the result and save your project
 
 ### Node types
 
@@ -105,6 +100,7 @@ This compiles the UI blueprints on the fly and launches Patchwork directly from 
 | Ctrl+T | Before / After comparison |
 | Ctrl++ | Zoom in |
 | Ctrl+- | Zoom out |
+| Ctrl+M | Toggle minimap |
 
 ## Project structure
 
