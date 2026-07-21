@@ -3031,12 +3031,20 @@ class NodeCanvas(Gtk.Overlay):
             if p.port_type == PortType.IMAGE:
                 img_output = p
                 break
-        if not img_input or not img_output:
+        if not img_input:
             return
 
         src_node = graph.get_node(edge.src_node)
         dst_node = graph.get_node(edge.dst_node)
         if not src_node or not dst_node:
+            return
+
+        if not img_output:
+            e = graph.add_edge(edge.src_node, edge.src_port, new_node_id, img_input.name)
+            if e:
+                self._update_all_port_colors()
+                self.emit("graph-changed")
+                self._maybe_process_analysis_node(new_node_id)
             return
 
         # Space out source and destination (and their connected chains)
@@ -3841,6 +3849,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("waveform_monitor:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3851,6 +3860,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("vectorscope:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3861,6 +3871,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("frequency_domain:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3871,6 +3882,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("color_balance:"):
             gx = (x - self._pan_x) / self._zoom
