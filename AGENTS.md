@@ -46,13 +46,13 @@ CI runs in Fedora 40 container.
 |-------|-----------|------|
 | Entry | `src/main.py` → `application.py` → `window.py` | App lifecycle, main window |
 | Models | `src/models/` | `FilterDef` (GObject), `ParamDef`, `AppState` |
-| Graph | `src/nodes/` | `NodeGraph`, `Port`, `Edge`, 8 node types |
-| Widgets | `src/widgets/` | `NodeCanvas`, `FilterBrowser`, `ComparisonWidget`, `ParameterPanel` |
-| Processing | `src/processing/` | `GraphExecutor` (sync), `ProcessingRunner` (async) |
+| Graph | `src/nodes/` | `NodeGraph`, `Port`, `Edge`, 58 node type classes |
+| Widgets | `src/widgets/` | `FilterBrowser`, `NodeCanvas`, `NodeWidget`, `PortWidget`, `Minimap` |
+| Processing | `src/processing/` | `GraphExecutor`, `ProcessResult`; PIL image ops, analysis utils |
 | G'MIC | `src/gmic/` | CLI wrapper, stdlib parser, pipeline builder |
 | ImageMagick | `src/imagemagick/` | CLI wrapper, built-in filter definitions |
 
-Node types: `InputNode`, `OutputNode`, `FilterNode`, `BlendNode`, `ColorNode`, `OpacityNode`, `ColoringNode`, `MaskNode`.
+Node types (58 classes): Input/Output, Filter, Blend, Opacity, Mask, Color Adjust (BrightnessContrast, Levels, HSL, ColorBalance, ExposureGamma, Curves), Color Source/Gradient/Noise, Transform (Crop, Resize, Rotate, Flip, Distort), Blur/Sharpen/EdgeDetect, Math/Logic (~20 operators), Raw I/O, Label/Comment, Analysis (Histogram, Waveform, Vectorscope, FrequencyDomain).
 
 ## Key conventions
 
