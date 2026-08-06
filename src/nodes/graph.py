@@ -95,6 +95,14 @@ class NodeGraph:
         self._edges.clear()
         self._edge_counter = 0
 
+    def replace_with(self, other: "NodeGraph"):
+        """Replace the contents of this graph with those of another graph."""
+        self._nodes.clear()
+        self._edges.clear()
+        self._nodes.update(other._nodes)
+        self._edges[:] = other._edges
+        self._edge_counter = other._edge_counter
+
     def add_node(self, node: Node):
         self._nodes[node.id] = node
 

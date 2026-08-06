@@ -209,6 +209,8 @@ class PatchworkWindow(Adw.ApplicationWindow):
 
     def _setup_menu(self):
         menu = Gio.Menu()
+        menu.append(_("Undo"), "win.undo")
+        menu.append(_("Redo"), "win.redo")
         menu.append(_("Open Project"), "win.open-project")
         menu.append(_("Save Project"), "win.save-project")
         menu.append(_("Preferences"), "win.preferences")
@@ -216,6 +218,8 @@ class PatchworkWindow(Adw.ApplicationWindow):
             self._menu_button.set_menu_model(menu)
 
         for name, handler, accel in [
+            ("undo", self._do_undo, "<primary>z"),
+            ("redo", self._do_redo, ["<primary><shift>z", "<primary>y"]),
             ("open-project", self._on_open_project, "<primary>o"),
             ("save-project", self._on_save_project, "<primary>s"),
             ("preferences", self._on_preferences, "<primary>comma"),
@@ -225,7 +229,16 @@ class PatchworkWindow(Adw.ApplicationWindow):
             self.add_action(action)
             app = self.get_application()
             if app:
-                app.set_accels_for_action(f"win.{name}", [accel])
+                accels = accel if isinstance(accel, list) else [accel]
+                app.set_accels_for_action(f"win.{name}", accels)
+
+    def _do_undo(self, action, param):
+        if self._canvas:
+            self._canvas.undo()
+
+    def _do_redo(self, action, param):
+        if self._canvas:
+            self._canvas.redo()
 
 
 
@@ -686,6 +699,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
             self._canvas._fit_content()
             self._canvas.queue_gl_render()
             self._canvas.emit("graph-changed")
+            self._canvas.reset_history()
         self._set_status(_("Project loaded"))
         self._update_render_button()
 

@@ -905,6 +905,7 @@ class NodeWidget(Gtk.Box):
         self._apply_minimize_state()
         self._canvas._update_port_centers(self._node)
         self._canvas.queue_gl_render()
+        self._canvas.emit("graph-changed")
 
     def toggle_minimize(self):
         if self._minimize_btn is None:
@@ -2245,6 +2246,7 @@ class NodeWidget(Gtk.Box):
         self._canvas.queue_gl_render()
         self._canvas._clamp_pan()
         self._canvas._update_all_positions()
+        self._canvas.emit("graph-changed")
 
     def _on_drag_begin(self, gesture, start_x, start_y):
         child = self.pick(start_x, start_y, Gtk.PickFlags.DEFAULT)
@@ -2303,6 +2305,7 @@ class NodeWidget(Gtk.Box):
         if self._canvas._dragging_node is self._node:
             self._canvas._dragging_node = None
         self._canvas._drag_group_starts.clear()
+        self._canvas.emit("graph-changed")
 
     def _on_click(self, gesture, n_press, x, y):
         event = gesture.get_last_event()
@@ -2713,6 +2716,12 @@ class NodeCanvas(Gtk.Overlay):
 
         self._clipboard: Optional[dict] = None
 
+        self._undo_stack: list[dict] = []
+        self._redo_stack: list[dict] = []
+        self._last_snapshot: Optional[dict] = None
+        self._suppress_history: bool = False
+        self._max_undo: int = 100
+
         self._filter_def_map: dict[str, FilterDef] = {}
         self._drag_preview: Optional[DragPreview] = None
         self._drag_insert_edge: Optional[Edge] = None
@@ -2785,6 +2794,69 @@ class NodeCanvas(Gtk.Overlay):
         for node in self._graph.nodes.values():
             self._add_node_widget(node)
         self.connect("realize", lambda *_: self._apply_zoom_css(self._zoom))
+        self.connect("graph-changed", self._on_canvas_graph_changed)
+
+    def _on_canvas_graph_changed(self, *args):
+        if self._suppress_history:
+            return
+        self._record_history()
+
+    def _record_history(self):
+        current = self._graph.to_dict()
+        if self._last_snapshot is None:
+            self._last_snapshot = current
+            return
+        if current == self._last_snapshot:
+            return
+        self._undo_stack.append(self._last_snapshot)
+        if len(self._undo_stack) > self._max_undo:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+        self._last_snapshot = current
+
+    def reset_history(self):
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._last_snapshot = self._graph.to_dict()
+
+    def undo(self):
+        if not self._undo_stack:
+            return
+        self._redo_stack.append(self._graph.to_dict())
+        target = self._undo_stack.pop()
+        self._apply_snapshot(target)
+        self._last_snapshot = target
+        self.grab_focus()
+        self.emit("graph-changed")
+
+    def redo(self):
+        if not self._redo_stack:
+            return
+        self._undo_stack.append(self._graph.to_dict())
+        target = self._redo_stack.pop()
+        self._apply_snapshot(target)
+        self._last_snapshot = target
+        self.grab_focus()
+        self.emit("graph-changed")
+
+    def _apply_snapshot(self, snapshot: dict):
+        self._suppress_history = True
+        try:
+            restored = NodeGraph.from_dict(snapshot, self._filter_def_map)
+            for w in list(self._node_widgets.values()):
+                w.free_animation()
+                self._fixed.remove(w)
+            self._node_widgets.clear()
+            self._selected_widgets.clear()
+            self._selected_port = None
+            self._drag_port = None
+            self._graph.replace_with(restored)
+            for node in self._graph.nodes.values():
+                self._add_node_widget(node)
+            self._update_all_port_colors()
+            self.queue_gl_render()
+        finally:
+            self._suppress_history = False
 
     def _update_zoom_label(self):
         pct = int(round(self._zoom * 100))
