@@ -249,6 +249,7 @@ class NodeGraph:
             from nodes.node_types import (
                 InputNode, RawInputNode, RawDecodeNode, FilterNode, BlendNode,
                 OpacityNode, MaskNode,
+                VideoInputNode, TimeNode,
                 BrightnessContrastNode, LevelsNode, HSLNode,
                 ColorSourceNode, GradientNode, NoiseNode,
                 ColorBalanceNode, ExposureGammaNode, CurvesNode,
@@ -264,6 +265,12 @@ class NodeGraph:
             )
             if isinstance(n, InputNode):
                 nd["params"]["file_path"] = n.file_path
+            elif isinstance(n, VideoInputNode):
+                nd["params"]["file_path"] = n.file_path
+            elif isinstance(n, TimeNode):
+                nd["params"]["mode"] = n.mode
+                nd["params"]["fps"] = n.fps
+                nd["params"]["length"] = n.length
             elif isinstance(n, RawInputNode):
                 nd["params"]["file_path"] = n.file_path
             elif isinstance(n, RawDecodeNode):
@@ -392,7 +399,7 @@ class NodeGraph:
     @staticmethod
     def from_dict(data: dict, filter_def_map: dict[str, "FilterDef"] = {}) -> "NodeGraph":
         from nodes.node_types import (
-            InputNode, RawInputNode, RawDecodeNode, OutputNode, FilterNode, BlendNode,
+            InputNode, VideoInputNode, TimeNode, RawInputNode, RawDecodeNode, OutputNode, FilterNode, BlendNode,
             OpacityNode, MaskNode,
             BrightnessContrastNode, LevelsNode, HSLNode,
             ColorSourceNode, GradientNode, NoiseNode,
@@ -416,6 +423,16 @@ class NodeGraph:
                 fp = params.get("file_path")
                 if fp:
                     node.file_path = fp
+            elif typ == "video_input":
+                node = VideoInputNode(nid, x, y)
+                fp = params.get("file_path")
+                if fp:
+                    node.file_path = fp
+            elif typ == "time":
+                node = TimeNode(nid, x, y)
+                node.mode = params.get("mode", node.mode)
+                node.fps = params.get("fps", node.fps)
+                node.length = params.get("length", node.length)
             elif typ == "raw_input":
                 node = RawInputNode(nid, x, y)
                 fp = params.get("file_path")
@@ -595,7 +612,7 @@ class NodeGraph:
                 node.height = nd.get("height", node.height)
                 node.minimized = nd.get("minimized", False)
                 label = nd.get("label")
-                if label and typ not in ("input", "raw_input"):
+                if label and typ not in ("input", "video_input", "raw_input"):
                     node.label = label
                 graph._nodes[node.id] = node
 

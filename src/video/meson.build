@@ -1,0 +1,5 @@
+python3 = import('python').find_installation('python3')
+python3.install_sources(
+  files('__init__.py', 'ffmpeg.py', 'renderer.py'),
+  subdir: 'patchwork/video',
+)

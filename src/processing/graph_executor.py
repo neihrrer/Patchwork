@@ -4,7 +4,7 @@ import tempfile
 from typing import Optional, Callable
 
 from nodes import (
-    NodeGraph, InputNode, RawInputNode, RawDecodeNode, OutputNode, FilterNode, BlendNode,
+    NodeGraph, InputNode, VideoInputNode, TimeNode, RawInputNode, RawDecodeNode, OutputNode, FilterNode, BlendNode,
     OpacityNode, MaskNode,
     BrightnessContrastNode, LevelsNode, HSLNode,
     ColorSourceNode, GradientNode, NoiseNode,
@@ -43,20 +43,37 @@ class GraphExecutor:
         self._gmic = gmic
         self._imagemagick = imagemagick
         self._output_paths: dict[str, str] = {}
+        self._ffmpeg: Optional[object] = None
+
+    def set_ffmpeg(self, ffmpeg):
+        self._ffmpeg = ffmpeg
 
     def execute(self, graph: NodeGraph, output_format: str = "png",
                 progress_callback: Optional[Callable[[str], None]] = None,
-                timeout: int = 120) -> ProcessResult:
+                timeout: int = 120, frame: int = 0,
+                force_refresh: bool = False,
+                cancel_event=None) -> ProcessResult:
         self._timeout = timeout
+        self._cancel_event = cancel_event
         self._output_paths = {}
         order = graph.topological_sort()
         if not order:
             return ProcessResult(error="Graph has no valid execution order (cycle or empty)")
 
+        def cancelled():
+            return self._cancel_event is not None and self._cancel_event.is_set()
+
+        if force_refresh:
+            for n in graph.nodes.values():
+                n.cache_dirty = True
+
         node_outputs: dict[str, str] = {}
         numeric_outputs: dict[str, float] = {}
 
         for node in order:
+            if cancelled():
+                return ProcessResult(error="Rendering cancelled", cancelled=True)
+
             if progress_callback:
                 progress_callback(f"Processing: {node.label}")
 
@@ -69,6 +86,26 @@ class GraphExecutor:
                     node.cache_dirty = False
                 else:
                     return ProcessResult(error=f"Input node '{node.label}' has no file set")
+
+            elif isinstance(node, TimeNode):
+                node._last_frame = frame
+                numeric_outputs[node.id] = node.value_for(frame)
+
+            elif isinstance(node, VideoInputNode):
+                if not node.file_path:
+                    return ProcessResult(error=f"Video Input node '{node.label}' has no file set")
+                if not os.path.isfile(node.file_path):
+                    return ProcessResult(error=f"Video file not found: {node.file_path}")
+                if not self._ffmpeg:
+                    return ProcessResult(error="Video input requires ffmpeg, which is not available")
+                fd, frame_path = tempfile.mkstemp(suffix=".png")
+                os.close(fd)
+                result = self._ffmpeg.extract_frame(node.file_path, frame, frame_path, timeout=timeout)
+                if not result.success:
+                    return ProcessResult(error=result.error, stdout=result.stdout, stderr=result.stderr)
+                node.cached_output_path = frame_path
+                node.cache_dirty = False
+                node_outputs[node.id] = frame_path
 
             elif isinstance(node, RawInputNode):
                 if node.file_path and os.path.isfile(node.file_path):

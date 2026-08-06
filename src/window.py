@@ -11,22 +11,27 @@ gi.require_version("Adw", "1")
 gi.require_version("GdkPixbuf", "2.0")
 
 from gi.repository import GLib, Gio, Gtk, Adw, GdkPixbuf
-from threading import Thread
+from threading import Event, Thread
 
 from config import AppConfig
-from models.app_state import VALID_OUTPUT_FORMATS
+
 from models.filter import FilterDef
 from gmic.cli import GmicCLI
 from imagemagick.cli import ImageMagickCLI
 from imagemagick.filters import get_builtin_filters as get_im_filters
 from nodes import (
-    NodeGraph, InputNode, RawInputNode, OutputNode, Node,
+    NodeGraph, InputNode, VideoInputNode, TimeNode, RawInputNode, OutputNode, Node,
     HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
 )
 from widgets.node_editor import NodeCanvas
 from widgets.filter_browser import FilterBrowser, set_pending_drag_text
 from processing.graph_executor import GraphExecutor
 from processing.runner import ProcessResult
+from video.ffmpeg import FfmpegCLI
+from video.renderer import (
+    AnimationSettings, render_frames, mux_animation,
+    FORMAT_MP4, FORMAT_GIF, FORMAT_PNG_SEQUENCE, VALID_ANIMATION_FORMATS,
+)
 
 try:
     _ = gettext.gettext
@@ -62,13 +67,14 @@ class PatchworkWindow(Adw.ApplicationWindow):
 
         self._gmic = GmicCLI()
         self._imagemagick = ImageMagickCLI()
+        self._ffmpeg = FfmpegCLI()
         self._graph = NodeGraph()
         self._executor = GraphExecutor(self._gmic, self._imagemagick)
+        self._executor.set_ffmpeg(self._ffmpeg)
         self._all_filter_defs: list[FilterDef] = []
         self._filter_def_map: dict[str, FilterDef] = {}
 
         self._config = AppConfig()
-        self._output_format: str = self._config.output_format
         self._canvas: Optional[NodeCanvas] = None
         self._filter_browser: Optional[FilterBrowser] = None
         self._result_pixbuf: Optional[GdkPixbuf.Pixbuf] = None
@@ -77,6 +83,8 @@ class PatchworkWindow(Adw.ApplicationWindow):
         self._auto_save_id: Optional[int] = None
         self._pending_graph: Optional["NodeGraph"] = None
         self._missing_images: list["InputNode"] = []
+        self._render_active: bool = False
+        self._render_cancel_event: Optional[Event] = None
 
 
 
@@ -225,20 +233,6 @@ class PatchworkWindow(Adw.ApplicationWindow):
         dialog = Adw.PreferencesDialog()
 
         page = Adw.PreferencesPage()
-        group = Adw.PreferencesGroup(
-            title=_("Output"),
-            description=_("Default image format for rendered results"),
-        )
-        formats = Gtk.StringList.new(VALID_OUTPUT_FORMATS)
-        row = Adw.ComboRow(
-            title=_("Output Format"),
-            model=formats,
-        )
-        row.set_selected(VALID_OUTPUT_FORMATS.index(self._output_format))
-        row.connect("notify::selected", self._on_output_format_changed)
-        group.add(row)
-        page.add(group)
-
         proc_group = Adw.PreferencesGroup(
             title=_("Processing"),
             description=_("Configure processing limits"),
@@ -329,12 +323,17 @@ class PatchworkWindow(Adw.ApplicationWindow):
         if self._minimap_switch:
             self._minimap_switch.set_active(minimap.get_visible())
 
-    def _on_output_format_changed(self, row, pspec):
-        self._output_format = VALID_OUTPUT_FORMATS[row.get_selected()]
-        self._config.output_format = self._output_format
-
     def _on_timeout_changed(self, row, pspec):
         self._config.processing_timeout = int(row.get_value())
+
+    def _clear_animation_result(self):
+        if getattr(self, "_canvas", None):
+            self._canvas.clear_node_animations()
+        anim = getattr(self, "_result_animation", None)
+        if anim:
+            anim.cleanup()
+            self._result_animation = None
+        self._result_pixbufs = {}
 
     def _on_snap_to_grid_changed(self, row, pspec):
         enabled = row.get_active()
@@ -405,13 +404,21 @@ class PatchworkWindow(Adw.ApplicationWindow):
     def _on_graph_changed(self, canvas):
         self._update_render_button()
         self._setup_auto_save()
+        self._clear_animation_result()
 
     def _update_render_button(self):
         order = self._graph.topological_sort()
         has_output = any(isinstance(n, OutputNode) for n in self._graph.nodes.values())
         can_render = len(order) > 0 and has_output
         if self._render_button:
-            self._render_button.set_sensitive(can_render)
+            if self._render_active:
+                self._render_button.set_sensitive(True)
+                self._render_button.set_icon_name("media-playback-pause-symbolic")
+                self._render_button.set_tooltip_text(_("Abort rendering"))
+            else:
+                self._render_button.set_sensitive(can_render)
+                self._render_button.set_icon_name("media-playback-start-symbolic")
+                self._render_button.set_tooltip_text(_("Render the node graph"))
 
     # ─── Open image ───────────────────────────────────────────────────────────
 
@@ -524,12 +531,23 @@ class PatchworkWindow(Adw.ApplicationWindow):
 
     def _on_input_node_open(self, canvas, node_id: str):
         node = self._graph.get_node(node_id)
-        if not node or not isinstance(node, (InputNode, RawInputNode)):
+        if not node or not isinstance(node, (InputNode, VideoInputNode, RawInputNode)):
             return
         is_raw = isinstance(node, RawInputNode)
         if is_raw:
             dialog = Gtk.FileDialog(
                 title=_("Select Raw File"),
+                modal=True,
+            )
+        elif isinstance(node, VideoInputNode):
+            file_filter = Gtk.FileFilter()
+            file_filter.set_name(_("Videos"))
+            for mime in ["video/mp4", "video/webm", "video/ogg", "video/quicktime",
+                         "video/x-matroska", "video/mpeg", "video/avi"]:
+                file_filter.add_mime_type(mime)
+            dialog = Gtk.FileDialog(
+                title=_("Select Video for Input"),
+                default_filter=file_filter,
                 modal=True,
             )
         else:
@@ -735,33 +753,162 @@ class PatchworkWindow(Adw.ApplicationWindow):
 
     # ─── Render ───────────────────────────────────────────────────────────────
 
+    def _is_animation_graph(self) -> bool:
+        return any(
+            isinstance(n, (TimeNode, VideoInputNode))
+            for n in self._graph.nodes.values()
+        )
+
+    def _animation_settings(self) -> AnimationSettings:
+        fps = 12
+        frame_count = 24
+        for n in self._graph.nodes.values():
+            if isinstance(n, TimeNode):
+                fps = int(n.fps) if n.fps else fps
+                frame_count = int(n.length) if n.length else frame_count
+                break
+        else:
+            for n in self._graph.nodes.values():
+                if isinstance(n, VideoInputNode) and n.file_path:
+                    info = self._ffmpeg.probe(n.file_path)
+                    if info:
+                        if info.get("fps"):
+                            fps = max(1, int(round(info["fps"])))
+                        if info.get("frame_count"):
+                            frame_count = info["frame_count"]
+                    break
+        frame_count = max(1, frame_count)
+        fps = max(1, fps)
+        return AnimationSettings(
+            frame_count=frame_count,
+            fps=fps,
+            out_format=FORMAT_MP4,
+            out_path="",
+        )
+
     def _on_render_clicked(self, button):
+        if self._render_active:
+            self._abort_render()
+            return
+
+        self._clear_animation_result()
+        self._render_active = True
+        self._render_cancel_event = Event()
         if self._render_button:
-            self._render_button.set_sensitive(False)
+            self._render_button.set_sensitive(True)
+            self._render_button.set_icon_name("media-playback-pause-symbolic")
+            self._render_button.set_tooltip_text(_("Abort rendering"))
         self._set_status(_("Rendering graph..."))
         self._status_spinner.set_spinning(True)
         self._progress_revealer.set_reveal_child(True)
         self._progress_bar.pulse()
 
         graph = self._graph
-        fmt = self._output_format
-
         timeout = self._config.processing_timeout
+        cancel_event = self._render_cancel_event
 
-        def work():
-            def progress(msg):
-                GLib.idle_add(self._set_status, msg)
-            result = self._executor.execute(graph, fmt, progress, timeout=timeout)
-            GLib.idle_add(self._finish_render, result)
+        if self._is_animation_graph():
+            settings = self._animation_settings()
+
+            def work():
+                def progress(msg):
+                    GLib.idle_add(self._set_status, msg)
+                try:
+                    result = render_frames(
+                        graph, self._executor, settings,
+                        progress_callback=progress, timeout=timeout,
+                        cancel_event=cancel_event,
+                    )
+                except Exception as e:
+                    result = ProcessResult(error=str(e))
+                GLib.idle_add(self._finish_animation_render, result, settings)
+        else:
+            fmt = "png"
+
+            def work():
+                def progress(msg):
+                    GLib.idle_add(self._set_status, msg)
+                try:
+                    result = self._executor.execute(graph, fmt, progress, timeout=timeout,
+                                                    cancel_event=cancel_event)
+                except Exception as e:
+                    result = ProcessResult(error=str(e))
+                GLib.idle_add(self._finish_render, result)
 
         Thread(target=work, daemon=True).start()
+
+    def _abort_render(self):
+        self._render_active = False
+        if self._render_cancel_event is not None:
+            self._render_cancel_event.set()
+        self._render_cancel_event = None
+        self._set_status(_("Aborting render..."))
+        self._update_render_button()
+
+    def _finish_animation_render(self, result: ProcessResult, settings: AnimationSettings):
+        self._progress_revealer.set_reveal_child(False)
+        self._status_spinner.set_spinning(False)
+        self._render_active = False
+        self._render_cancel_event = None
+        self._update_render_button()
+        if self._canvas:
+            self._canvas._update_all_port_colors()
+            for n in list(self._graph.nodes.values()):
+                if isinstance(n, TimeNode):
+                    self._canvas.update_node_display(n.id)
+
+        if result.cancelled:
+            settings.cleanup()
+            self._set_status(_("Rendering cancelled"))
+            return
+
+        if not result.success:
+            settings.cleanup()
+            self._set_status(_("Animation render failed"))
+            details = ""
+            if result.stdout:
+                details += result.stdout + "\n"
+            if result.stderr:
+                details += result.stderr
+            if not details:
+                details = result.error or ""
+            if details:
+                self._show_output(details.strip())
+            return
+
+        self._result_animation = settings
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file(settings.frames[-1])
+        except Exception:
+            pixbuf = None
+        self._result_pixbuf = pixbuf
+        self._result_pixbufs = {}
+        fps = int(settings.fps) or 1
+        if self._canvas:
+            for n in self._graph.nodes.values():
+                if isinstance(n, OutputNode):
+                    self._canvas.set_node_animation(n.id, settings.frames, fps)
+                    self._result_pixbufs[n.id] = pixbuf
+        if self._export_button:
+            self._export_button.set_sensitive(True)
+
+        self._set_status(_("Animation rendered ({} frames). Use Export to save.").format(len(settings.frames)))
+        toast = Adw.Toast(title=_("Animation rendered"), timeout=2)
+        if self._toast_overlay:
+            self._toast_overlay.add_toast(toast)
 
     def _finish_render(self, result: ProcessResult):
         self._progress_revealer.set_reveal_child(False)
         self._status_spinner.set_spinning(False)
+        self._render_active = False
+        self._render_cancel_event = None
         self._update_render_button()
         if self._canvas:
             self._canvas._update_all_port_colors()
+
+        if result.cancelled:
+            self._set_status(_("Rendering cancelled"))
+            return
 
         if not result.success:
             self._set_status(_("Render failed"))
@@ -810,7 +957,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
             # Update analysis node displays (no output port — must be done separately)
             if self._canvas and self._graph:
                 for n in list(self._graph.nodes.values()):
-                    if isinstance(n, (HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode)):
+                    if isinstance(n, (HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode, TimeNode)):
                         self._canvas.update_node_display(n.id)
 
             self._set_status(_("Render complete"))
@@ -820,33 +967,109 @@ class PatchworkWindow(Adw.ApplicationWindow):
         except Exception as e:
             self._show_error(str(e))
 
+    # ─── Animation export ────────────────────────────────────────────────────
+
+    _IMG_EXT = {
+        "png": "png", "jpeg": "jpg", "webp": "webp", "tiff": "tif", "bmp": "bmp",
+    }
+    _IMG_MIME = {
+        "png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp",
+        "tiff": "image/tiff", "bmp": "image/bmp",
+    }
+    _EXT_TO_FORMAT = {
+        ".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".webp": "webp",
+        ".tif": "tiff", ".tiff": "tiff", ".bmp": "bmp",
+    }
+
+    def _on_animation_export(self, result: AnimationSettings):
+        file_filter = Gtk.FileFilter()
+        file_filter.set_name(_("Animation"))
+        file_filter.add_suffix("mp4")
+        file_filter.add_suffix("gif")
+        chooser = Gtk.FileDialog(
+            title=_("Export Animation"),
+            default_filter=file_filter,
+            modal=True,
+            initial_name=_("animation.mp4"),
+        )
+        chooser.save(self, None, lambda d, r: self._on_animation_export_dest(result, d, r))
+
+    def _on_animation_export_dest(self, anim, dialog, result):
+        try:
+            file = dialog.save_finish(result)
+            if not file:
+                return
+            out_path = file.get_path() or ""
+        except GLib.Error:
+            return
+
+        anim.out_path = out_path
+        ext = (os.path.splitext(out_path)[1] or "").lower()
+        if ext == ".gif":
+            anim.out_format = FORMAT_GIF
+        elif ext == ".mp4":
+            anim.out_format = FORMAT_MP4
+        else:
+            anim.out_format = FORMAT_PNG_SEQUENCE
+        if self._export_button:
+            self._export_button.set_sensitive(False)
+        self._set_status(_("Exporting animation..."))
+        self._status_spinner.set_spinning(True)
+        self._progress_revealer.set_reveal_child(True)
+        self._progress_bar.pulse()
+
+        def work():
+            def progress(msg):
+                GLib.idle_add(self._set_status, msg)
+            res = mux_animation(self._ffmpeg, anim, progress_callback=progress)
+            GLib.idle_add(self._finish_animation_export, res, anim)
+
+        Thread(target=work, daemon=True).start()
+
+    def _finish_animation_export(self, result: ProcessResult, anim: AnimationSettings):
+        self._progress_revealer.set_reveal_child(False)
+        self._status_spinner.set_spinning(False)
+        if self._export_button:
+            self._export_button.set_sensitive(True)
+
+        if not result.success:
+            self._set_status(_("Animation export failed"))
+            details = ""
+            if result.stdout:
+                details += result.stdout + "\n"
+            if result.stderr:
+                details += result.stderr
+            if not details:
+                details = result.error or ""
+            if details:
+                self._show_output(details.strip())
+            return
+
+        self._set_status(_("Animation saved to {}").format(result.output_path))
+        toast = Adw.Toast(title=_("Animation exported"), timeout=3)
+        if self._toast_overlay:
+            self._toast_overlay.add_toast(toast)
+
     # ─── Export ───────────────────────────────────────────────────────────────
 
     def _on_export_clicked(self, button):
+        anim = getattr(self, "_result_animation", None)
+        if anim and anim.frames:
+            self._on_animation_export(anim)
+            return
         if not self._result_pixbuf:
             return
 
-        fmt = self._output_format
-        ext = fmt
-        ext_map = {"jpeg": "jpg"}
-        ext = ext_map.get(fmt, fmt)
-        mime_map = {
-            "png": "image/png",
-            "jpeg": "image/jpeg",
-            "tiff": "image/tiff",
-            "bmp": "image/bmp",
-            "webp": "image/webp",
-        }
-
         file_filter = Gtk.FileFilter()
-        file_filter.set_name(_("{} Image").format(fmt.upper()))
-        file_filter.add_mime_type(mime_map.get(fmt, "image/png"))
+        file_filter.set_name(_("Images"))
+        for fmt in ("png", "jpeg", "webp", "tiff", "bmp"):
+            file_filter.add_mime_type(self._IMG_MIME[fmt])
 
         dialog = Gtk.FileDialog(
             title=_("Export Result"),
             default_filter=file_filter,
             modal=True,
-            initial_name=f"output.{ext}",
+            initial_name=_("output.png"),
         )
         dialog.save(self, None, self._on_export_response)
 
@@ -855,13 +1078,14 @@ class PatchworkWindow(Adw.ApplicationWindow):
             file = dialog.save_finish(result)
             if not file:
                 return
-            fmt = self._output_format
             path = file.get_path()
+            fmt = self._format_from_path(path)
+            if fmt is None:
+                fmt = "png"
+            ext = "." + self._IMG_EXT[fmt]
 
             if len(self._result_pixbufs) > 1:
-                base, ext = os.path.splitext(path)
-                if not ext:
-                    ext = f".{fmt}"
+                base = os.path.splitext(path)[0]
                 saved = []
                 for i, (node_id, pixbuf) in enumerate(self._result_pixbufs.items()):
                     fname = f"{base}{ext}" if i == 0 else f"{base}_{i+1}{ext}"
@@ -875,6 +1099,10 @@ class PatchworkWindow(Adw.ApplicationWindow):
         except GLib.Error as e:
             if e.domain != "gtk-dialog-error-quark":
                 self._show_error(str(e))
+
+    def _format_from_path(self, path: str) -> Optional[str]:
+        ext = (os.path.splitext(path)[1] or "").lower()
+        return self._EXT_TO_FORMAT.get(ext)
 
     # ─── Filter loading ───────────────────────────────────────────────────────
 

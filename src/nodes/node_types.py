@@ -33,6 +33,50 @@ class InputNode(Node):
         self.cache_dirty = True
 
 
+class VideoInputNode(Node):
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        outputs = [
+            Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
+        ]
+        super().__init__(id, "Video Input", "video_input", [], outputs, x, y)
+        self.width = 180
+        self.height = 80
+        self._file_path: Optional[str] = None
+
+    @property
+    def file_path(self) -> Optional[str]:
+        return self._file_path
+
+    @file_path.setter
+    def file_path(self, value: Optional[str]):
+        self._file_path = value
+        if value:
+            self.label = os.path.basename(value)
+        self.cache_dirty = True
+
+
+class TimeNode(Node):
+    TIME_MODE_FRAME = "frame"
+    TIME_MODE_SECONDS = "seconds"
+
+    def __init__(self, id: str, x: float = 0, y: float = 0):
+        outputs = [
+            Port(id, "value", "Frame", PortDirection.OUTPUT, PortType.NUMERIC),
+        ]
+        super().__init__(id, "Clock", "time", [], outputs, x, y)
+        self.width = 180
+        self.height = 130
+        self.mode: str = self.TIME_MODE_FRAME
+        self.fps: float = 12.0
+        self.length: int = 24
+        self._last_frame: int = 0
+
+    def value_for(self, frame: int) -> float:
+        if self.mode == self.TIME_MODE_SECONDS:
+            return frame / self.fps if self.fps else 0.0
+        return float(frame)
+
+
 class RawInputNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
         outputs = [
@@ -520,6 +564,8 @@ LABEL_COLORS = [
 NODE_CATEGORY_MAP = {
     "input": "source", "color_source": "source",
     "gradient": "source", "noise": "source",
+    "video_input": "source",
+    "time": "math",
     "output": "output",
     "raw_input": "raw_input", "raw_decode": "raw_input",
     "filter": "effect",

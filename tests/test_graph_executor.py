@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+import threading
 
 from nodes import NodeGraph, InputNode, OutputNode, ConstantNode
 from nodes import (
@@ -86,6 +87,19 @@ class TestGraphExecutorCoreLogic:
         )
         with patch("os.path.isfile", return_value=True):
             result = executor.execute(graph_with_filter, "png", timeout=1)
+        assert result.success is False
+
+    def test_executor_cancel_returns_cancelled(self, graph_with_filter):
+        executor = make_executor()
+        executor._gmic.run_pipeline.return_value = MagicMock(
+            success=True, output_path="x.png", error="",
+            stdout="", stderr=""
+        )
+        ev = threading.Event()
+        ev.set()
+        with patch("os.path.isfile", return_value=True):
+            result = executor.execute(graph_with_filter, "png", cancel_event=ev)
+        assert result.cancelled is True
         assert result.success is False
 
     def test_subtract_node_no_crash(self):

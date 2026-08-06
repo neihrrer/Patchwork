@@ -55,6 +55,10 @@ _BASIC_SUBCATEGORIES = {
         ("gradient", "Gradient", "gradient"),
         ("noise", "Noise", "noise"),
     ],
+    "Animation": [
+        ("video_input", "Video Input", "video_input"),
+        ("time", "Clock", "time"),
+    ],
     "Adjust": [
         ("brightness_contrast", "Brightness/Contrast", "brightness_contrast"),
         ("levels", "Levels", "levels"),
@@ -546,6 +550,7 @@ class FilterBrowser(GObject.Object):
             "gradient": "gradient:",
             "noise": "noise:",
             "input": "input:",
+            "video_input": "video_input:",
             "raw_input": "raw_input:",
             "raw_decode": "raw_decode:",
             "output": "output:",
@@ -562,7 +567,8 @@ class FilterBrowser(GObject.Object):
                                "histogram", "waveform_monitor", "vectorscope",
                                "frequency_domain",
                                "not", "and", "or", "nand", "nor", "xor", "xnor",
-                               "compare", "clamp", "map_range"):
+                               "compare", "clamp", "map_range",
+                               "time"):
             return f"{node.node_type}:"
         return None
 

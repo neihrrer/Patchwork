@@ -17,7 +17,7 @@ except Exception:
     _ = lambda s: s
 
 from nodes import (
-    Node, NodeGraph, Edge, Port, PortDirection, PortType, FilterNode, InputNode, RawInputNode, RawDecodeNode, OutputNode, BlendNode,
+    Node, NodeGraph, Edge, Port, PortDirection, PortType, FilterNode, InputNode, VideoInputNode, TimeNode, RawInputNode, RawDecodeNode, OutputNode, BlendNode,
     OpacityNode, MaskNode,
     BrightnessContrastNode, LevelsNode, HSLNode,
     ColorSourceNode, GradientNode, NoiseNode,
@@ -240,6 +240,8 @@ _NODE_PREVIEW_INFO = {
     "gradient:": (_("Gradient"), "gradient"),
     "noise:": (_("Noise"), "noise"),
     "input:": (_("Input"), "input"),
+    "video_input:": (_("Video Input"), "video_input"),
+    "time:": (_("Clock"), "time"),
     "output:": (_("Output"), "output"),
     "constant:": (_("Constant"), "constant"),
     "add:": (_("Add"), "add"),
@@ -454,7 +456,19 @@ class NodeWidget(Gtk.Box):
         self._thumb_picture: Optional[Gtk.Picture] = None
         self._analysis_area: Optional[Gtk.DrawingArea] = None
         self._analysis_data: Optional[dict] = None
+        self._time_value_label: Optional[Gtk.Label] = None
         self._image_aspect: Optional[float] = None
+        self._anim_frames: list[str] = []
+        self._anim_fps: int = 1
+        self._anim_index: int = 0
+        self._anim_playing: bool = False
+        self._anim_timer_id: int = 0
+        self._anim_bar: Optional[Gtk.Box] = None
+        self._anim_scale: Optional[Gtk.Scale] = None
+        self._anim_frame_label: Optional[Gtk.Label] = None
+        self._anim_seek_guard: bool = False
+        self._anim_min_w = 340
+        self._anim_bar_h = 52
         self._resize_start_w = 0
         self._resize_start_h = 0
         self._resize_start_px = 0.0
@@ -1009,6 +1023,8 @@ class NodeWidget(Gtk.Box):
             self._build_edge_detect_params()
         elif isinstance(self._node, ConstantNode):
             self._build_constant_params()
+        elif isinstance(self._node, TimeNode):
+            self._build_time_params()
         elif isinstance(self._node, CompareNode):
             self._build_compare_params()
         elif isinstance(self._node, ClampNode):
@@ -1447,6 +1463,226 @@ class NodeWidget(Gtk.Box):
         self._ctrl_widgets.append(spin)
         self._port_spin_buttons["value"] = spin
         self._make_control_row("Value", "value", spin)
+
+    def _build_time_params(self):
+        node: TimeNode = self._node
+        modes = [_("Frame number"), _("Time (seconds)")]
+        mode_map = {
+            0: TimeNode.TIME_MODE_FRAME,
+            1: TimeNode.TIME_MODE_SECONDS,
+        }
+        combo = Gtk.DropDown.new_from_strings(modes)
+        keys = list(mode_map.keys())
+        values = list(mode_map.values())
+        combo.set_selected(keys[values.index(node.mode)] if node.mode in values else 0)
+        combo.connect("notify::selected",
+                      lambda c, _: self._set_time_mode(mode_map.get(c.get_selected(),
+                                TimeNode.TIME_MODE_FRAME)))
+        combo.set_css_classes(["node-param-control"])
+        self._ctrl_widgets.append(combo)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        row.set_css_classes(["node-param-row"])
+        row.set_margin_end(4)
+        lbl = Gtk.Label(label=_("Mode"), xalign=0)
+        lbl.set_css_classes(["node-param-label"])
+        row.append(lbl)
+        row.append(combo)
+        self.append(row)
+        self._param_controls.append(row)
+
+        fps_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        fps_lbl = Gtk.Label(label=_("FPS"), xalign=0)
+        fps_lbl.set_css_classes(["node-param-label"])
+        fps_row.append(fps_lbl)
+        fps_spin = Gtk.SpinButton(adjustment=Gtk.Adjustment(value=node.fps, lower=1, upper=120, step_increment=1), climb_rate=1, digits=1)
+        fps_spin.set_css_classes(["node-param-control"])
+        fps_spin.connect("value-changed", lambda s: setattr(node, "fps", s.get_value()))
+        fps_row.append(fps_spin)
+        len_lbl = Gtk.Label(label=_("Length"), xalign=0)
+        len_lbl.set_css_classes(["node-param-label"])
+        fps_row.append(len_lbl)
+        len_spin = Gtk.SpinButton(adjustment=Gtk.Adjustment(value=node.length, lower=1, upper=100000, step_increment=1), climb_rate=1, digits=0)
+        len_spin.set_css_classes(["node-param-control"])
+        len_spin.connect("value-changed", lambda s: setattr(node, "length", int(s.get_value())))
+        fps_row.append(len_spin)
+        self.append(fps_row)
+        self._param_controls.append(fps_row)
+
+        out_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        out_lbl = Gtk.Label(label=_("Output"), xalign=0)
+        out_lbl.set_css_classes(["node-param-label"])
+        out_row.append(out_lbl)
+        self._time_value_label = Gtk.Label(label=self._format_time_value(node))
+        self._time_value_label.set_css_classes(["node-param-value"])
+        out_row.append(self._time_value_label)
+        self.append(out_row)
+        self._param_controls.append(out_row)
+
+    def _set_time_mode(self, mode: str):
+        if isinstance(self._node, TimeNode):
+            self._node.mode = mode
+            self._refresh_time_value()
+        self._canvas._update_all_port_colors()
+
+    def _format_time_value(self, node) -> str:
+        if node is None:
+            return ""
+        return f"{node.value_for(node._last_frame):.4g}"
+
+    def _refresh_time_value(self):
+        if self._time_value_label is not None and isinstance(self._node, TimeNode):
+            self._time_value_label.set_label(self._format_time_value(self._node))
+
+    def set_animation(self, frames: list[str], fps: int):
+        self.free_animation()
+        self._anim_frames = list(frames)
+        self._anim_fps = max(1, int(fps or 1))
+        self._anim_index = 0
+        if not self._anim_frames or not self._thumb_box or not self._thumb_overlay:
+            return
+        if self._anim_bar is None:
+            self._build_animation_bar()
+        self._anim_bar.set_visible(True)
+        if not self._node.minimized:
+            self._logical_w = max(int(self._node.width or 240), self._anim_min_w)
+            self._node.width = self._logical_w
+        self._update_animation_frame(0)
+
+    def free_animation(self):
+        self._anim_playing = False
+        if self._anim_timer_id:
+            GLib.source_remove(self._anim_timer_id)
+            self._anim_timer_id = 0
+        if self._anim_bar is not None:
+            self._anim_bar.set_visible(False)
+        self._anim_frames = []
+        self._anim_index = 0
+
+    def _build_animation_bar(self):
+        negate = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        negate.set_halign(Gtk.Align.FILL)
+        negate.set_valign(Gtk.Align.END)
+        negate.set_hexpand(True)
+        negate.add_css_class("animation-player-bar")
+
+        to_start = Gtk.Button(icon_name="media-skip-backward-symbolic")
+        to_start.set_css_classes(["player-btn"])
+        to_start.connect("clicked", lambda b: self._seek_animation(0))
+        back = Gtk.Button(icon_name="media-seek-backward-symbolic")
+        back.set_css_classes(["player-btn"])
+        back.connect("clicked", lambda b: self._step_animation(-1))
+        self._play_btn = Gtk.ToggleButton(icon_name="media-playback-start-symbolic")
+        self._play_btn.set_css_classes(["player-btn"])
+        self._play_btn.connect("toggled", self._on_play_toggled)
+        fwd = Gtk.Button(icon_name="media-seek-forward-symbolic")
+        fwd.set_css_classes(["player-btn"])
+        fwd.connect("clicked", lambda b: self._step_animation(1))
+        to_end = Gtk.Button(icon_name="media-skip-forward-symbolic")
+        to_end.set_css_classes(["player-btn"])
+        to_end.connect("clicked", lambda b: self._seek_animation(len(self._anim_frames) - 1))
+
+        negate.append(to_start)
+        negate.append(back)
+        negate.append(self._play_btn)
+        negate.append(fwd)
+        negate.append(to_end)
+
+        max_idx = max(0, len(self._anim_frames) - 1)
+        adj = Gtk.Adjustment(value=0, lower=0, upper=max_idx, step_increment=1, page_increment=5)
+        self._anim_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=adj)
+        self._anim_scale.set_draw_value(False)
+        self._anim_scale.set_hexpand(True)
+        self._anim_scale.connect("value-changed", self._on_anim_scale_changed)
+        negate.append(self._anim_scale)
+
+        self._anim_frame_label = Gtk.Label(label=f"1/{len(self._anim_frames)}")
+        self._anim_frame_label.add_css_class("dim-label")
+        negate.append(self._anim_frame_label)
+
+        self.append(negate)
+        if self._thumb_box:
+            self.reorder_child_after(negate, self._thumb_box)
+        self._anim_bar = negate
+
+    def _step_animation(self, delta: int):
+        self._seek_animation(self._anim_index + delta)
+
+    def _seek_animation(self, index: int):
+        if not self._anim_frames:
+            return
+        self._update_animation_frame(index)
+
+    def _on_anim_scale_changed(self, scale):
+        if self._anim_seek_guard or not self._anim_frames:
+            return
+        self._update_animation_frame(int(scale.get_value()))
+
+    def _on_play_toggled(self, btn):
+        if btn.get_active():
+            if not self._anim_playing:
+                self._anim_playing = True
+                if not self._anim_frames:
+                    btn.set_active(False)
+                    return
+                delay = max(16, int(round(1000.0 / self._anim_fps)))
+                self._anim_timer_id = GLib.timeout_add(delay, self._anim_tick)
+                self._play_btn.set_icon_name("media-playback-pause-symbolic")
+        else:
+            self._anim_playing = False
+            if self._anim_timer_id:
+                GLib.source_remove(self._anim_timer_id)
+                self._anim_timer_id = 0
+            self._play_btn.set_icon_name("media-playback-start-symbolic")
+
+    def _anim_tick(self):
+        if not self._anim_playing or not self._anim_frames:
+            self._anim_timer_id = 0
+            return GLib.SOURCE_REMOVE
+        n = len(self._anim_frames)
+        if self._anim_index + 1 >= n:
+            self._anim_playing = False
+            self._anim_index = n - 1
+            if self._play_btn:
+                self._play_btn.set_active(False)
+                self._play_btn.set_icon_name("media-playback-start-symbolic")
+            self._anim_timer_id = 0
+            return GLib.SOURCE_REMOVE
+        self._update_animation_frame(self._anim_index + 1)
+        return GLib.SOURCE_CONTINUE
+
+    def _update_animation_frame(self, index: int):
+        if not self._anim_frames:
+            return
+        n = len(self._anim_frames)
+        index = max(0, min(n - 1, int(index)))
+        self._anim_index = index
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file(self._anim_frames[index])
+        except Exception:
+            pixbuf = None
+        if pixbuf is not None and self._thumb_picture is not None:
+            self._thumb_picture.set_paintable(Gdk.Texture.new_for_pixbuf(pixbuf))
+            self._has_image = True
+            if not self._node.minimized:
+                self._thumb_box.set_visible(True)
+                self._resize_handle.set_visible(True)
+                if self._image_aspect is None:
+                    w = pixbuf.get_width()
+                    h = pixbuf.get_height()
+                    if w > 0 and h > 0:
+                        self._image_aspect = w / h
+                        self._logical_w = max(int(self._node.width or 240), self._anim_min_w)
+                        img_h = int(self._logical_w / self._image_aspect)
+                        self._logical_h = max(160, img_h + self._anim_bar_h)
+                        self._node.width = self._logical_w
+                        self._node.height = self._logical_h
+                        self.apply_zoom(self._canvas._zoom)
+        if self._anim_scale is not None:
+            self._anim_seek_guard = True
+            self._anim_scale.set_value(index)
+            self._anim_seek_guard = False
+        if self._anim_frame_label is not None:
+            self._anim_frame_label.set_label(f"{index + 1}/{n}")
 
     def _build_compare_params(self):
         node: CompareNode = self._node
@@ -2079,7 +2315,7 @@ class NodeWidget(Gtk.Box):
         elif not self._selected:
             self._canvas.select_node(self)
         self._canvas.grab_focus()
-        if isinstance(self._node, (InputNode, RawInputNode)) and not self._node.file_path:
+        if isinstance(self._node, (InputNode, VideoInputNode, RawInputNode)) and not self._node.file_path:
             if hasattr(self, '_header') and self._header:
                 h = self._header.get_allocation().height
                 if 0 <= y < h:
@@ -2658,6 +2894,7 @@ class NodeCanvas(Gtk.Overlay):
 
     def clear_all(self):
         for w in self._node_widgets.values():
+            w.free_animation()
             self._fixed.remove(w)
         self._node_widgets.clear()
         self._selected_widgets.clear()
@@ -2670,6 +2907,7 @@ class NodeCanvas(Gtk.Overlay):
     def remove_node(self, node_id: str):
         w = self._node_widgets.pop(node_id, None)
         if w:
+            w.free_animation()
             self._fixed.remove(w)
             self._selected_widgets.discard(w)
             if self._dragging_node is w.graph_node:
@@ -2845,7 +3083,9 @@ class NodeCanvas(Gtk.Overlay):
 
         if _is_analysis_node(node) and hasattr(node, 'analysis_data') and node.analysis_data:
             w.set_analysis_data(node.analysis_data)
-        elif isinstance(node, InputNode):
+        elif isinstance(node, TimeNode):
+            w._refresh_time_value()
+        elif isinstance(node, (InputNode, VideoInputNode)):
             path = node.file_path
             if path:
                 try:
@@ -2880,6 +3120,16 @@ class NodeCanvas(Gtk.Overlay):
                     pixbuf = pixbuf.scale_simple(int(wgt * scale), int(hgt * scale), GdkPixbuf.InterpType.TILES)
                 w.set_thumbnail(pixbuf)
             self.queue_gl_render()
+
+    def set_node_animation(self, node_id: str, frames: list[str], fps: int):
+        w = self._node_widgets.get(node_id)
+        if w:
+            w.set_animation(frames, fps)
+            self.queue_gl_render()
+
+    def clear_node_animations(self):
+        for w in self._node_widgets.values():
+            w.free_animation()
 
     def set_filter_defs(self, defs: list["FilterDef"]):
         self._filter_def_map.clear()
@@ -2955,15 +3205,30 @@ class NodeCanvas(Gtk.Overlay):
 
     # ─── Wire-insert helpers ───────────────────────────────────────────────────
 
-    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:", "color_source:", "gradient:", "noise:", "color_balance:", "exposure_gamma:", "curves:", "crop:", "resize:", "rotate:", "flip:", "distort:", "blur:", "sharpen:", "edge_detect:", "histogram:", "waveform_monitor:", "vectorscope:", "frequency_domain:", "not:", "and:", "or:", "nand:", "nor:", "xor:", "xnor:", "compare:", "clamp:", "map_range:", "modulo:", "power:", "square_root:", "absolute:", "log:", "exp:", "random:"})
+    _INSERTABLE_PREFIXES = frozenset({"blend:", "opacity:", "mask:", "filter:", "brightness_contrast:", "levels:", "hsl:", "color_balance:", "exposure_gamma:", "curves:", "crop:", "resize:", "rotate:", "flip:", "distort:", "blur:", "sharpen:", "edge_detect:", "histogram:", "waveform_monitor:", "vectorscope:", "frequency_domain:"})
 
-    def _is_insertable_node(self, text: str) -> bool:
-        return any(text.startswith(p) for p in self._INSERTABLE_PREFIXES)
+    _NUMERIC_INSERTABLE_PREFIXES = frozenset({"add:", "subtract:", "multiply:", "divide:", "ceil:", "floor:", "round:", "sum:", "product:", "not:", "and:", "or:", "nand:", "nor:", "xor:", "xnor:", "compare:", "clamp:", "map_range:", "modulo:", "power:", "square_root:", "absolute:", "log:", "exp:", "random:", "constant:"})
+
+    def _node_insert_type(self, text: str) -> Optional[str]:
+        if any(text.startswith(p) for p in self._NUMERIC_INSERTABLE_PREFIXES):
+            return PortType.NUMERIC
+        if any(text.startswith(p) for p in self._INSERTABLE_PREFIXES):
+            return PortType.IMAGE
+        return None
+
+    def _node_insert_ports(self, new_node):
+        for ptype in (PortType.IMAGE, PortType.NUMERIC):
+            inp = next((p for p in new_node.inputs if p.port_type == ptype), None)
+            if inp:
+                outp = next((p for p in new_node.outputs if p.port_type == ptype), None)
+                return inp, outp, ptype
+        return None, None, None
 
     def _update_drag_insert_edge(self, text: str, x: float, y: float):
         prev = self._drag_insert_edge
         self._drag_insert_edge = None
-        if self._is_insertable_node(text):
+        ptype = self._node_insert_type(text)
+        if ptype is not None:
             edge = self._find_edge_at(x, y, threshold=30.0)
             if edge:
                 src_n = self._graph.get_node(edge.src_node)
@@ -2971,7 +3236,7 @@ class NodeCanvas(Gtk.Overlay):
                 if src_n and dst_n:
                     src_p = src_n.get_output_port(edge.src_port)
                     dst_p = dst_n.get_input_port(edge.dst_port)
-                    if src_p and dst_p and src_p.port_type == PortType.IMAGE and dst_p.port_type == PortType.IMAGE:
+                    if src_p and dst_p and src_p.port_type == ptype and dst_p.port_type == ptype:
                         self._drag_insert_edge = edge
                         self._drag_insert_pos = (x, y)
         if prev is not self._drag_insert_edge:
@@ -3016,22 +3281,13 @@ class NodeCanvas(Gtk.Overlay):
                 if w:
                     self.update_node_position(w)
 
-    def _insert_new_node_into_edge(self, edge: Edge, new_node_id: str):
+    def _insert_new_node_into_edge(self, edge: Edge, new_node_id: str, ptype: str = PortType.IMAGE):
         graph = self._graph
         new_node = graph.get_node(new_node_id)
         if not new_node:
             return
-        img_input = None
-        for p in new_node.inputs:
-            if p.port_type == PortType.IMAGE:
-                img_input = p
-                break
-        img_output = None
-        for p in new_node.outputs:
-            if p.port_type == PortType.IMAGE:
-                img_output = p
-                break
-        if not img_input:
+        inp, outp, _ = self._node_insert_ports(new_node)
+        if not inp:
             return
 
         src_node = graph.get_node(edge.src_node)
@@ -3039,8 +3295,8 @@ class NodeCanvas(Gtk.Overlay):
         if not src_node or not dst_node:
             return
 
-        if not img_output:
-            e = graph.add_edge(edge.src_node, edge.src_port, new_node_id, img_input.name)
+        if not outp:
+            e = graph.add_edge(edge.src_node, edge.src_port, new_node_id, inp.name)
             if e:
                 self._update_all_port_colors()
                 self.emit("graph-changed")
@@ -3064,8 +3320,8 @@ class NodeCanvas(Gtk.Overlay):
             self._shift_downstream(edge.dst_node, need_right)
 
         graph.remove_edge(edge.id)
-        e1 = graph.add_edge(edge.src_node, edge.src_port, new_node_id, img_input.name)
-        e2 = graph.add_edge(new_node_id, img_output.name, edge.dst_node, edge.dst_port)
+        e1 = graph.add_edge(edge.src_node, edge.src_port, new_node_id, inp.name)
+        e2 = graph.add_edge(new_node_id, outp.name, edge.dst_node, edge.dst_port)
         if e1 and e2:
             self._update_all_port_colors()
             self.emit("graph-changed")
@@ -3074,6 +3330,12 @@ class NodeCanvas(Gtk.Overlay):
             graph.add_edge(edge.src_node, edge.src_port, edge.dst_node, edge.dst_port)
 
     def _try_insert_at(self, x: float, y: float, new_node_id: str):
+        new_node = self._graph.get_node(new_node_id)
+        if not new_node:
+            return
+        inp, outp, ptype = self._node_insert_ports(new_node)
+        if not inp:
+            return
         edge = self._find_edge_at(x, y, threshold=30.0)
         if not edge:
             return
@@ -3083,9 +3345,9 @@ class NodeCanvas(Gtk.Overlay):
             return
         src_p = src_n.get_output_port(edge.src_port)
         dst_p = dst_n.get_input_port(edge.dst_port)
-        if not src_p or not dst_p or src_p.port_type != PortType.IMAGE or dst_p.port_type != PortType.IMAGE:
+        if not src_p or not dst_p or src_p.port_type != ptype or dst_p.port_type != ptype:
             return
-        self._insert_new_node_into_edge(edge, new_node_id)
+        self._insert_new_node_into_edge(edge, new_node_id, ptype)
 
     def _build_node_from_drag_text(self, text: str, gx: float, gy: float) -> Optional[Node]:
         node = None
@@ -3123,6 +3385,12 @@ class NodeCanvas(Gtk.Overlay):
         elif text.startswith("input:"):
             nid = "input_" + str(GLib.get_monotonic_time())
             node = InputNode(nid, gx, gy)
+        elif text.startswith("video_input:"):
+            nid = "video_input_" + str(GLib.get_monotonic_time())
+            node = VideoInputNode(nid, gx, gy)
+        elif text.startswith("time:"):
+            nid = "time_" + str(GLib.get_monotonic_time())
+            node = TimeNode(nid, gx, gy)
         elif text.startswith("output:"):
             nid = "output_" + str(GLib.get_monotonic_time())
             node = OutputNode(nid, gx, gy)
@@ -3499,6 +3767,26 @@ class NodeCanvas(Gtk.Overlay):
             if w:
                 self.select_node(w)
             return True
+        elif text and text.startswith("video_input:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "video_input_" + str(GLib.get_monotonic_time())
+            node = VideoInputNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
+        elif text and text.startswith("time:"):
+            gx = (x - self._pan_x) / self._zoom
+            gy = (y - self._pan_y) / self._zoom
+            nid = "time_" + str(GLib.get_monotonic_time())
+            node = TimeNode(nid, gx, gy)
+            self.add_node(node)
+            w = self.get_node_widget(nid)
+            if w:
+                self.select_node(w)
+            return True
         elif text and text.startswith("output:"):
             gx = (x - self._pan_x) / self._zoom
             gy = (y - self._pan_y) / self._zoom
@@ -3529,6 +3817,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("add:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3539,6 +3828,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("subtract:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3549,6 +3839,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("multiply:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3559,6 +3850,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("divide:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3569,6 +3861,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("ceil:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3579,6 +3872,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("floor:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3589,6 +3883,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("round:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3599,6 +3894,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("sum:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3609,6 +3905,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("product:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3619,6 +3916,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("not:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3629,6 +3927,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("and:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3639,6 +3938,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("or:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3649,6 +3949,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("nand:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3659,6 +3960,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("nor:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3669,6 +3971,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("xor:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3679,6 +3982,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("xnor:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3689,6 +3993,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("compare:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3699,6 +4004,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("clamp:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3709,6 +4015,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("map_range:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3719,6 +4026,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("modulo:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3729,6 +4037,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("power:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3739,6 +4048,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("square_root:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3749,6 +4059,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("absolute:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3759,6 +4070,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("log:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3769,6 +4081,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("exp:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3779,6 +4092,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("random:"):
             gx = (x - self._pan_x) / self._zoom
@@ -3789,6 +4103,7 @@ class NodeCanvas(Gtk.Overlay):
             w = self.get_node_widget(nid)
             if w:
                 self.select_node(w)
+            self._try_insert_at(x, y, nid)
             return True
         elif text and text.startswith("label:"):
             gx = (x - self._pan_x) / self._zoom
@@ -4334,7 +4649,7 @@ class NodeCanvas(Gtk.Overlay):
                 BlurNode, SharpenNode, EdgeDetectNode,
                 ConstantNode, LabelNode, CommentNode,
             )
-            if isinstance(n, InputNode):
+            if isinstance(n, (InputNode, VideoInputNode)):
                 nd["params"]["file_path"] = n.file_path
             elif isinstance(n, FilterNode):
                 nd["params"]["filter_key"] = f"{n.filter_def.engine}:{n.filter_def.name}"
@@ -4434,7 +4749,7 @@ class NodeCanvas(Gtk.Overlay):
         if not self._clipboard:
             return
         from nodes.node_types import (
-            InputNode, OutputNode, FilterNode, BlendNode,
+            InputNode, VideoInputNode, TimeNode, OutputNode, FilterNode, BlendNode,
             OpacityNode, MaskNode,
             BrightnessContrastNode, LevelsNode, HSLNode,
             ColorSourceNode, GradientNode, NoiseNode,
@@ -4484,6 +4799,13 @@ class NodeCanvas(Gtk.Overlay):
                 fp = params.get("file_path")
                 if fp:
                     node.file_path = fp
+            elif typ == "video_input":
+                node = VideoInputNode(nid, x, y)
+                fp = params.get("file_path")
+                if fp:
+                    node.file_path = fp
+            elif typ == "time":
+                node = TimeNode(nid, x, y)
             elif typ == "output":
                 node = OutputNode(nid, x, y)
             elif typ == "filter":

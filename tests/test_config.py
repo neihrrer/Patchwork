@@ -8,7 +8,6 @@ class TestAppConfig:
         config_path = tmp_path / "config.json"
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
-        assert cfg.output_format == "png"
         assert cfg.processing_timeout == 60
         assert cfg.auto_save_interval == 0
         assert cfg.grid_visible is True
@@ -20,24 +19,24 @@ class TestAppConfig:
         config_path = tmp_path / "config.json"
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
-        cfg.output_format = "jpeg"
+        cfg.processing_timeout = 300
         cfg.auto_save_interval = 5
         cfg2 = AppConfig(path=str(config_path))
-        assert cfg2.output_format == "jpeg"
+        assert cfg2.processing_timeout == 300
         assert cfg2.auto_save_interval == 5
 
     def test_missing_file_uses_defaults(self, tmp_path):
         config_path = tmp_path / "nonexistent.json"
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
-        assert cfg.output_format == "png"
+        assert cfg.grid_visible is True
 
     def test_partial_file_merges(self, tmp_path):
         config_path = tmp_path / "config.json"
-        config_path.write_text(json.dumps({"output_format": "webp"}))
+        config_path.write_text(json.dumps({"auto_save_interval": 9}))
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
-        assert cfg.output_format == "webp"
+        assert cfg.auto_save_interval == 9
         assert cfg.processing_timeout == 60
 
     def test_corrupted_file_falls_back(self, tmp_path):
@@ -45,13 +44,13 @@ class TestAppConfig:
         config_path.write_text("not valid json")
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
-        assert cfg.output_format == "png"
+        assert cfg.snap_to_grid is False
 
     def test_attribute_access(self, tmp_path):
         config_path = tmp_path / "config.json"
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
-        assert cfg.output_format == "png"
+        assert cfg.minimap_visible is False
         with pytest.raises(AttributeError):
             _ = cfg.nonexistent_key
 
@@ -74,10 +73,10 @@ class TestAppConfig:
         config_path = tmp_path / "config.json"
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
-        cfg.output_format = "tiff"
+        cfg.auto_save_interval = 5
         cfg.grid_visible = False
         cfg.minimap_visible = True
         cfg2 = AppConfig(path=str(config_path))
-        assert cfg2.output_format == "tiff"
+        assert cfg2.auto_save_interval == 5
         assert cfg2.grid_visible is False
         assert cfg2.minimap_visible is True

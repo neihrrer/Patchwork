@@ -3,12 +3,14 @@ from typing import Optional
 
 class ProcessResult:
     def __init__(self, output_path: Optional[str] = None, error: str = "", stdout: str = "",
-                 stderr: str = "", output_paths: Optional[dict[str, str]] = None):
+                 stderr: str = "", output_paths: Optional[dict[str, str]] = None,
+                 cancelled: bool = False):
         self.output_path = output_path
         self.error = error
         self.stdout = stdout
         self.stderr = stderr
         self.output_paths = output_paths or {}
+        self.cancelled = cancelled
 
     @property
     def success(self) -> bool:
