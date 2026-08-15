@@ -26,12 +26,6 @@
 
 ## Installation
 
-### Flatpak (recommended)
-
-```bash
-# Once published on Flathub:
-flatpak install flathub org.patchwork.Patchwork
-flatpak run org.patchwork.Patchwork
 ```
 
 ### From source (Meson)
