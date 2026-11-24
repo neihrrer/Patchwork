@@ -1,6 +1,6 @@
 id: org.patchwork.Patchwork
 runtime: org.gnome.Platform
-runtime-version: '50'
+runtime-version: '51'
 sdk: org.gnome.Sdk
 command: patchwork
 
@@ -16,27 +16,29 @@ modules:
   - name: python3-Pillow
     buildsystem: simple
     build-commands:
-      - pip3 install --prefix=/app --no-build-isolation --no-deps Pillow
+      - pip3 install --prefix=/app --no-build-isolation --no-deps "Pillow>=10.0"
 
   - name: blueprint-compiler
     buildsystem: meson
     sources:
       - type: git
         url: https://gitlab.gnome.org/jwestman/blueprint-compiler.git
-        tag: v0.12.0
+        tag: v0.22.2
 
   - name: gmic
     buildsystem: cmake
     builddir: true
     config-opts:
-      - -DBUILD_LIBS=OFF
-      - -DENABLE_FFMPEG=OFF
-      - -DENABLE_GRAPHICS_MAGICK=OFF
-      - -DENABLE_QT=OFF
+      - -DBUILD_LIB=OFF
+      - -DBUILD_LIB_STATIC=ON
+      - -DBUILD_CLI=ON
+      - -DBUILD_MAN=OFF
+      - -DBUILD_BASH_COMPLETION=OFF
+      - -DENABLE_LTO=ON
     sources:
       - type: git
         url: https://github.com/GreycLab/gmic.git
-        tag: v3.4.3
+        tag: v.4.0.8
 
   - name: patchwork
     buildsystem: meson
