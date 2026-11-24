@@ -10,7 +10,7 @@ meson setup build && meson compile -C build && sudo meson install -C build   # f
 
 ## Testing
 
-16 test files in `tests/` using **pytest** (249 tests).
+17 test files in `tests/` using **pytest** (302 tests, including the filter suite once `gmic` and `magick` are installed).
 
 ```bash
 python3 -m pytest tests/ -q                  # all tests (fast, no CLI needed)
@@ -31,7 +31,7 @@ CI uses `python3 -m py_compile` on 3 files (no formatter, no type checker, no li
 python3 -m py_compile src/main.py src/application.py src/window.py
 ```
 
-CI runs in Fedora 40 container.
+CI runs in a Fedora 45 container: `meson` build, `py_compile` lint, then `pytest`.
 
 ## Build system
 
@@ -46,7 +46,7 @@ CI runs in Fedora 40 container.
 |-------|-----------|------|
 | Entry | `src/main.py` → `application.py` → `window.py` | App lifecycle, main window |
 | Models | `src/models/` | `FilterDef` (GObject), `ParamDef`, `AppState` |
-| Graph | `src/nodes/` | `NodeGraph`, `Port`, `Edge`, 58 node type classes |
+| Graph | `src/nodes/` | `NodeGraph`, `Port`, `Edge`, 60 node type classes |
 | Widgets | `src/widgets/` | `FilterBrowser`, `NodeCanvas`, `NodeWidget`, `PortWidget`, `Minimap` |
 | Processing | `src/processing/` | `GraphExecutor`, `ProcessResult`; PIL image ops, analysis utils |
 | G'MIC | `src/gmic/` | CLI wrapper, stdlib parser, pipeline builder |
@@ -66,6 +66,7 @@ Node types (58 classes): Input/Output, Filter, Blend, Opacity, Mask, Color Adjus
 ## Gotchas
 
 - `./run.sh` requires `blueprint-compiler` on `$PATH`; falls back to existing `build/resources/*.ui`
-- Rendering requires `gmic` and/or `magick` CLIs — tests do not
+- Rendering requires `gmic` and/or `magick` CLIs; the filter tests skip when they are missing
+- The G'MIC filter list is downloaded from the tag matching the installed `gmic` version (`master` when undetectable) and cached in `~/.cache/patchwork/stdlib` — see `src/gmic/stdlib.py`
 - Only one branch: `master`; tags use `v*` pattern for releases
 - Flatpak manifest at `flatpak/org.patchwork.Patchwork.yml`

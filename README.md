@@ -20,13 +20,11 @@
 | Libadwaita | 1.0 | via PyGObject |
 | PyGObject | 3.50 | Python GTK bindings |
 | Pillow | 10.0 | Python imaging library |
-| G'MIC (`gmic`) | any | CLI — required for G'MIC filters |
+| G'MIC (`gmic`) | any | CLI — required for G'MIC filters; the filter list is fetched for the installed version |
 | ImageMagick (`magick`) | any | CLI — required for blends, color ops, masks |
 | blueprint-compiler | any | Build-time only |
 
 ## Installation
-
-```
 
 ### From source (Meson)
 
@@ -57,6 +55,14 @@ sudo meson install -C build
 ```
 
 This compiles the UI blueprints on the fly and launches Patchwork directly from the source tree.
+
+### Running the tests
+
+```bash
+python3 -m pytest tests/ -q
+```
+
+The filter suites exercise the installed `gmic` and `magick` CLIs and are skipped when those are unavailable.
 
 ## Getting started
 
