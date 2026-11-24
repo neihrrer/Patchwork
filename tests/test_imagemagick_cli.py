@@ -46,6 +46,7 @@ class TestBuildArgs:
         ("contrast_stretch", ["5", "245"], [("-contrast-stretch", "5%,245%")]),
         ("canny_edge", ["1", "1.0", "10", "30"], [("-canny", "1x1.0+10%+30%")]),
         ("charcoal", ["2"], [("-charcoal", "2")]),
+        ("charcoal", ["2.0", "1.0"], [("-charcoal", "2.0x1.0")]),
         ("oil", ["3"], [("-paint", "3")]),
         ("emboss", ["1"], [("-emboss", "1")]),
         ("edge", ["1"], [("-edge", "1")]),

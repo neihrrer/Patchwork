@@ -107,7 +107,7 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
         val = raw_params[0] if raw_params else None
         return [("-edge", val)]
     elif op == "charcoal":
-        val = raw_params[0] if raw_params else None
+        val = _join_params_raw(raw_params, "x", 2) if raw_params else None
         return [("-charcoal", val)]
     elif op == "oil":
         val = raw_params[0] if raw_params else None
