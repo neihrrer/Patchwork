@@ -165,6 +165,22 @@ def _parse_gui_params(text: str):
     return GmicFilterParser().parse_gui(gui)[0].parameters
 
 
+class TestParameterSeparators:
+    def test_separator_before_a_parameter_does_not_leak_into_its_name(self):
+        # 'sep = separator(), Preview type = choice(...)' used to name the
+        # parameter ', Preview type'.
+        params = _parse_gui_params(
+            '#@gui : sep = separator(), Preview type = choice("Full","Half")\n'
+            '#@gui : Amount = float(1,0,2)\n')
+        assert [p.name for p in params] == ["Preview type", "Amount"]
+        assert params[0].kind == "choice"
+
+    def test_note_before_a_parameter_does_not_leak_into_its_name(self):
+        params = _parse_gui_params(
+            '#@gui : note = note("hello"), Angle = float(0,0,360)\n')
+        assert [p.name for p in params] == ["Angle"]
+
+
 class TestChoiceParameter:
     def test_quoted_first_argument_is_the_first_choice(self):
         # G'MIC-Qt keeps the first item as a choice when it is not an index

@@ -268,6 +268,14 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
     ), after_close
 
 
+def _skip_separator(text: str) -> str:
+    """Drop a leading parameter separator (', ' between definitions)."""
+    text = text.lstrip()
+    if text.startswith(","):
+        text = text[1:].lstrip()
+    return text
+
+
 def _parse_params(text: str) -> list[ParamDef]:
     results = []
     remaining = text
@@ -277,7 +285,9 @@ def _parse_params(text: str) -> list[ParamDef]:
             break
         param, after_close = result
         if param is None:
-            remaining = after_close
+            # A separator/note/link widget: continue with the next parameter
+            # on the same line, without its leading comma.
+            remaining = _skip_separator(after_close)
             continue
         results.append(param)
         # Check if there's another param after this one, separated by comma

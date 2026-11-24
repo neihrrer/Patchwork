@@ -120,6 +120,16 @@ plotcmd :
 """
 
 
+class TestParameterSeparators:
+    def test_separator_does_not_prefix_the_next_parameter_name(self, stdlib_filters):
+        # 'sep = separator(), Preview type = choice(...)' produced parameters
+        # named ', Preview type' for every filter that shares a line with a
+        # separator.
+        names = [p.name for p in stdlib_filters["fx_gamify"].parameters]
+        assert "Preview type" in names
+        assert not any(name.startswith(",") for name in names)
+
+
 class TestChoiceLabels:
     def test_quoted_first_choice_is_not_dropped(self, stdlib_filters):
         # 'Tiled Preview = choice(3,"None","2x1",...)' lost the "None" label,
