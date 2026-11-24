@@ -87,21 +87,30 @@ def _parse_param_value(value_text: str) -> ParamValue:
         return value_text
 
 
-_PARAM_TYPES = {
-    "bool": ParamKind.BOOL,
-    "button": ParamKind.BOOL,
-    "int": ParamKind.INT,
-    "float": ParamKind.FLOAT,
-    "choice": ParamKind.CHOICE,
-    "color": ParamKind.COLOR,
-    "point": ParamKind.POINT,
-    "text": ParamKind.TEXT,
-    "value": ParamKind.TEXT,
-    "file_in": ParamKind.FILE,
-    "file_out": ParamKind.FILE,
-    "file": ParamKind.FILE,
-    "folder": ParamKind.FOLDER,
-}
+_PARAM_TYPE_PREFIXES = (
+    ("int", ParamKind.INT),
+    ("float", ParamKind.FLOAT),
+    ("bool", ParamKind.BOOL),
+    ("button", ParamKind.BOOL),
+    ("choice", ParamKind.CHOICE),
+    ("color", ParamKind.COLOR),
+    ("point", ParamKind.POINT),
+    ("text", ParamKind.TEXT),
+    ("value", ParamKind.TEXT),
+    # Also matches the 'filein' and 'fileout' spellings.
+    ("file", ParamKind.FILE),
+    ("folder", ParamKind.FOLDER),
+)
+
+_NON_PARAM_TYPES = ("sep", "separator", "note", "link")
+
+
+def _param_kind(type_name: str) -> Optional[str]:
+    """Map a 'typedef' name to a parameter kind (G'MIC-Qt matches prefixes)."""
+    for prefix, kind in _PARAM_TYPE_PREFIXES:
+        if type_name.startswith(prefix):
+            return kind
+    return None
 
 
 def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
@@ -140,7 +149,7 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
     after_close = rest[close_idx + 1:].strip()
 
     # Skip non-param markers but let caller continue parsing
-    if type_name in ("sep", "separator", "note"):
+    if type_name in _NON_PARAM_TYPES:
         return None, after_close
 
     args = _split_args(args_text)
@@ -156,7 +165,7 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
         is_disabled = is_disabled or _sm.group(1) == "1"
         after_close = after_close[_sm.end():].strip()
 
-    kind = _PARAM_TYPES.get(type_name)
+    kind = _param_kind(type_name)
     if kind is None:
         return None, after_close
 

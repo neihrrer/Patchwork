@@ -44,12 +44,14 @@ def gmic_image(tmp_path):
     return str(path)
 
 
-def run_filter(image_path, filter_def, timeout=60):
+def run_filter(image_path, filter_def, timeout=60, params=None):
     graph = NodeGraph()
     source = InputNode("in")
     source.file_path = image_path
     graph.add_node(source)
     node = FilterNode("flt", filter_def)
+    for name, value in (params or {}).items():
+        node.set_param(name, value)
     graph.add_node(node)
     output = OutputNode("out")
     graph.add_node(output)
@@ -118,6 +120,34 @@ plotcmd :
 
 #@gui _
 """
+
+
+def _parse_gui_params(text):
+    gui = "#@gui Check : checkcmd\n" + text + "\ncheckcmd :\n  blur 1\n\n#@gui _\n"
+    return GmicFilterParser().parse_gui(gui)[0].parameters
+
+
+class TestFileParameter:
+    def test_filein_and_fileout_are_file_parameters(self):
+        params = _parse_gui_params(
+            '#@gui : Filename = filein()\n'
+            '#@gui : Save As = _fileout("out.png")\n'
+            '#@gui : Normalize = bool(1)\n')
+        assert [p.kind for p in params] == ["file", "file", "bool"]
+        assert params[1].default == "out.png"
+
+    def test_import_data_keeps_its_argument_positions(self, stdlib_filters,
+                                                     tmp_path, gmic_image):
+        # 'Filename = filein()' was dropped, so 'Normalize' landed in '$1'
+        # and G'MIC complained "Undefined argument '$2' (for 1 argument)".
+        filter_def = stdlib_filters["fx_import_image"]
+        assert [p.kind for p in filter_def.parameters] == ["file", "bool"]
+
+        source = tmp_path / "imported.png"
+        Image.new("RGB", (64, 64), (200, 10, 10)).save(str(source))
+        result = run_filter(gmic_image, filter_def, timeout=120,
+                            params={"Filename": str(source)})
+        assert result.success, result.error
 
 
 class TestParameterSeparators:
