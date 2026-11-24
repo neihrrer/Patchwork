@@ -12,8 +12,8 @@ classifiers = [
     "Topic :: Multimedia :: Graphics :: Editors",
 ]
 dependencies = [
-    "PyGObject>=3.50",
-    "Pillow>=10.0",
+    "PyGObject>=3.58.1",
+    "Pillow>=12.3.0",
 ]
 
 [project.urls]
