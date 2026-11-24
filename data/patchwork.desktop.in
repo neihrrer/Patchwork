@@ -1,6 +1,7 @@
 [Desktop Entry]
 Name=Patchwork
-Summary=Node-based image editor with G'MIC and ImageMagick
+Comment=Node-based image editor with G'MIC and ImageMagick
+GenericName=Image Editor
 Exec=patchwork
 Icon=@APP_ID@
 Type=Application

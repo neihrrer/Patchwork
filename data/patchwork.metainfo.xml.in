@@ -5,11 +5,17 @@
   <project_license>GPL-3.0-or-later</project_license>
   <name>Patchwork</name>
   <summary>Node-based image editor powered by G'MIC and ImageMagick</summary>
+  <developer id="com.github.neihrrer">
+    <name>neihrrer</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
   <description>
-    <p>Patchwork is a modern GTK4/Libadwaita node-based image editor.</p>
-    <p>Build image processing pipelines visually by connecting nodes. Powered by G'MIC (600+ filters) and ImageMagick (blend, color, mask operations).</p>
+    <p>Patchwork is a modern GTK4/Libadwaita node-based image editor for Linux, built around a visual graph of connected nodes.</p>
+    <p>Build image processing pipelines visually by connecting nodes. Powered by G'MIC (1200+ filters) and ImageMagick (blend, color, mask operations).</p>
   </description>
   <url type="homepage">https://github.com/neihrrer/Patchwork</url>
+  <url type="bugtracker">https://github.com/neihrrer/Patchwork/issues</url>
+  <url type="vcs-browser">https://github.com/neihrrer/Patchwork</url>
   <launchable type="desktop-id">@APP_ID@.desktop</launchable>
   <provides>
     <binary>patchwork</binary>
