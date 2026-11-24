@@ -3,6 +3,7 @@ from nodes import (
     OpacityNode, MaskNode, BrightnessContrastNode, LevelsNode, HSLNode,
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+    NotNode, XorNode, CompareNode, ModuloNode,
     LabelNode, CommentNode,
     Edge, Port, PortDirection, PortType,
 )
@@ -470,6 +471,24 @@ class TestSerialization:
         node = graph.get_node("b1")
         assert node is not None
         assert node.mode == "multiply"
+
+    def test_from_dict_logic_and_math_nodes(self):
+        data = {
+            "version": 1,
+            "nodes": [
+                {"id": "n1", "type": "not", "label": "Not", "x": 0, "y": 0, "width": 200, "height": 120, "params": {}},
+                {"id": "n2", "type": "xor", "label": "Xor", "x": 220, "y": 0, "width": 200, "height": 120, "params": {}},
+                {"id": "n3", "type": "compare", "label": "Compare", "x": 0, "y": 140, "width": 200, "height": 120, "params": {"operator": "!="}},
+                {"id": "n4", "type": "modulo", "label": "Modulo", "x": 220, "y": 140, "width": 200, "height": 120, "params": {}},
+            ],
+            "edges": []
+        }
+        graph = NodeGraph.from_dict(data)
+        assert isinstance(graph.get_node("n1"), NotNode)
+        assert isinstance(graph.get_node("n2"), XorNode)
+        assert isinstance(graph.get_node("n3"), CompareNode)
+        assert graph.get_node("n3").operator == "!="
+        assert isinstance(graph.get_node("n4"), ModuloNode)
 
     def test_from_dict_filter_node_skips_missing_def(self):
         data = {

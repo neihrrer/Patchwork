@@ -1,11 +1,14 @@
 import gettext
 from enum import Enum, auto
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 try:
     _ = gettext.gettext
 except Exception:
     _ = lambda s: s
+
+if TYPE_CHECKING:
+    from models.filter import FilterDef
 
 
 class PortDirection(Enum):
@@ -263,13 +266,8 @@ class NodeGraph:
                 ColorBalanceNode, ExposureGammaNode, CurvesNode,
                 CropNode, ResizeNode, RotateNode, FlipNode, DistortNode,
                 BlurNode, SharpenNode, EdgeDetectNode,
-                ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
-                CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
+                ConstantNode, CompareNode, ClampNode, MapRangeNode, RandomNode,
                 LabelNode, CommentNode,
-                HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
-                NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
-                CompareNode, ClampNode, MapRangeNode,
-                ModuloNode, PowerNode, SquareRootNode, AbsoluteNode, LogNode, ExpNode, RandomNode,
             )
             if isinstance(n, InputNode):
                 nd["params"]["file_path"] = n.file_path
@@ -418,6 +416,9 @@ class NodeGraph:
             CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
             LabelNode, CommentNode,
             HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode,
+            NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
+            CompareNode, ClampNode, MapRangeNode,
+            ModuloNode, PowerNode, SquareRootNode, AbsoluteNode, LogNode, ExpNode, RandomNode,
         )
         graph = NodeGraph()
         for nd in data.get("nodes", []):
