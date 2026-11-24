@@ -85,6 +85,9 @@ class PatchworkWindow(Adw.ApplicationWindow):
         self._modified: bool = False
         self._project_path: Optional[str] = None
         self._close_dialog: Optional[Adw.AlertDialog] = None
+        self._pending_confirm_action = None
+        self._autosave_dialog: Optional[Adw.AlertDialog] = None
+        self._pending_autosave: Optional["NodeGraph"] = None
         self._render_active: bool = False
         self._render_cancel_event: Optional[Event] = None
 
@@ -217,6 +220,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
         menu = Gio.Menu()
         menu.append(_("Undo"), "win.undo")
         menu.append(_("Redo"), "win.redo")
+        menu.append(_("New Project"), "win.new-project")
         menu.append(_("Open Project"), "win.open-project")
         menu.append(_("Save Project"), "win.save-project")
         menu.append(_("Preferences"), "win.preferences")
@@ -226,6 +230,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
         for name, handler, accel in [
             ("undo", self._do_undo, "<primary>z"),
             ("redo", self._do_redo, ["<primary><shift>z", "<primary>y"]),
+            ("new-project", self._on_new_project, "<primary>n"),
             ("open-project", self._on_open_project, "<primary>o"),
             ("save-project", self._on_save_project, "<primary>s"),
             ("preferences", self._on_preferences, "<primary>comma"),
@@ -375,17 +380,80 @@ class PatchworkWindow(Adw.ApplicationWindow):
                 interval * 60, self._do_auto_save
             )
 
-    def _do_auto_save(self) -> bool:
-        auto_path = Path.home() / ".cache" / "patchwork" / "autosave.patch"
+    def _autosave_path(self) -> Path:
+        return Path.home() / ".cache" / "patchwork" / "autosave.patch"
+
+    def _delete_autosave(self):
         try:
-            auto_path.parent.mkdir(parents=True, exist_ok=True)
-            self._save_patchwork_to_path(str(auto_path), self._graph)
+            self._autosave_path().unlink()
         except OSError:
             pass
-        self._auto_save_id = GLib.timeout_add_seconds(
-            self._config.auto_save_interval * 60, self._do_auto_save
-        )
+
+    def _do_auto_save(self) -> bool:
+        if self._modified and self._graph.nodes:
+            auto_path = self._autosave_path()
+            try:
+                auto_path.parent.mkdir(parents=True, exist_ok=True)
+                self._save_patchwork_to_path(str(auto_path), self._graph)
+            except OSError:
+                pass
+        if self._config.auto_save_interval > 0:
+            self._auto_save_id = GLib.timeout_add_seconds(
+                self._config.auto_save_interval * 60, self._do_auto_save
+            )
+        else:
+            self._auto_save_id = None
         return False
+
+    def _maybe_offer_autosave(self):
+        """Offer to restore a project left behind by an abnormal exit."""
+        if self._autosave_dialog is not None or self._close_dialog is not None:
+            return
+        path = self._autosave_path()
+        if not path.is_file():
+            return
+        try:
+            data, pack_dir = self._load_patchwork_from_path(str(path))
+            if not isinstance(data, dict) or data.get("version") != 1:
+                self._delete_autosave()
+                return
+            graph = NodeGraph.from_dict(data, self._filter_def_map)
+        except Exception:
+            self._delete_autosave()
+            return
+        if not graph.nodes:
+            self._delete_autosave()
+            return
+        self._rebind_packed_images(graph, pack_dir)
+
+        dialog = Adw.AlertDialog(
+            heading=_("Restore Autosaved Project?"),
+            body=_("Patchwork found a project that was not saved when the "
+                   "application last closed. Restore it?"),
+        )
+        dialog.add_response("discard", _("Discard"))
+        dialog.add_response("restore", _("Restore"))
+        dialog.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_response_appearance("restore", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("restore")
+        dialog.set_close_response("discard")
+        self._autosave_dialog = dialog
+        self._pending_autosave = graph
+        dialog.connect("response", self._on_autosave_response)
+        dialog.present(self)
+
+    def _on_autosave_response(self, dialog, response: str):
+        if self._autosave_dialog is None:
+            return  # already resolved
+        graph = self._pending_autosave
+        self._autosave_dialog = None
+        self._pending_autosave = None
+        if response == "restore" and graph is not None:
+            self._apply_loaded_graph(graph)
+            self._project_path = None
+            self._mark_modified(True)
+            self._set_status(_("Restored autosaved project"))
+        self._delete_autosave()
 
     # ─── Filter browser ──────────────────────────────────────────────────────
 
@@ -447,14 +515,21 @@ class PatchworkWindow(Adw.ApplicationWindow):
         file_filter.add_suffix("patch")
         return file_filter
 
-    def _on_close_request(self, *_args) -> bool:
-        """Ask before closing a project with unsaved changes."""
-        if not self._modified:
-            return False
+    def _confirm_unsaved(self, on_proceed):
+        """Run ``on_proceed`` once the user resolved unsaved changes.
 
+        No changes: proceed at once.  Otherwise the shared Save/Discard/Cancel
+        dialog decides: Cancel aborts, Discard proceeds, Save writes the
+        project first (a cancelled save dialog aborts as well).
+        """
+        if not self._modified:
+            on_proceed()
+            return
+        if self._close_dialog is not None or self._autosave_dialog is not None:
+            return  # a prompt is already open; ignore the second request
         dialog = Adw.AlertDialog(
             heading=_("Save Changes?"),
-            body=_("This project has unsaved changes. Save them before closing?"),
+            body=_("This project has unsaved changes. Save them before continuing?"),
         )
         dialog.add_response("cancel", _("Cancel"))
         dialog.add_response("discard", _("Discard"))
@@ -463,54 +538,109 @@ class PatchworkWindow(Adw.ApplicationWindow):
         dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response("save")
         dialog.set_close_response("cancel")
-        dialog.connect("response", self._on_close_response)
         self._close_dialog = dialog
+        self._pending_confirm_action = on_proceed
+        dialog.connect("response", self._on_unsaved_response)
         dialog.present(self)
-        return True
 
-    def _on_close_response(self, dialog, response: str):
+    def _on_unsaved_response(self, dialog, response: str):
+        if self._close_dialog is None:
+            return  # already resolved (closing the dialog also reports 'cancel')
+        on_proceed = self._pending_confirm_action
         self._close_dialog = None
+        self._pending_confirm_action = None
+        if on_proceed is None:
+            return
         if response == "discard":
-            self._modified = False
-            self.close()
+            on_proceed()
         elif response == "save":
-            self._save_before_close()
+            self._save_before_action(on_proceed)
 
-    def _save_before_close(self):
+    def _save_before_action(self, on_proceed):
+        """Save the project first, then continue; a cancelled dialog aborts."""
         if self._project_path:
-            try:
-                self._save_patchwork_to_path(self._project_path, self._graph)
-            except Exception as e:
-                self._show_error(str(e))
-                return
-            self._modified = False
-            self.close()
+            if self._save_to_path(self._project_path):
+                on_proceed()
             return
 
+        def saved(path: str):
+            if self._save_to_path(path):
+                on_proceed()
+
+        self._show_save_dialog(saved)
+
+    def _show_save_dialog(self, on_done):
+        """Ask for a destination path, then call ``on_done(path)``."""
         dialog = Gtk.FileDialog(
             title=_("Save Project"),
             default_filter=self._project_file_filter(),
             modal=True,
         )
-        dialog.save(self, None, self._on_close_save_response)
 
-    def _on_close_save_response(self, dialog, result):
-        try:
-            file = dialog.save_finish(result)
+        def response(dlg, result):
+            try:
+                file = dlg.save_finish(result)
+            except GLib.Error as e:
+                if e.domain != "gtk-dialog-error-quark":
+                    self._show_error(str(e))
+                return
+            except Exception as e:
+                self._show_error(str(e))
+                return
             if not file:
-                return  # the user cancelled: keep the window open
+                return
             path = file.get_path()
             if not path.endswith(".patch"):
                 path += ".patch"
+            on_done(path)
+
+        dialog.save(self, None, response)
+
+    def _save_to_path(self, path: str) -> bool:
+        try:
             self._save_patchwork_to_path(path, self._graph)
-            self._project_path = path
-            self._modified = False
-            self.close()
-        except GLib.Error as e:
-            if e.domain != "gtk-dialog-error-quark":
-                self._show_error(str(e))
         except Exception as e:
             self._show_error(str(e))
+            return False
+        self._project_path = path
+        self._mark_modified(False)
+        self._delete_autosave()
+        self._set_status(_("Project saved"))
+        return True
+
+    def _on_close_request(self, *_args) -> bool:
+        """Ask before closing a project with unsaved changes."""
+        if not self._modified:
+            self._delete_autosave()
+            return False
+        self._confirm_unsaved(self._finish_close)
+        return True
+
+    def _finish_close(self):
+        self._modified = False
+        self._delete_autosave()
+        # The Save/Discard dialog may still be on screen; closing the window
+        # while it is presented is ignored, so close once it is gone.
+        GLib.idle_add(self._close_window)
+
+    def _close_window(self) -> bool:
+        self.close()
+        return False
+
+    # ─── New project ─────────────────────────────────────────────────────────
+
+    def _on_new_project(self, action=None, param=None):
+        self._confirm_unsaved(self._new_project)
+
+    def _new_project(self):
+        if self._canvas:
+            self._canvas.clear_all()
+            self._canvas.reset_history()
+        self._pending_graph = None
+        self._missing_images = []
+        self._project_path = None
+        self._mark_modified(False)
+        self._set_status(_("New project"))
 
     def _update_render_button(self):
         order = self._graph.topological_sort()
@@ -736,16 +866,25 @@ class PatchworkWindow(Adw.ApplicationWindow):
             return data, None
 
     def _on_open_project(self, action, param):
-        file_filter = Gtk.FileFilter()
-        file_filter.set_name(_("Patchwork Projects"))
-        file_filter.add_suffix("patch")
+        self._confirm_unsaved(self._show_open_dialog)
 
+    def _show_open_dialog(self):
         dialog = Gtk.FileDialog(
             title=_("Open Project"),
-            default_filter=file_filter,
+            default_filter=self._project_file_filter(),
             modal=True,
         )
         dialog.open(self, None, self._on_open_project_response)
+
+    def _rebind_packed_images(self, graph, pack_dir):
+        """Point input nodes at the images unpacked from a project archive."""
+        if not pack_dir:
+            return
+        for n in graph.nodes.values():
+            if isinstance(n, InputNode) and n.file_path:
+                cached = pack_dir / f"{n.id}{Path(n.file_path).suffix}"
+                if cached.exists():
+                    n.file_path = str(cached)
 
     def _on_open_project_response(self, dialog, result):
         try:
@@ -759,12 +898,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
                 return
             graph = NodeGraph.from_dict(data, self._filter_def_map)
 
-            if pack_dir:
-                for n in graph.nodes.values():
-                    if isinstance(n, InputNode) and n.file_path:
-                        cached = pack_dir / f"{n.id}{Path(n.file_path).suffix}"
-                        if cached.exists():
-                            n.file_path = str(cached)
+            self._rebind_packed_images(graph, pack_dir)
 
             missing = [
                 n for n in graph.nodes.values()
@@ -835,34 +969,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
         self._prompt_next_missing_image()
 
     def _on_save_project(self, action, param):
-        file_filter = Gtk.FileFilter()
-        file_filter.set_name(_("Patchwork Projects"))
-        file_filter.add_suffix("patch")
-
-        dialog = Gtk.FileDialog(
-            title=_("Save Project"),
-            default_filter=file_filter,
-            modal=True,
-        )
-        dialog.save(self, None, self._on_save_project_response)
-
-    def _on_save_project_response(self, dialog, result):
-        try:
-            file = dialog.save_finish(result)
-            if not file:
-                return
-            path = file.get_path()
-            if not path.endswith(".patch"):
-                path += ".patch"
-            self._save_patchwork_to_path(path, self._graph)
-            self._project_path = path
-            self._mark_modified(False)
-            self._set_status(_("Project saved"))
-        except GLib.Error as e:
-            if e.domain != "gtk-dialog-error-quark":
-                self._show_error(str(e))
-        except Exception as e:
-            self._show_error(str(e))
+        self._show_save_dialog(self._save_to_path)
 
     # ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1235,20 +1342,24 @@ class PatchworkWindow(Adw.ApplicationWindow):
 
         def done(result):
             gmic_f, im_f = result
-            all_f = gmic_f + im_f
-            self._filter_def_map = {f"{f.engine}:{f.name}": f for f in all_f}
-            if self._filter_browser:
-                self._filter_browser.set_filters(all_f)
-            if self._canvas:
-                self._canvas.set_filter_defs(all_f)
-            total = len(all_f)
-            self._set_status(_("{} filters loaded").format(total) if total else _("No filters available"))
+            self._finish_loading_filters(gmic_f + im_f)
 
         def work():
             result = load()
             GLib.idle_add(done, result)
 
         Thread(target=work, daemon=True).start()
+
+    def _finish_loading_filters(self, all_f):
+        """Populate browsers and offer the autosaved project, if any."""
+        self._filter_def_map = {f"{f.engine}:{f.name}": f for f in all_f}
+        if self._filter_browser:
+            self._filter_browser.set_filters(all_f)
+        if self._canvas:
+            self._canvas.set_filter_defs(all_f)
+        total = len(all_f)
+        self._set_status(_("{} filters loaded").format(total) if total else _("No filters available"))
+        self._maybe_offer_autosave()
 
     # ─── Utilities ────────────────────────────────────────────────────────────
 

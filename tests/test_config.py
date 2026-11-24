@@ -9,7 +9,7 @@ class TestAppConfig:
         from config import AppConfig
         cfg = AppConfig(path=str(config_path))
         assert cfg.processing_timeout == 60
-        assert cfg.auto_save_interval == 0
+        assert cfg.auto_save_interval == 5
         assert cfg.grid_visible is True
         assert cfg.snap_to_grid is False
         assert cfg.extended_zoom is False

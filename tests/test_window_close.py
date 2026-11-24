@@ -48,7 +48,7 @@ def _pump(rounds: int = 20):
 
 
 @pytest.fixture
-def window(monkeypatch):
+def window(monkeypatch, tmp_path):
     import gi
     gi.require_version("Gtk", "4.0")
     gi.require_version("Adw", "1")
@@ -56,6 +56,8 @@ def window(monkeypatch):
     from window import PatchworkWindow
 
     monkeypatch.setattr(PatchworkWindow, "_load_filters", lambda self: None)
+    autosave = tmp_path / "autosave.patch"
+    monkeypatch.setattr(PatchworkWindow, "_autosave_path", lambda self: autosave)
     win = PatchworkWindow()
     win.present()
     _pump()
@@ -64,11 +66,10 @@ def window(monkeypatch):
 
 
 def _respond(window, response: str):
-    """Simulate the user picking a dialog response (dialog closes first)."""
+    """Simulate the user picking a dialog response."""
     dialog = window._close_dialog
+    window._on_unsaved_response(dialog, response)
     dialog.close()
-    _pump()
-    window._on_close_response(dialog, response)
     _pump()
 
 

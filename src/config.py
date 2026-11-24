@@ -7,7 +7,7 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 DEFAULTS = {
     "processing_timeout": 60,
     "snap_to_grid": False,
-    "auto_save_interval": 0,
+    "auto_save_interval": 5,
     "grid_visible": True,
     "extended_zoom": False,
     "minimap_visible": False,
