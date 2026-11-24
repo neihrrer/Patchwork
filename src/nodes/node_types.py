@@ -119,6 +119,8 @@ class RawDecodeNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
         inputs = [
             Port(id, "raw", "Raw Data", PortDirection.INPUT, PortType.RAW),
+            Port(id, "decode_width", "Width", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "decode_height", "Height", PortDirection.INPUT, PortType.NUMERIC),
         ]
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
@@ -692,10 +694,14 @@ class CommentNode(Node):
 
 class ColorSourceNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "source_width", "Width", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "source_height", "Height", PortDirection.INPUT, PortType.NUMERIC),
+        ]
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
-        super().__init__(id, "Color Source", "color_source", [], outputs, x, y)
+        super().__init__(id, "Color Source", "color_source", inputs, outputs, x, y)
         self.width = 180
         self.height = 160
         self.source_width: int = 512
@@ -705,10 +711,14 @@ class ColorSourceNode(Node):
 
 class GradientNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "source_width", "Width", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "source_height", "Height", PortDirection.INPUT, PortType.NUMERIC),
+        ]
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
-        super().__init__(id, "Gradient", "gradient", [], outputs, x, y)
+        super().__init__(id, "Gradient", "gradient", inputs, outputs, x, y)
         self.width = 180
         self.height = 180
         self.source_width: int = 512
@@ -721,10 +731,14 @@ class GradientNode(Node):
 
 class NoiseNode(Node):
     def __init__(self, id: str, x: float = 0, y: float = 0):
+        inputs = [
+            Port(id, "source_width", "Width", PortDirection.INPUT, PortType.NUMERIC),
+            Port(id, "source_height", "Height", PortDirection.INPUT, PortType.NUMERIC),
+        ]
         outputs = [
             Port(id, "image", "Image", PortDirection.OUTPUT, PortType.IMAGE),
         ]
-        super().__init__(id, "Noise", "noise", [], outputs, x, y)
+        super().__init__(id, "Noise", "noise", inputs, outputs, x, y)
         self.width = 180
         self.height = 160
         self.source_width: int = 512

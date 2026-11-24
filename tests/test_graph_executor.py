@@ -276,3 +276,73 @@ class TestImageSizeNumericInputs:
             assert executor._get_numeric_input(node, "opacity", empty_graph, {}) is None
         finally:
             os.unlink(src)
+
+
+class TestGeneratedImageSizes:
+    """Source nodes take their size from a numeric or image input."""
+
+    @staticmethod
+    def _png(tmp_path, size=(120, 80)):
+        from PIL import Image
+        path = tmp_path / "src.png"
+        Image.new("RGB", size, (10, 20, 30)).save(path)
+        return str(path)
+
+    def test_color_source_follows_image_size(self, tmp_path):
+        from nodes import ColorSourceNode
+        path = self._png(tmp_path, (120, 80))
+        executor = make_executor()
+        graph = NodeGraph()
+        inp = InputNode("in")
+        inp.file_path = path
+        src = ColorSourceNode("src")
+        out = OutputNode("out")
+        for n in (inp, src, out):
+            graph.add_node(n)
+        graph.add_edge("in", "image", "src", "source_width")
+        graph.add_edge("in", "image", "src", "source_height")
+        graph.add_edge("src", "image", "out", "image")
+        result = executor.execute(graph, "png")
+        assert result.success, result.error
+        from PIL import Image
+        with Image.open(result.output_path) as image:
+            assert image.size == (120, 80)
+
+    def test_noise_source_takes_numeric_size(self, tmp_path):
+        from nodes import NoiseNode, ConstantNode
+        executor = make_executor()
+        graph = NodeGraph()
+        w = ConstantNode("w")
+        w.value = 64.0
+        h = ConstantNode("h")
+        h.value = 32.0
+        noise = NoiseNode("n")
+        out = OutputNode("out")
+        for n in (w, h, noise, out):
+            graph.add_node(n)
+        graph.add_edge("w", "value", "n", "source_width")
+        graph.add_edge("h", "value", "n", "source_height")
+        graph.add_edge("n", "image", "out", "image")
+        result = executor.execute(graph, "png")
+        assert result.success, result.error
+        from PIL import Image
+        with Image.open(result.output_path) as image:
+            assert image.size == (64, 32)
+
+    def test_filter_width_label_uses_image_size(self, tmp_path):
+        from models.filter import FilterDef, ParamDef
+        from nodes import FilterNode
+        path = self._png(tmp_path, (222, 111))
+        executor = make_executor()
+        graph = NodeGraph()
+        inp = InputNode("in")
+        inp.file_path = path
+        fdef = FilterDef(
+            name="t", display_name="T", image_input_count=1,
+            parameters=[ParamDef("Width (px)", "Width (px)", kind="int", default=10)],
+            gmic_command="t", engine="gmic")
+        node = FilterNode("f", fdef)
+        graph.add_node(inp)
+        graph.add_node(node)
+        graph.add_edge("in", "image", "f", "Width (px)")
+        assert executor._get_numeric_input(node, "Width (px)", graph, {}) == 222.0

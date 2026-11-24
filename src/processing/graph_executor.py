@@ -3,6 +3,7 @@ import os
 import tempfile
 from typing import Optional, Callable
 
+from nodes.graph import size_port_kind
 from nodes import (
     NodeGraph, InputNode, VideoInputNode, TimeNode, RawInputNode, RawDecodeNode, OutputNode, FilterNode, BlendNode,
     OpacityNode, MaskNode,
@@ -122,8 +123,12 @@ class GraphExecutor:
                     inp = self._first_raw_input(node, graph, node_outputs)
                     if not inp:
                         return ProcessResult(error=f"Raw Decode '{node.label}' has no input")
+                    decode_width = self._get_numeric_input(
+                        node, "decode_width", graph, numeric_outputs) or node.decode_width
+                    decode_height = self._get_numeric_input(
+                        node, "decode_height", graph, numeric_outputs) or node.decode_height
                     result = decode_raw(inp, node.decode_method,
-                                        node.decode_width, node.decode_height,
+                                        int(decode_width), int(decode_height),
                                         node.byte_offset, output_format)
                     if not result.success:
                         return result
@@ -211,20 +216,33 @@ class GraphExecutor:
                 node_outputs[node.id] = result.output_path
 
             elif isinstance(node, ColorSourceNode):
-                result = generate_color_source(node.source_width, node.source_height, node.color, output_format)
+                source_width = self._get_numeric_input(
+                    node, "source_width", graph, numeric_outputs) or node.source_width
+                source_height = self._get_numeric_input(
+                    node, "source_height", graph, numeric_outputs) or node.source_height
+                result = generate_color_source(int(source_width), int(source_height),
+                                               node.color, output_format)
                 if not result.success:
                     return result
                 node_outputs[node.id] = result.output_path
 
             elif isinstance(node, GradientNode):
-                result = generate_gradient(node.source_width, node.source_height, node.gradient_type,
+                source_width = self._get_numeric_input(
+                    node, "source_width", graph, numeric_outputs) or node.source_width
+                source_height = self._get_numeric_input(
+                    node, "source_height", graph, numeric_outputs) or node.source_height
+                result = generate_gradient(int(source_width), int(source_height), node.gradient_type,
                                            node.start_color, node.end_color, node.angle, output_format)
                 if not result.success:
                     return result
                 node_outputs[node.id] = result.output_path
 
             elif isinstance(node, NoiseNode):
-                result = generate_noise(node.source_width, node.source_height, node.noise_type,
+                source_width = self._get_numeric_input(
+                    node, "source_width", graph, numeric_outputs) or node.source_width
+                source_height = self._get_numeric_input(
+                    node, "source_height", graph, numeric_outputs) or node.source_height
+                result = generate_noise(int(source_width), int(source_height), node.noise_type,
                                         node.scale, node.seed if node.seed else None, output_format)
                 if not result.success:
                     return result
@@ -598,8 +616,8 @@ class GraphExecutor:
         pixel dimension, so a node can follow the size of the image it is
         given.
         """
-        key = port_name.strip().lower()
-        if not (key.endswith("width") or key.endswith("height")):
+        kind = size_port_kind(port_name)
+        if kind is None:
             return None
         source = graph.get_node(node_id)
         if source is None:
@@ -613,7 +631,7 @@ class GraphExecutor:
                 width, height = image.size
         except Exception:
             return None
-        return float(width if key.endswith("width") else height)
+        return float(width if kind == "width" else height)
 
     def _all_inputs(self, node, graph: NodeGraph, outputs: dict[str, str]) -> list[str]:
         result = []

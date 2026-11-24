@@ -61,7 +61,7 @@ Node types (58 classes): Input/Output, Filter, Blend, Opacity, Mask, Color Adjus
 - **Project files** — `.patch` JSON format, schema version 1
 - **snake_case** for functions/variables, **PascalCase** for classes, **SCREAMING_SNAKE_CASE** for constants
 - **Import order**: stdlib, third-party (`gi.repository`, `PIL`), local
-- **Image-driven size ports** — an image output may be wired into an input port whose name ends in `width`/`height`; `GraphExecutor._image_dimension` then supplies that pixel size instead of a numeric input. `NodeGraph.add_edge` allows exactly this cross-type case and nothing else
+- **Image-driven size ports** — an image output may be wired into an input port whose name describes a width or height (`resize_width`, `Width (px)`, `source_height`, ...; see `nodes.graph.size_port_kind`); `GraphExecutor._image_dimension` then supplies that pixel size instead of a numeric input. `NodeGraph.add_edge` allows exactly this cross-type case and nothing else
 - **4-space indent**, no trailing whitespace, ~100 char line limit
 
 ## Gotchas

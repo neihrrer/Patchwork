@@ -1,4 +1,5 @@
 import gettext
+import re
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
 
@@ -9,6 +10,20 @@ except Exception:
 
 if TYPE_CHECKING:
     from models.filter import FilterDef
+
+
+def size_port_kind(name: str) -> Optional[str]:
+    """Return ``"width"``/``"height"`` when a port name describes that size.
+
+    Filter parameter labels are free text ("Width (px)", "2. Height",
+    "Dimension 1 (% Width)"), so match on words instead of suffixes; when a
+    label mentions both, the last one wins.
+    """
+    kind = None
+    for word in re.split(r"[^a-z]+", (name or "").lower()):
+        if word in ("width", "height"):
+            kind = word
+    return kind
 
 
 class PortDirection(Enum):
@@ -169,9 +184,8 @@ class NodeGraph:
             # an input port named like 'width'/'height' (resize_width,
             # crop_height, a filter's Width, ...) and the executor takes that
             # dimension from the image.
-            size_port = dst_p.port_type == PortType.NUMERIC and (
-                dst_p.name.strip().lower().endswith("width")
-                or dst_p.name.strip().lower().endswith("height"))
+            size_port = (dst_p.port_type == PortType.NUMERIC
+                         and size_port_kind(dst_p.name) is not None)
             if not (src_p.port_type == PortType.IMAGE and size_port):
                 return None
         self._edge_counter += 1

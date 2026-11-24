@@ -626,3 +626,34 @@ class TestImageDrivenSizePorts:
         empty_graph.add_node(const)
         empty_graph.add_node(resize)
         assert empty_graph.add_edge("c", "value", "rz", "resize_width") is not None
+
+
+class TestSizePortNames:
+    def test_names_that_describe_a_width(self):
+        from nodes.graph import size_port_kind
+        for name in ("Width", "Width (px)", "1. Width", "resize_width",
+                     "Stroke Width", "Dimension 1  (% Width)"):
+            assert size_port_kind(name) == "width", name
+
+    def test_names_that_describe_a_height(self):
+        from nodes.graph import size_port_kind
+        for name in ("Height", "2. Height", "Brick Height (px)",
+                     "Hauteur / Height [pixels]", "source_height"):
+            assert size_port_kind(name) == "height", name
+
+    def test_other_names_are_not_size_ports(self):
+        from nodes.graph import size_port_kind
+        for name in ("opacity", "Bandwidth", "radius", ""):
+            assert size_port_kind(name) is None, name
+
+    def test_image_can_drive_a_filter_width_label(self, empty_graph):
+        from models.filter import FilterDef, ParamDef
+        inp = InputNode("in")
+        fdef = FilterDef(
+            name="t", display_name="T", image_input_count=1,
+            parameters=[ParamDef("Width (px)", "Width (px)", kind="int", default=10)],
+            gmic_command="t", engine="gmic")
+        node = FilterNode("f", fdef)
+        empty_graph.add_node(inp)
+        empty_graph.add_node(node)
+        assert empty_graph.add_edge("in", "image", "f", "Width (px)") is not None
