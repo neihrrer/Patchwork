@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 from unittest.mock import patch
@@ -42,6 +43,60 @@ class TestRunPipelineArguments:
         result = GmicCLI().run_pipeline([str(source)], ["-blur 3"], str(target))
         assert result.success, result.error
         assert target.stat().st_size > 0
+
+
+class TestScriptCommandRoute:
+    """Commands with space-containing text values run from a command file."""
+
+    def test_uses_a_temporary_command_file(self, tmp_path):
+        from gmic.cli import GmicCLI
+        source = tmp_path / "in.png"
+        Image.new("RGB", (8, 8), (0, 0, 0)).save(str(source))
+        target = tmp_path / "out.png"
+        target.write_bytes(b"png")
+        captured = {}
+
+        def fake_run(args, **kwargs):
+            captured["args"] = list(args)
+            captured["path"] = args[2]
+            with open(args[2], encoding="utf-8") as handle:
+                captured["content"] = handle.read()
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        with patch("shutil.which", return_value="/usr/bin/gmic"), \
+                patch("subprocess.run", side_effect=fake_run):
+            result = GmicCLI().run_pipeline(
+                [str(source)], ["unused"], str(target),
+                script_command='iain_fast_formula "apply_gamma 2.2"')
+
+        assert result.success, result.error
+        assert captured["args"][:2] == ["/usr/bin/gmic", "-m"]
+        assert captured["args"][2] == captured["path"]
+        assert captured["args"][3:] == [str(source), "-__patchwork_run",
+                                        "-o", str(target)]
+        assert captured["content"] == ('__patchwork_run :\n'
+                                       '  iain_fast_formula "apply_gamma 2.2"\n')
+        assert not os.path.exists(captured["path"])
+
+    def test_command_file_is_removed_on_failure(self, tmp_path):
+        from gmic.cli import GmicCLI
+        source = tmp_path / "in.png"
+        Image.new("RGB", (8, 8), (0, 0, 0)).save(str(source))
+        captured = {}
+
+        def failing_run(args, **kwargs):
+            captured["path"] = args[2]
+            return subprocess.CompletedProcess(args, 1, "", "boom")
+
+        with patch("shutil.which", return_value="/usr/bin/gmic"), \
+                patch("subprocess.run", side_effect=failing_run):
+            result = GmicCLI().run_pipeline(
+                [str(source)], [], str(tmp_path / "out.png"),
+                script_command="blur 3")
+
+        assert result.success is False
+        assert "boom" in result.error
+        assert not os.path.exists(captured["path"])
 
 
 class TestRunPipelineOutput:

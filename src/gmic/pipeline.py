@@ -23,10 +23,29 @@ def _gmic_escape(s: str) -> str:
     )
 
 
-def _serialize_param(val: ParamValue, param_def: Optional[ParamDef] = None) -> str:
+def _gmic_script_escape(s: str) -> str:
+    """Escape a text parameter value for a line of a G'MIC command file.
+
+    Command files are parsed by G'MIC itself instead of the shell CLI, so
+    double quotes protect ``$``, ``{``, commas and spaces and the value reads
+    back verbatim (this is what filters that re-interpret a parameter, such as
+    "run this code", need).  Only backslashes, quotes and line breaks need an
+    escape; line breaks must not reach the file as raw newlines.
+    """
+    return (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\012")
+        .replace("\r", "\\015")
+        .replace("\t", "\\011")
+    )
+
+
+def _serialize_param(val: ParamValue, param_def: Optional[ParamDef] = None,
+                     style: str = "cli") -> str:
     if val is None or val == "":
         if param_def is not None and param_def.default is not None and param_def.default != "":
-            return _serialize_param(param_def.default, param_def)
+            return _serialize_param(param_def.default, param_def, style)
         return "0"
     if isinstance(val, bool):
         return "1" if val else "0"
@@ -40,6 +59,8 @@ def _serialize_param(val: ParamValue, param_def: Optional[ParamDef] = None) -> s
         return ",".join(str(v) for v in val)
     result = str(val)
     if param_def is not None and param_def.kind == ParamKind.TEXT:
+        if style == "script":
+            return '"' + _gmic_script_escape(result) + '"'
         # Quotes keep '$', ',' and spaces literal; the octals keep the whole
         # argument list free of raw spaces so G'MIC still splits it.
         return '"' + _gmic_escape(result) + '"'

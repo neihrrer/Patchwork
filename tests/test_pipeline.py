@@ -119,3 +119,21 @@ class TestSerializeParam:
     def test_text_value_no_special_chars_quoted(self):
         p = ParamDef("x", "X", kind="text", default=" .oO0")
         assert _serialize_param("hello", p) == '"hello"'
+
+    def test_text_value_script_style_keeps_spaces_and_commas(self):
+        # Command files are parsed by G'MIC itself, so quotes are enough and
+        # the value reads back verbatim.
+        p = ParamDef("x", "X", kind="text", default="")
+        assert _serialize_param("apply_gamma 2.2", p, style="script") == '"apply_gamma 2.2"'
+        assert _serialize_param("blur 1,2", p, style="script") == '"blur 1,2"'
+
+    def test_text_value_script_style_escapes_specials(self):
+        p = ParamDef("x", "X", kind="text", default="")
+        assert (_serialize_param('a\\b"c\nd', p, style="script")
+                == '"a\\\\b\\"c\\012d"')
+
+    def test_script_style_keeps_numbers_and_lists_bare(self):
+        assert _serialize_param(3, ParamDef("x", "X", kind="int", default=1),
+                                style="script") == "3"
+        assert _serialize_param([255, 0, 0], ParamDef("c", "C", kind="color"),
+                                style="script") == "255,0,0"

@@ -9,7 +9,7 @@ import os
 import shutil
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from gmic.cli import GmicCLI
 from gmic.parser import GmicFilterParser
@@ -45,21 +45,31 @@ def gmic_image(tmp_path):
     return str(path)
 
 
-def run_filter(image_path, filter_def, timeout=60, params=None):
+def run_filter(image_path, filter_def, timeout=60, params=None, reverse_edges=False):
+    if isinstance(image_path, str):
+        image_path = [image_path]
     graph = NodeGraph()
-    source = InputNode("in")
-    source.file_path = image_path
-    graph.add_node(source)
+    sources = []
+    for index, path in enumerate(image_path):
+        source = InputNode(f"in{index}")
+        source.file_path = path
+        graph.add_node(source)
+        sources.append(source)
     node = FilterNode("flt", filter_def)
     for name, value in (params or {}).items():
         node.set_param(name, value)
     graph.add_node(node)
     output = OutputNode("out")
     graph.add_node(output)
-    graph.add_edge("in", "image", "flt", "image")
-    for index in range(1, filter_def.image_input_count):
-        graph.add_edge("in", "image", "flt", f"image_{index + 1}")
-    graph.add_edge("flt", "image", "out", "image")
+    ports = ["image"]
+    ports.extend(f"image_{index + 1}"
+                 for index in range(1, filter_def.image_input_count))
+    pairs = list(zip(sources, ports))
+    if reverse_edges:
+        pairs.reverse()
+    for source, port in pairs:
+        graph.add_edge(source.id, "image", node.id, port)
+    graph.add_edge(node.id, "image", output.id, "image")
 
     executor = GraphExecutor(GmicCLI(), None)
     return executor.execute(graph, output_format="png", timeout=timeout)
@@ -235,7 +245,94 @@ class TestMultiImageOutput:
         assert Image.open(result.output_path).size == (200, 200)
 
 
+class TestMultiInput:
+    @staticmethod
+    def _two_images(tmp_path):
+        first = tmp_path / "first.png"
+        second = tmp_path / "second.png"
+        Image.new("RGB", (200, 200), (200, 30, 30)).save(str(first))
+        Image.new("RGB", (200, 200), (30, 30, 200)).save(str(second))
+        return first, second
+
+    def test_two_layer_filter_renders(self, stdlib_filters, tmp_path):
+        # 'fx_blend' declares two image inputs with ': *' and blends them.
+        filter_def = stdlib_filters["fx_blend"]
+        assert filter_def.image_input_count == 2
+        first, second = self._two_images(tmp_path)
+
+        result = run_filter([str(first), str(second)], filter_def, timeout=120)
+        assert result.success, result.error
+        assert Image.open(result.output_path).size == (200, 200)
+
+    def test_inputs_are_passed_in_port_order(self, stdlib_filters, tmp_path,
+                                             monkeypatch):
+        # Feeding the ports out of order must not swap the layers.
+        filter_def = stdlib_filters["fx_blend"]
+        first, second = self._two_images(tmp_path)
+        seen = []
+        real = GmicCLI.run_pipeline
+
+        def recording(self, input_paths, commands, output_path=None,
+                      timeout=120, script_command=None):
+            seen.append(list(input_paths))
+            return real(self, input_paths, commands, output_path, timeout,
+                        script_command)
+
+        monkeypatch.setattr(GmicCLI, "run_pipeline", recording)
+        result = run_filter([str(first), str(second)], filter_def,
+                            timeout=120, reverse_edges=True)
+
+        assert result.success, result.error
+        assert seen and seen[0] == [str(first), str(second)]
+
+    def test_single_input_filter_still_gets_one_layer(self, stdlib_filters,
+                                                      gmic_image, monkeypatch):
+        filter_def = stdlib_filters["fx_pills"]
+        seen = []
+        real = GmicCLI.run_pipeline
+
+        def recording(self, input_paths, commands, output_path=None,
+                      timeout=120, script_command=None):
+            seen.append(list(input_paths))
+            return real(self, input_paths, commands, output_path, timeout,
+                        script_command)
+
+        monkeypatch.setattr(GmicCLI, "run_pipeline", recording)
+        result = run_filter(gmic_image, filter_def, timeout=120)
+
+        assert result.success, result.error
+        assert seen == [[gmic_image]]
+
+
 class TestTextParameter:
+    def test_filter_that_executes_its_text_parameter(self, stdlib_filters,
+                                                     gmic_image):
+        # 'iain_fast_formula' runs its text parameter as G'MIC code
+        # ("apply_gamma 2.2").  The CLI cannot pass that space, so the
+        # command runs from a temporary command file instead.
+        filter_def = stdlib_filters.get("iain_fast_formula")
+        if filter_def is None:
+            pytest.skip("community stdlib cache missing")
+        assert " " in filter_def.parameters[0].default
+
+        result = run_filter(gmic_image, filter_def, timeout=120)
+
+        assert result.success, result.error
+        rendered = Image.open(result.output_path).convert("RGB")
+        original = Image.open(gmic_image).convert("RGB")
+        assert rendered.size == original.size
+        assert ImageChops.difference(rendered, original).getbbox() is not None
+
+    def test_command_list_text_parameter(self, stdlib_filters, gmic_image):
+        # 'samj_Filtres_Sur_Tuiles' passes a whole command list ('shift 2,2,
+        # 0,0,0 mirror y') as one parameter.
+        filter_def = stdlib_filters.get("samj_Filtres_Sur_Tuiles")
+        if filter_def is None:
+            pytest.skip("community stdlib cache missing")
+
+        result = run_filter(gmic_image, filter_def, timeout=120)
+        assert result.success, result.error
+
     def test_whitespace_in_a_text_value_is_not_stripped(self, stdlib_filters):
         # 'Ascii Art' defaults its dictionary to ' .oO0': the leading space
         # is one of the characters to draw with, and stripping it changed

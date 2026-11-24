@@ -615,15 +615,14 @@ class GraphExecutor:
         raw_cmd = node.filter_def.gmic_command
         space_idx = raw_cmd.find(" ")
         cmd_name = raw_cmd[:space_idx] if space_idx >= 0 else raw_cmd
-        serialized = [_serialize_param(
-            node.param_values.get(p.name, p.default), p
-        ) for p in node.filter_def.parameters]
-        for i, p in enumerate(node.filter_def.parameters):
+        params = node.filter_def.parameters
+        values = [node.param_values.get(p.name, p.default) for p in params]
+        for i, p in enumerate(params):
             if p.kind in (ParamKind.INT, ParamKind.FLOAT) and not p.is_hidden and graph and numeric_outputs:
                 num_val = self._get_numeric_input(node, p.name, graph, numeric_outputs)
                 if num_val is not None:
-                    val = int(num_val) if p.kind == ParamKind.INT else num_val
-                    serialized[i] = _serialize_param(val, p)
+                    values[i] = int(num_val) if p.kind == ParamKind.INT else num_val
+        serialized = [_serialize_param(value, p) for value, p in zip(values, params)]
         if serialized:
             full_cmd = cmd_name + "," + ",".join(serialized)
         elif space_idx >= 0:
@@ -632,8 +631,23 @@ class GraphExecutor:
             full_cmd = cmd_name
         commands = [input_paths[0], full_cmd]
 
+        # The CLI cannot carry a text value with a space (it quotes the whole
+        # argument list and the commas stop splitting), so such commands run
+        # from a temporary command file instead.
+        script_cmd = None
+        needs_script = any(
+            p.kind == ParamKind.TEXT and (
+                (isinstance(value, str) and " " in value)
+                or (value in (None, "") and isinstance(p.default, str) and " " in p.default))
+            for value, p in zip(values, params))
+        if needs_script:
+            script_values = [_serialize_param(value, p, style="script")
+                             for value, p in zip(values, params)]
+            script_cmd = cmd_name + ((" " + ",".join(script_values)) if script_values else "")
+
         if node.filter_def.engine == ENGINE_GMIC:
-            result = self._gmic.run_pipeline(input_paths, commands[1:], out_path, timeout=timeout)
+            result = self._gmic.run_pipeline(input_paths, commands[1:], out_path, timeout=timeout,
+                                             script_command=script_cmd)
         else:
             result = self._imagemagick.run_pipeline(input_paths[0], commands[1:], out_path, timeout=timeout)
 

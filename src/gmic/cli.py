@@ -40,7 +40,17 @@ class GmicCLI:
         commands: list[str],
         output_path: Optional[str] = None,
         timeout: int = 120,
+        script_command: Optional[str] = None,
     ) -> GmicResult:
+        """Run ``commands`` on ``input_paths`` and write ``output_path``.
+
+        ``script_command`` is an alternative command line (one line, ``name
+        arg,arg``) that is executed from a temporary G'MIC command file.  The
+        CLI cannot represent an argument list where a text value contains a
+        space (its argv parser quotes such items and swallows the commas), but
+        a command file is parsed by G'MIC itself, so filters that re-interpret
+        their text parameter get the value verbatim.
+        """
         if not self.available:
             return GmicResult(False, error=_("gmic not found on system. Install it with your package manager."))
 
@@ -52,26 +62,36 @@ class GmicCLI:
             fd, output_path = tempfile.mkstemp(suffix=".png")
             os.close(fd)
 
-        args = [self._gmic_path] + input_paths
-        for cmd in commands:
-            if not cmd.strip():
-                continue
-            if cmd.startswith("-"):
-                # Already an option: split it like a bare command, otherwise
-                # "-blur 3" reaches G'MIC as a single (unknown) item.
-                cmd = cmd[1:]
-            comma_idx = cmd.find(",")
-            space_idx = cmd.find(" ")
-            comma_first = comma_idx >= 0 and (space_idx < 0 or comma_idx < space_idx)
-            if comma_first:
-                args.append("-" + cmd[:comma_idx])
-                args.append(cmd[comma_idx + 1:])
-            elif space_idx >= 0:
-                args.append("-" + cmd[:space_idx])
-                args.append(cmd[space_idx + 1:])
-            else:
-                args.append("-" + cmd)
-        args.extend(["-o", output_path])
+        command_file = None
+        if script_command is not None:
+            fd, command_file = tempfile.mkstemp(suffix=".gmic")
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write("__patchwork_run :\n")
+                for line in script_command.splitlines() or [script_command]:
+                    handle.write("  " + line + "\n")
+            args = ([self._gmic_path, "-m", command_file] + input_paths
+                    + ["-__patchwork_run", "-o", output_path])
+        else:
+            args = [self._gmic_path] + input_paths
+            for cmd in commands:
+                if not cmd.strip():
+                    continue
+                if cmd.startswith("-"):
+                    # Already an option: split it like a bare command, otherwise
+                    # "-blur 3" reaches G'MIC as a single (unknown) item.
+                    cmd = cmd[1:]
+                comma_idx = cmd.find(",")
+                space_idx = cmd.find(" ")
+                comma_first = comma_idx >= 0 and (space_idx < 0 or comma_idx < space_idx)
+                if comma_first:
+                    args.append("-" + cmd[:comma_idx])
+                    args.append(cmd[comma_idx + 1:])
+                elif space_idx >= 0:
+                    args.append("-" + cmd[:space_idx])
+                    args.append(cmd[space_idx + 1:])
+                else:
+                    args.append("-" + cmd)
+            args.extend(["-o", output_path])
 
         try:
             result = subprocess.run(
@@ -105,6 +125,12 @@ class GmicCLI:
             return GmicResult(False, error=_("gmic not found on system"))
         except Exception as e:
             return GmicResult(False, error=str(e))
+        finally:
+            if command_file is not None:
+                try:
+                    os.unlink(command_file)
+                except OSError:
+                    pass
 
     def list_filters(self) -> list[FilterDef]:
         main_text, community_text = fetch_or_get_cached()
