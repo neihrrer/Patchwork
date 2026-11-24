@@ -113,3 +113,38 @@ class TestImageMagickCLI:
                                error="", stdout="", stderr="")
         assert r.success is True
         assert r.output_path == "/tmp/out.png"
+
+
+class TestImageMagick6Fallback:
+    @staticmethod
+    def _im6_which(name):
+        return "/usr/bin/convert" if name in ("convert", "/usr/bin/convert") else None
+
+    def test_detects_convert_when_magick_is_missing(self):
+        from imagemagick.cli import ImageMagickCLI
+        with patch("shutil.which", side_effect=self._im6_which):
+            cli = ImageMagickCLI()
+            assert cli.available is True
+            assert cli.magick_path == "/usr/bin/convert"
+
+    def test_run_pipeline_invokes_convert(self, tmp_path):
+        from imagemagick.cli import ImageMagickCLI
+        src = tmp_path / "in.png"
+        src.write_bytes(b"not really a png")
+        out = tmp_path / "out.png"
+        with patch("shutil.which", side_effect=self._im6_which):
+            with patch("subprocess.run") as run:
+                run.return_value.returncode = 0
+                run.return_value.stdout = ""
+                run.return_value.stderr = ""
+                out.write_bytes(b"out")
+                cli = ImageMagickCLI()
+                result = cli.run_pipeline(str(src), ["blur,3.0,1.0"], str(out))
+        assert result.success is True
+        assert run.call_args.args[0][0] == "/usr/bin/convert"
+
+    def test_explicit_path_is_not_overridden(self):
+        from imagemagick.cli import ImageMagickCLI
+        with patch("shutil.which", return_value=None):
+            cli = ImageMagickCLI("/opt/ima/magick")
+            assert cli.magick_path == "/opt/ima/magick"

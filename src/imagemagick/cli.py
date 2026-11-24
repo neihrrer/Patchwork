@@ -161,6 +161,9 @@ class ImageMagickResult:
 class ImageMagickCLI:
     def __init__(self, magick_path: str = "magick"):
         resolved = shutil.which(magick_path)
+        if resolved is None and magick_path == "magick":
+            # ImageMagick 6 ships the CLI as `convert` and has no `magick` driver.
+            resolved = shutil.which("convert")
         self._magick_path = resolved or magick_path
 
     @property
