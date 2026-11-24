@@ -70,6 +70,7 @@ The filter suites exercise the installed `gmic` and `magick` CLIs and are skippe
 2. **Browse filters:** the sidebar lists all available filters and nodes organized by category
 3. **Add a filter:** drag a filter from the sidebar onto the canvas, or double-click it
 4. **Connect nodes:** click and drag from an output port (right side of a node) to an input port (left side of another node)
+   - Wiring an **image** output into a **Width** or **Height** input (for example on Resize or Crop) uses that image's pixel size for the parameter, so a node can follow the size of another image
 5. **Tweak parameters:** click a filter node to adjust its parameters
 6. **Render:** click the **Render** button in the toolbar to process the graph
 7. **Export/Save:** once rendered, click the save icon to export the result and save your project

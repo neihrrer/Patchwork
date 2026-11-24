@@ -172,3 +172,107 @@ class TestHelperMethods:
         empty_graph.add_node(add)
         result = executor._get_numeric_input(add, "a", empty_graph, {})
         assert result is None
+
+
+class TestImageSizeNumericInputs:
+    """An image wired into a width/height parameter port supplies that size."""
+
+    @staticmethod
+    def _png(tmp_path, size=(160, 90)):
+        from PIL import Image
+        path = tmp_path / "src.png"
+        Image.new("RGB", size, (40, 90, 160)).save(path)
+        return str(path)
+
+    def test_resize_follows_connected_image_size(self, tmp_path):
+        from nodes import ResizeNode
+        path = self._png(tmp_path, (160, 90))
+        executor = make_executor()
+        graph = NodeGraph()
+        inp = InputNode("in")
+        inp.file_path = path
+        resize = ResizeNode("rz")
+        out = OutputNode("out")
+        for n in (inp, resize, out):
+            graph.add_node(n)
+        graph.add_edge("in", "image", "rz", "image")
+        graph.add_edge("in", "image", "rz", "resize_width")
+        graph.add_edge("in", "image", "rz", "resize_height")
+        graph.add_edge("rz", "image", "out", "image")
+        result = executor.execute(graph, "png")
+        assert result.success, result.error
+        from PIL import Image
+        with Image.open(result.output_path) as image:
+            assert image.size == (160, 90)
+
+    def test_crop_width_and_height_use_their_ports(self, tmp_path):
+        from nodes import CropNode
+        path = self._png(tmp_path, (160, 90))
+        executor = make_executor()
+        graph = NodeGraph()
+        inp = InputNode("in")
+        inp.file_path = path
+        crop = CropNode("cr")
+        out = OutputNode("out")
+        for n in (inp, crop, out):
+            graph.add_node(n)
+        graph.add_edge("in", "image", "cr", "image")
+        graph.add_edge("in", "image", "cr", "crop_width")
+        graph.add_edge("in", "image", "cr", "crop_height")
+        graph.add_edge("cr", "image", "out", "image")
+        result = executor.execute(graph, "png")
+        assert result.success, result.error
+        from PIL import Image
+        with Image.open(result.output_path) as image:
+            assert image.size == (160, 90)
+
+    def test_filter_width_parameter_uses_image_size(self, empty_graph):
+        from models.filter import FilterDef, ParamDef
+        from nodes import FilterNode
+        executor = make_executor()
+        import tempfile, os
+        from PIL import Image
+        fd, src = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        Image.new("RGB", (321, 123)).save(src)
+        try:
+            inp = InputNode("in")
+            inp.file_path = src
+            fdef = FilterDef(
+                name="test", display_name="Test", image_input_count=1,
+                parameters=[ParamDef("Width", "Width", kind="int", default=10),
+                            ParamDef("Height", "Height", kind="int", default=10)],
+                gmic_command="test_cmd", engine="gmic")
+            node = FilterNode("f", fdef)
+            empty_graph.add_node(inp)
+            empty_graph.add_node(node)
+            empty_graph.add_edge("in", "image", "f", "Width")
+            empty_graph.add_edge("in", "image", "f", "Height")
+            assert executor._get_numeric_input(node, "Width", empty_graph, {}) == 321.0
+            assert executor._get_numeric_input(node, "Height", empty_graph, {}) == 123.0
+        finally:
+            os.unlink(src)
+
+    def test_non_size_parameter_ignores_image(self, empty_graph):
+        from models.filter import FilterDef, ParamDef
+        from nodes import FilterNode
+        import tempfile, os
+        from PIL import Image
+        executor = make_executor()
+        fd, src = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        Image.new("RGB", (50, 50)).save(src)
+        try:
+            inp = InputNode("in")
+            inp.file_path = src
+            fdef = FilterDef(
+                name="test", display_name="Test", image_input_count=1,
+                parameters=[ParamDef("opacity", "Opacity", kind="float", default=1.0)],
+                gmic_command="test_cmd", engine="gmic")
+            node = FilterNode("f", fdef)
+            empty_graph.add_node(inp)
+            empty_graph.add_node(node)
+            empty_graph.add_edge("in", "image", "f", "opacity")
+            assert executor._get_numeric_input(node, "opacity", empty_graph, {}) is None
+        finally:
+            os.unlink(src)

@@ -4,6 +4,7 @@ from nodes import (
     ConstantNode, AddNode, SubtractNode, MultiplyNode, DivideNode,
     CeilNode, FloorNode, RoundNode, SumNode, ProductNode,
     NotNode, XorNode, CompareNode, ModuloNode,
+    ResizeNode, BlurNode,
     LabelNode, CommentNode,
     Edge, Port, PortDirection, PortType,
 )
@@ -599,3 +600,29 @@ class TestSerialization:
             "multiply", "divide", "ceil", "floor", "round",
             "sum", "product", "label", "comment",
         }
+
+
+class TestImageDrivenSizePorts:
+    """Only width/height parameters may be driven by an image connection."""
+
+    def test_image_output_can_drive_width_port(self, empty_graph):
+        inp = InputNode("in")
+        resize = ResizeNode("rz")
+        empty_graph.add_node(inp)
+        empty_graph.add_node(resize)
+        assert empty_graph.add_edge("in", "image", "rz", "resize_width") is not None
+        assert empty_graph.add_edge("in", "image", "rz", "resize_height") is not None
+
+    def test_image_output_cannot_drive_other_numeric_ports(self, empty_graph):
+        inp = InputNode("in")
+        blur = BlurNode("blur")
+        empty_graph.add_node(inp)
+        empty_graph.add_node(blur)
+        assert empty_graph.add_edge("in", "image", "blur", "radius") is None
+
+    def test_numeric_output_still_drives_size_port(self, empty_graph):
+        const = ConstantNode("c")
+        resize = ResizeNode("rz")
+        empty_graph.add_node(const)
+        empty_graph.add_node(resize)
+        assert empty_graph.add_edge("c", "value", "rz", "resize_width") is not None

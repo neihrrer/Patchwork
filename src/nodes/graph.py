@@ -165,7 +165,15 @@ class NodeGraph:
         if not src_p or not dst_p:
             return None
         if src_p.port_type != dst_p.port_type:
-            return None
+            # An image may drive a size parameter: connect an image output to
+            # an input port named like 'width'/'height' (resize_width,
+            # crop_height, a filter's Width, ...) and the executor takes that
+            # dimension from the image.
+            size_port = dst_p.port_type == PortType.NUMERIC and (
+                dst_p.name.strip().lower().endswith("width")
+                or dst_p.name.strip().lower().endswith("height"))
+            if not (src_p.port_type == PortType.IMAGE and size_port):
+                return None
         self._edge_counter += 1
         edge = Edge(f"e{self._edge_counter}", src_node, src_port, dst_node, dst_port)
         self._edges.append(edge)

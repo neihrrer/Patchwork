@@ -271,10 +271,10 @@ class GraphExecutor:
                 inp = self._first_input(node, graph, node_outputs)
                 if not inp:
                     return ProcessResult(error=f"Crop '{node.label}' has no input")
-                cx = self._get_numeric_input(node, "x", graph, numeric_outputs) or node.crop_x
-                cy = self._get_numeric_input(node, "y", graph, numeric_outputs) or node.crop_y
-                cw = self._get_numeric_input(node, "width", graph, numeric_outputs) or node.crop_width
-                ch = self._get_numeric_input(node, "height", graph, numeric_outputs) or node.crop_height
+                cx = self._get_numeric_input(node, "crop_x", graph, numeric_outputs) or node.crop_x
+                cy = self._get_numeric_input(node, "crop_y", graph, numeric_outputs) or node.crop_y
+                cw = self._get_numeric_input(node, "crop_width", graph, numeric_outputs) or node.crop_width
+                ch = self._get_numeric_input(node, "crop_height", graph, numeric_outputs) or node.crop_height
                 result = crop_image(inp, cx, cy, cw, ch, output_format)
                 if not result.success:
                     return result
@@ -284,8 +284,8 @@ class GraphExecutor:
                 inp = self._first_input(node, graph, node_outputs)
                 if not inp:
                     return ProcessResult(error=f"Resize '{node.label}' has no input")
-                rw = self._get_numeric_input(node, "width", graph, numeric_outputs) or node.resize_width
-                rh = self._get_numeric_input(node, "height", graph, numeric_outputs) or node.resize_height
+                rw = self._get_numeric_input(node, "resize_width", graph, numeric_outputs) or node.resize_width
+                rh = self._get_numeric_input(node, "resize_height", graph, numeric_outputs) or node.resize_height
                 result = resize_image(inp, rw, rh, node.resize_mode, output_format)
                 if not result.success:
                     return result
@@ -314,14 +314,14 @@ class GraphExecutor:
                 inp = self._first_input(node, graph, node_outputs)
                 if not inp:
                     return ProcessResult(error=f"Distort '{node.label}' has no input")
-                x0 = self._get_numeric_input(node, "x0", graph, numeric_outputs) or node.dist_x0
-                y0 = self._get_numeric_input(node, "y0", graph, numeric_outputs) or node.dist_y0
-                x1 = self._get_numeric_input(node, "x1", graph, numeric_outputs) or node.dist_x1
-                y1 = self._get_numeric_input(node, "y1", graph, numeric_outputs) or node.dist_y1
-                x2 = self._get_numeric_input(node, "x2", graph, numeric_outputs) or node.dist_x2
-                y2 = self._get_numeric_input(node, "y2", graph, numeric_outputs) or node.dist_y2
-                x3 = self._get_numeric_input(node, "x3", graph, numeric_outputs) or node.dist_x3
-                y3 = self._get_numeric_input(node, "y3", graph, numeric_outputs) or node.dist_y3
+                x0 = self._get_numeric_input(node, "dist_x0", graph, numeric_outputs) or node.dist_x0
+                y0 = self._get_numeric_input(node, "dist_y0", graph, numeric_outputs) or node.dist_y0
+                x1 = self._get_numeric_input(node, "dist_x1", graph, numeric_outputs) or node.dist_x1
+                y1 = self._get_numeric_input(node, "dist_y1", graph, numeric_outputs) or node.dist_y1
+                x2 = self._get_numeric_input(node, "dist_x2", graph, numeric_outputs) or node.dist_x2
+                y2 = self._get_numeric_input(node, "dist_y2", graph, numeric_outputs) or node.dist_y2
+                x3 = self._get_numeric_input(node, "dist_x3", graph, numeric_outputs) or node.dist_x3
+                y3 = self._get_numeric_input(node, "dist_y3", graph, numeric_outputs) or node.dist_y3
                 result = distort_image(inp, x0, y0, x1, y1, x2, y2, x3, y3, output_format)
                 if not result.success:
                     return result
@@ -584,7 +584,36 @@ class GraphExecutor:
                 val = numeric_outputs.get(e.src_node)
                 if val is not None:
                     return val
+                dimensions = self._image_dimension(graph, e.src_node, port_name)
+                if dimensions is not None:
+                    return dimensions
         return None
+
+    @staticmethod
+    def _image_dimension(graph: NodeGraph, node_id: str, port_name: str) -> Optional[float]:
+        """Width/height of the image produced by ``node_id``, if requested.
+
+        An image output wired into a parameter port named like ``width`` or
+        ``height`` (``resize_width``, ``crop_height``, ...) supplies that
+        pixel dimension, so a node can follow the size of the image it is
+        given.
+        """
+        key = port_name.strip().lower()
+        if not (key.endswith("width") or key.endswith("height")):
+            return None
+        source = graph.get_node(node_id)
+        if source is None:
+            return None
+        path = getattr(source, "cached_output_path", None) or getattr(source, "file_path", None)
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            from PIL import Image
+            with Image.open(path) as image:
+                width, height = image.size
+        except Exception:
+            return None
+        return float(width if key.endswith("width") else height)
 
     def _all_inputs(self, node, graph: NodeGraph, outputs: dict[str, str]) -> list[str]:
         result = []
