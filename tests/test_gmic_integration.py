@@ -76,6 +76,36 @@ btncheck :
 """
 
 
+POINT_FILTER = """\
+#@gui Point Check : ptcheck
+#@gui : Center = point(50,50,0,1,255,255,255,200,10)
+#@gui : Zoom = float(0.75,0,1)
+
+#@gui _
+"""
+
+
+class TestPointParameter:
+    def test_only_the_coordinates_are_the_value(self):
+        # The trailing arguments are widget options (removable, burst,
+        # color, radius), not command arguments.
+        params = GmicFilterParser().parse_gui(POINT_FILTER)[0].parameters
+        assert params[0].kind == "point"
+        assert params[0].default == [50, 50]
+        assert [p.kind for p in params] == ["point", "float"]
+
+    def test_point_options_do_not_shift_later_arguments(self, stdlib_filters,
+                                                        gmic_image):
+        # 'fx_distort_rbf' takes four points followed by three more
+        # parameters; extra point arguments made G'MIC reject 'warp'.
+        filter_def = stdlib_filters["fx_distort_rbf"]
+        points = [p for p in filter_def.parameters if p.kind == "point"]
+        assert points and all(len(p.default) == 2 for p in points)
+
+        result = run_filter(gmic_image, filter_def, timeout=120)
+        assert result.success, result.error
+
+
 class TestButtonParameter:
     def test_button_is_parsed_as_a_boolean(self):
         params = GmicFilterParser().parse_gui(BUTTON_FILTER)[0].parameters

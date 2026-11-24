@@ -232,8 +232,10 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
         default = vals if vals else [0, 0, 0, 255]
 
     elif kind == ParamKind.POINT:
+        # Only the first two arguments are the point value; the optional
+        # removable/burst/color/radius arguments configure the widget.
         vals = []
-        for a in args:
+        for a in args[:2]:
             v = _parse_param_value(a)
             if v is not None:
                 vals.append(v)
