@@ -17,3 +17,9 @@ updates:
       python-dependencies:
         patterns:
           - "*"
+    ignore:
+      # Both are minimum floors for compatibility with distro packages, not
+      # pins: raising them to the newest release only narrows what runs
+      # Patchwork. Security advisories still open PRs.
+      - dependency-name: "PyGObject"
+      - dependency-name: "Pillow"
