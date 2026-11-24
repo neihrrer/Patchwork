@@ -93,6 +93,7 @@ def _parse_param_value(value_text: str) -> ParamValue:
 
 _PARAM_TYPES = {
     "bool": ParamKind.BOOL,
+    "button": ParamKind.BOOL,
     "int": ParamKind.INT,
     "float": ParamKind.FLOAT,
     "choice": ParamKind.CHOICE,
@@ -172,7 +173,11 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
     choices = []
 
     if kind == ParamKind.BOOL:
-        if args:
+        if type_name == "button":
+            # A button passes 0 until it is pressed; its argument is only
+            # the widget alignment.
+            default = False
+        elif args:
             val = _parse_param_value(args[0])
             if val is None:
                 default = False
@@ -180,6 +185,8 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
                 default = val.lower() not in ("0", "false", "none", "")
             else:
                 default = bool(int(val))
+        else:
+            default = False
 
     elif kind == ParamKind.INT:
         if args:
