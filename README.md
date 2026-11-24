@@ -20,7 +20,7 @@
 | Libadwaita | 1.0 | via PyGObject |
 | PyGObject | 3.50 | Python GTK bindings |
 | Pillow | 10.0 | Python imaging library |
-| G'MIC (`gmic`) | any | CLI — required for G'MIC filters; the filter list is fetched for the installed version |
+| G'MIC (`gmic`) | any | CLI — required for G'MIC filters; the filter list is fetched for the installed version (community filters come from a pinned snapshot of `gmic-community`, cached on first use) |
 | ImageMagick (`magick`) | any | CLI — required for blends, color ops, masks |
 | blueprint-compiler | any | Build-time only |
 

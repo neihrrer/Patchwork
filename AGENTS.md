@@ -68,5 +68,6 @@ Node types (58 classes): Input/Output, Filter, Blend, Opacity, Mask, Color Adjus
 - `./run.sh` requires `blueprint-compiler` on `$PATH`; falls back to existing `build/resources/*.ui`
 - Rendering requires `gmic` and/or `magick` CLIs; the filter tests skip when they are missing
 - The G'MIC filter list is downloaded from the tag matching the installed `gmic` version (`master` when undetectable) and cached in `~/.cache/patchwork/stdlib` — see `src/gmic/stdlib.py`
+- The community filter list is pinned in `src/gmic/stdlib.py` (`COMMUNITY_REF`, the snapshot for G'MIC 4.0.3) and cached under a ref-keyed name; it is deliberately not fetched from `master`, whose newer filters need commands the installed interpreter does not have. Community filters are imported with `gmic -m <pinned file>` before they run, so that file must stay in the cache for them to work
 - Only one branch: `master`; tags use `v*` pattern for releases
 - Flatpak manifest at `flatpak/org.patchwork.Patchwork.yml`
