@@ -1,12 +1,8 @@
-project('patchwork', 'c',
+project('patchwork',
   version: '0.1.0',
   license: 'GPL-3.0-or-later',
   meson_version: '>= 1.0.0',
 )
-
-i18n = import('i18n')
-gnome = import('gnome')
-python = import('python').find_installation('python3')
 
 app_id = 'org.patchwork.Patchwork'
 
