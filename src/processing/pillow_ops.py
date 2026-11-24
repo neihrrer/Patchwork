@@ -140,13 +140,7 @@ def _blend_soft_light(base: Image.Image, blend: Image.Image) -> Image.Image:
     base_r, base_g, base_b, base_a = base.split()
     blend_r, blend_g, blend_b, blend_a = blend.split()
     def soft(a, b):
-        b2 = ImageMath.unsafe_eval("convert(b * 2, 'L')", b=b)
-        b2m256 = ImageMath.unsafe_eval("convert(b * 2 - 256, 'L')", b=b)
-        mask = ImageMath.unsafe_eval("convert(b < 128 ? 255 : 0, 'L')", b=b)
-        term1 = ImageChops.multiply(a, b2)
-        term2 = ImageChops.screen(a, b2m256)
-        raw = Image.composite(term1, term2, mask)
-        return ImageMath.unsafe_eval("convert(a - (1 - 2 * b / 256) * (a - a * a / 256), 'L')", a=base_r, b=blend_r)
+        return ImageMath.unsafe_eval("convert(a - (1 - 2 * b / 256) * (a - a * a / 256), 'L')", a=a, b=b)
     r = soft(base_r, blend_r)
     g = soft(base_g, blend_g)
     b = soft(base_b, blend_b)
@@ -669,7 +663,7 @@ def decode_raw(raw_path: str, method: str, width: int, height: int, offset: int,
                 total_floats = channels if finfo["mode"] == "F" else channels * (3 if finfo["mode"] == "RGB" else 4)
                 data = f.read(total_floats * 4)
                 if len(data) < total_floats * 4:
-                    return ProcessResult(error=f"File too small")
+                    return ProcessResult(error="File too small")
                 vals = struct.unpack(f"<{total_floats}f", data[:total_floats * 4])
                 clamped = bytes(max(0, min(255, int(v * 255.0))) for v in vals)
                 img = Image.frombytes(finfo["mode"], (width, height), clamped)
