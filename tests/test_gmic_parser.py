@@ -1,3 +1,10 @@
+import re
+import shutil
+import subprocess
+import textwrap
+
+import pytest
+
 from gmic.parser import (
     _strip_html, _strip_name, _find_matching_close, _split_args,
     _parse_param_value, _parse_param_def,
@@ -99,6 +106,58 @@ class TestMungeGuiCommand:
     def test_strips_preview_suffix(self):
         result = _munge_gui_command("test, preview(2) *")
         assert result == "test"
+
+
+FOLDER_TREE = textwrap.dedent("""\
+    #@gui ____<b>Artistic</b>
+    #@gui Filter A : cmd_a
+    #@gui ____<b>Various</b>
+    #@gui Filter B : cmd_b
+    #@gui _<i>Nature</i>
+    #@gui Filter C : cmd_c
+    #@gui Category Only
+    #@gui Filter D : cmd_d
+
+    cmd_a : blur 1
+    cmd_b : blur 2
+    cmd_c : blur 3
+    cmd_d : blur 4
+    #@gui _
+    """)
+
+
+class TestFolderNesting:
+    """'#@gui' folder names are prefixed by N underscores, i.e. go up N levels."""
+
+    def test_leading_underscores_pop_that_many_levels(self):
+        filters = {f.name: f for f in GmicFilterParser().parse_gui(FOLDER_TREE)}
+        assert filters["cmd_a"].category == ["Artistic"]
+        assert filters["cmd_b"].category == ["Various"]
+        assert filters["cmd_c"].category == ["Nature"]
+        assert filters["cmd_d"].category == ["Nature", "Category Only"]
+
+    @pytest.mark.skipif(shutil.which("gmic") is None, reason="gmic not installed")
+    def test_matches_gmic_parse_gui(self, tmp_path):
+        tree_file = tmp_path / "tree.gmic"
+        tree_file.write_text(FOLDER_TREE)
+        proc = subprocess.run(
+            ["gmic", "-input_text", str(tree_file), "-parse_gui", "print"],
+            capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL,
+        )
+        # Lines look like '  > [#0] Artistic/Filter A'.
+        expected = {}
+        text = re.sub(r"\x1b\[[0-9;]*m", "", proc.stderr).replace("\r", "\n")
+        for line in text.splitlines():
+            marker = line.find("[#")
+            if ">" not in line or marker < 0:
+                continue
+            path = line[line.find("]", marker) + 2:].strip()
+            expected[path.rsplit("/", 1)[-1]] = path.split("/")[:-1]
+
+        filters = GmicFilterParser().parse_gui(FOLDER_TREE)
+        assert len(expected) == len(filters)
+        for fd in filters:
+            assert expected[fd.display_name] == fd.category
 
 
 class TestGmicFilterParser:

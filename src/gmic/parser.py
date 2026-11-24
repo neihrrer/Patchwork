@@ -368,20 +368,20 @@ class GmicFilterParser:
 
             content = line[5:].strip()
 
-            if not content or content == "_":
-                if content == "_":
-                    folder_stack.clear()
+            if not content:
                 current_filter = None
                 continue
 
             if ":" not in content:
-                was_pop = content.startswith("_")
-                folder_name = _strip_name(content.lstrip("_"))
-                if not folder_name:
-                    continue
-                if was_pop and folder_stack:
-                    folder_stack.pop()
-                folder_stack.append(folder_name)
+                # A folder name may be prefixed by N underscores, meaning
+                # "go up N levels" before entering the folder itself.
+                levelup = len(content) - len(content.lstrip("_"))
+                folder_name = _strip_name(content[levelup:])
+                for _ in range(levelup):
+                    if folder_stack:
+                        folder_stack.pop()
+                if folder_name:
+                    folder_stack.append(folder_name)
                 current_filter = None
                 continue
 
