@@ -74,15 +74,11 @@ def _parse_param_value(value_text: str) -> ParamValue:
     if value_text in ("None", "none", ""):
         return None
     if value_text.startswith("\"") and value_text.endswith("\""):
-        inner = value_text[1:-1]
-        if inner in ("None", "none"):
-            return None
-        return inner
+        # Quoted arguments are literals: a quoted "None" is the text 'None'
+        # (e.g. a choice label), not the G'MIC 'None' keyword.
+        return value_text[1:-1]
     if value_text.startswith("'") and value_text.endswith("'"):
-        inner = value_text[1:-1]
-        if inner in ("None", "none"):
-            return None
-        return inner
+        return value_text[1:-1]
     try:
         if "." in value_text:
             return float(value_text)
@@ -211,17 +207,24 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
             max_val = float(val) if val is not None else None
 
     elif kind == ParamKind.CHOICE:
-        for a in args[1:]:
-            v = _parse_param_value(a)
-            choices.append(str(v) if v is not None else "")
         if args:
-            val = _parse_param_value(args[0])
-            if isinstance(val, str):
-                default = choices.index(val) if val in choices else 0
+            first = _parse_param_value(args[0])
+            if isinstance(first, str):
+                # A quoted first argument is the default choice *label* and is
+                # also listed as the first choice (see 'choice("X","Y","XY")'
+                # in the G'MIC plug-in documentation).
+                choices.append(first)
+                for a in args[1:]:
+                    v = _parse_param_value(a)
+                    choices.append(str(v) if v is not None else "")
+                default = choices.index(first)
             else:
-                default = int(val) if val is not None else 0
+                for a in args[1:]:
+                    v = _parse_param_value(a)
+                    choices.append(str(v) if v is not None else "")
+                default = int(first) if first is not None else 0
         if default is not None and choices:
-            default = min(default, len(choices) - 1)
+            default = max(0, min(default, len(choices) - 1))
 
     elif kind == ParamKind.COLOR:
         vals = []

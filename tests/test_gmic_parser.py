@@ -160,6 +160,32 @@ class TestFolderNesting:
             assert expected[fd.display_name] == fd.category
 
 
+def _parse_gui_params(text: str):
+    gui = "#@gui Check : checkcmd\n" + text + "\ncheckcmd :\n  blur 1\n\n#@gui _\n"
+    return GmicFilterParser().parse_gui(gui)[0].parameters
+
+
+class TestChoiceParameter:
+    def test_quoted_first_argument_is_the_first_choice(self):
+        # G'MIC-Qt keeps the first item as a choice when it is not an index
+        # ('choice("X","Y","XY")' has three choices, defaulting to 'X').
+        (param,) = _parse_gui_params(
+            '#@gui : Mirror = choice("None","X-Axis","Y-Axis","XY-Axes")\n')
+        assert param.choices == ["None", "X-Axis", "Y-Axis", "XY-Axes"]
+        assert param.default == 0
+
+    def test_numeric_first_argument_is_the_default_index(self):
+        (param,) = _parse_gui_params(
+            '#@gui : Mode = choice(2,"Gray","RGB","CMYK")\n')
+        assert param.choices == ["Gray", "RGB", "CMYK"]
+        assert param.default == 2
+
+    def test_quoted_none_is_a_literal_label(self):
+        assert _parse_param_value('"None"') == "None"
+        assert _parse_param_value("'none'") == "none"
+        assert _parse_param_value("None") is None
+
+
 class TestGmicFilterParser:
     def test_builtin_filters_not_empty(self):
         parser = GmicFilterParser()

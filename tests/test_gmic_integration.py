@@ -120,6 +120,16 @@ plotcmd :
 """
 
 
+class TestChoiceLabels:
+    def test_quoted_first_choice_is_not_dropped(self, stdlib_filters):
+        # 'Tiled Preview = choice(3,"None","2x1",...)' lost the "None" label,
+        # shifting every option by one.
+        param = next(p for p in stdlib_filters["fx_make_seamless"].parameters
+                     if p.name == "Tiled Preview")
+        assert param.choices[0] == "None"
+        assert param.default == 3
+
+
 class TestGuiLineJoining:
     def test_equals_sign_in_filter_name_is_not_a_parameter(self):
         # 'Plot [Y=f(X)]' used to absorb the parameter lines into the
