@@ -96,6 +96,29 @@ class TestListFiltersProvenance:
         assert filters and all(f.source == "main" for f in filters)
 
 
+class TestUnsupportedFilters:
+    def test_blocked_filters_are_removed_after_merging(self):
+        from gmic.cli import GmicCLI
+        main = ("#@gui External : fx_karo_cimg_skel\n"
+                "#@gui Keep Main : fx_keep_main\n"
+                "#@gui File Arg : fx_import_image\n")
+        community = ("#@gui Other File Arg : fx_for_littbarski\n"
+                     "#@gui Keep Community : fx_keep_community\n")
+        with patch("gmic.cli.fetch_or_get_cached", return_value=(main, community)):
+            names = {f.name for f in GmicCLI().list_filters()}
+        assert names == {"fx_keep_main", "fx_keep_community"}
+
+    def test_every_blocked_filter_has_a_reason(self):
+        from gmic.cli import UNSUPPORTED_FILTERS
+        assert len(UNSUPPORTED_FILTERS) == 7
+        assert set(UNSUPPORTED_FILTERS) == {
+            "fx_karo_cimg_skel", "fx_karo_cimg_nlmeans", "fx_karo_pink_bianca",
+            "fx_intarsia", "fx_import_image", "fx_import_image_16",
+            "fx_for_littbarski",
+        }
+        assert all(reason for reason in UNSUPPORTED_FILTERS.values())
+
+
 class TestScriptCommandRoute:
     """Commands with space-containing text values run from a command file."""
 

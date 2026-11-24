@@ -15,6 +15,24 @@ except Exception:
     _ = lambda s: s
 
 
+# Filters that Patchwork cannot run, with the reason shown to the user.
+# Keeping this data-driven makes it easy to prune the list (and to restore a
+# filter once the blocker disappears).
+UNSUPPORTED_FILTERS = {
+    # They shell out to programs that are not part of a G'MIC install.
+    "fx_karo_cimg_skel": _("needs the external 'use_skeleton' executable"),
+    "fx_karo_cimg_nlmeans": _("needs the external 'use_nlmeans' executable"),
+    "fx_karo_pink_bianca": _("needs the external 'pink' executable"),
+    # A file/folder parameter is an argument, and G'MIC has no way to express
+    # an empty one, so these filters always refuse to run in Patchwork.  They
+    # could come back if empty arguments ever become expressible.
+    "fx_intarsia": _("needs an empty output folder argument"),
+    "fx_import_image": _("needs an empty input file argument"),
+    "fx_import_image_16": _("needs an empty input file argument"),
+    "fx_for_littbarski": _("needs an empty palette file argument"),
+}
+
+
 class GmicResult:
     def __init__(self, success: bool, output_path: Optional[str] = None, error: str = "", stdout: str = "", stderr: str = ""):
         self.success = success
@@ -148,10 +166,11 @@ class GmicCLI:
             if not text:
                 continue
             for f in self._parser.parse_gui(text):
-                if f.name not in seen:
-                    seen.add(f.name)
-                    f.source = source
-                    all_filters.append(f)
+                if f.name in seen or f.name in UNSUPPORTED_FILTERS:
+                    continue
+                seen.add(f.name)
+                f.source = source
+                all_filters.append(f)
 
         if all_filters:
             return all_filters

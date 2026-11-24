@@ -257,6 +257,11 @@ class TestMultiImageOutput:
 
 
 class TestCommunityFilters:
+    def test_known_unsupported_filters_are_not_listed(self, listed_filters):
+        from gmic.cli import UNSUPPORTED_FILTERS
+        for name in UNSUPPORTED_FILTERS:
+            assert name not in listed_filters
+
     def test_sources_are_marked(self, listed_filters):
         assert listed_filters["jdoe_toyfilter"].source == "community"
         assert listed_filters["fx_equation_plot"].source == "main"
