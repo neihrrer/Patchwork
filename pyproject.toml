@@ -2,9 +2,20 @@
 name = "patchwork"
 version = "0.1.0"
 description = "Node-based image processing environment with a modern GTK4 interface"
+readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+classifiers = [
+    "Environment :: X11 Applications :: GTK",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: Editors",
+]
 dependencies = [
     "PyGObject>=3.50",
     "Pillow>=10.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/neihrrer/Patchwork"
+Issues = "https://github.com/neihrrer/Patchwork/issues"
