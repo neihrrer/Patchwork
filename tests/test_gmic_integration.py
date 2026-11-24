@@ -128,6 +128,32 @@ def _parse_gui_params(text):
     return GmicFilterParser().parse_gui(gui)[0].parameters
 
 
+class TestValueParameter:
+    def test_multiple_values_are_kept_as_one_argument(self):
+        # 'value(25,25)' is a single argument holding two numbers (G'MIC
+        # commands bind it to two variables, e.g. 'sx,sy=25,25').
+        params = _parse_gui_params(
+            '#@gui : Keypoints = value(25,25)\n'
+            '#@gui : Mode = value(-1)\n')
+        assert params[0].kind == "text"
+        assert params[0].is_hidden is True
+        assert params[0].default == "25,25"
+        assert params[1].default == "-1"
+
+    def test_warp_rbf_runs(self, stdlib_filters, gmic_image):
+        # 'fx_warp_rbf' binds 13 keypoints of six numbers each from
+        # 'point(...), value(25,25), value(25,25)'; dropping the second
+        # number of each value misaligned the binding and G'MIC reported
+        # "Unknown command or filename '1-83'".
+        filter_def = stdlib_filters["fx_warp_rbf"]
+        values = [p.default for p in filter_def.parameters
+                  if p.kind == "text" and "," in str(p.default)]
+        assert values
+
+        result = run_filter(gmic_image, filter_def, timeout=120)
+        assert result.success, result.error
+
+
 class TestFileParameter:
     def test_filein_and_fileout_are_file_parameters(self):
         params = _parse_gui_params(

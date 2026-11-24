@@ -254,7 +254,12 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
         default = vals if vals else [0, 0]
 
     elif kind == ParamKind.TEXT:
-        if args:
+        if type_name == "value" and args_text.strip():
+            # 'value(25,25)' is passed as a single (quoted) argument; G'MIC
+            # commands commonly bind it to several variables at once.
+            v = _parse_param_value(args_text.strip())
+            default = str(v) if v is not None else ""
+        elif args:
             v = _parse_param_value(args[-1])
             default = str(v) if v is not None else ""
         else:
