@@ -5,16 +5,17 @@ from models.filter import ParamDef, ParamValue, ParamKind
 def _gmic_escape(s: str) -> str:
     """Escape a text parameter value for the G'MIC command line.
 
-    G'MIC keeps each command line argument as a single item, so spaces need no
-    escaping, but commas split arguments, double quotes start a quoted string
-    and a backslash escapes the following character.  The ``\\,`` escape is
-    used for commas rather than ``\\054``: the octal form only survives the
-    argument parsing itself, while the backslash form also survives a value
-    that a filter re-interprets as a command (e.g. through ``$1``).
+    The CLI wraps every argument containing a space in double quotes, which
+    turns the whole comma-separated argument list into a single value, so
+    spaces are encoded as the octal literal \\040.  Commas are escaped with a
+    backslash: inside one argument list they separate values, so a comma that
+    belongs to a text value must be protected.  Double quotes and backslashes
+    escape the same way.
     """
     return (
         s.replace("\\", "\\\\")
         .replace('"', '\\"')
+        .replace(" ", "\\040")
         .replace(",", "\\,")
         .replace("\n", "\\012")
         .replace("\r", "\\015")
@@ -39,5 +40,7 @@ def _serialize_param(val: ParamValue, param_def: Optional[ParamDef] = None) -> s
         return ",".join(str(v) for v in val)
     result = str(val)
     if param_def is not None and param_def.kind == ParamKind.TEXT:
-        return _gmic_escape(result)
+        # Quotes keep '$', ',' and spaces literal; the octals keep the whole
+        # argument list free of raw spaces so G'MIC still splits it.
+        return '"' + _gmic_escape(result) + '"'
     return result.strip()

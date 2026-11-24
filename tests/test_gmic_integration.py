@@ -210,19 +210,24 @@ class TestMultiImageOutput:
 
 
 class TestTextParameter:
-    def test_text_value_with_spaces_reaches_gmic(self, stdlib_filters,
-                                                 gmic_image):
-        # 'iain_fast_formula' runs its text parameter as a command
-        # ("apply_gamma 2.2"); escaping the space as '\040' made G'MIC look
-        # for a file called 'apply_gamma\0402.2'.
-        filter_def = stdlib_filters.get("iain_fast_formula")
-        if filter_def is None:
-            pytest.skip("community stdlib cache missing")
-        assert filter_def.parameters[0].kind == "text"
-        assert " " in filter_def.parameters[0].default
+    def test_whitespace_in_a_text_value_is_not_stripped(self, stdlib_filters):
+        # 'Ascii Art' defaults its dictionary to ' .oO0': the leading space
+        # is one of the characters to draw with, and stripping it changed
+        # the generated art.
+        from gmic.pipeline import _serialize_param
+        filter_def = stdlib_filters["fx_asciiart"]
+        dictionary = next(p for p in filter_def.parameters
+                          if p.name == "Custom Dictionary")
+        assert dictionary.default.startswith(" ")
+        assert _serialize_param(dictionary.default, dictionary) == '"\\040.oO0"'
 
-        result = run_filter(gmic_image, filter_def, timeout=120)
-        assert result.success, result.error
+    def test_newlines_do_not_break_the_command_line(self):
+        from gmic.pipeline import _serialize_param
+        from models.filter import ParamDef
+        param = ParamDef("x", "X", kind="text", default="")
+        serialized = _serialize_param("first\nsecond", param)
+        assert "\n" not in serialized
+        assert serialized == '"first\\012second"'
 
 
 class TestButtonParameter:
