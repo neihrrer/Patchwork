@@ -31,6 +31,10 @@ _NOISE_ATTENUATE_SCALE = {
 # Used when a command carries no amplitude argument (e.g. old project files).
 _NOISE_DEFAULT_AMPLITUDE = "0.1"
 
+# Filters that only alter colour: their output must keep the source alpha
+# channel instead of flattening transparency to the background colour.
+_RESTORE_ALPHA_OPS = frozenset({"add_noise", "canny_edge", "charcoal", "edge", "vignette"})
+
 _GRAYSCALE_METHODS = [
     "Rec709Luminance",
     "Rec601Luminance",
@@ -105,7 +109,7 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
         return [("-resize", val)]
     elif op == "rotate":
         val = raw_params[0] if raw_params else None
-        return [("-rotate", val)]
+        return [("-background", "none"), ("-rotate", val)]
     elif op == "grayscale":
         idx = int(raw_params[0]) if raw_params else 0
         idx = max(0, min(idx, len(_GRAYSCALE_METHODS) - 1))
@@ -227,6 +231,7 @@ class ImageMagickCLI:
             os.close(fd)
 
         args = [self._magick_path, input_path]
+        restore_alpha = False
         for cmd in commands:
             if not cmd.strip():
                 continue
@@ -234,6 +239,8 @@ class ImageMagickCLI:
             op = parts[0]
             raw_params = parts[1].split(",") if len(parts) > 1 else []
             flag_parts = _build_args(op, raw_params)
+            if flag_parts and op in _RESTORE_ALPHA_OPS:
+                restore_alpha = True
             for flag, arg in flag_parts:
                 args.append(flag)
                 if arg is not None:
@@ -241,6 +248,16 @@ class ImageMagickCLI:
                         args.extend(arg)
                     else:
                         args.append(arg)
+
+        if restore_alpha:
+            # Process the colour channels only, then re-attach the source alpha
+            # so regions that were transparent do not become opaque.
+            args = (
+                [self._magick_path, input_path, "-alpha", "off"]
+                + args[2:]
+                + ["(", input_path, "-alpha", "extract", ")",
+                   "-alpha", "off", "-compose", "CopyOpacity", "-composite"]
+            )
 
         args.append(output_path)
 

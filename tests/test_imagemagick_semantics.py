@@ -9,7 +9,7 @@ import random
 import shutil
 
 import pytest
-from PIL import Image, ImageChops, ImageStat
+from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 
 MAGICK = shutil.which("magick")
@@ -34,6 +34,15 @@ def _noise_image(path, size=(160, 120)):
     img = Image.new("RGB", size)
     img.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256))
                  for _ in range(size[0] * size[1])])
+    img.save(path)
+    return str(path)
+
+
+def _rgba_shapes(path, size=(160, 120)):
+    img = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([20, 20, 90, 90], fill=(220, 60, 30, 255))
+    draw.ellipse([95, 30, 150, 100], fill=(30, 160, 220, 200))
     img.save(path)
     return str(path)
 
@@ -165,6 +174,49 @@ class TestAddNoiseAmplitude:
         original = Image.open(src).convert("RGB")
         noisy = Image.open(out).convert("RGB")
         assert _mean_diff(original, noisy) > 0.2
+
+
+class TestAlphaPreservation:
+    @pytest.mark.parametrize("command", [
+        "charcoal,2.0,1.0",
+        "edge,1.0",
+        "canny_edge,1.0,1.0,10.0,30.0",
+        "vignette,10.0,10.0,3.0,0",
+        "add_noise,0,0.2",
+    ])
+    def test_transparent_areas_stay_transparent(self, command, tmp_path):
+        from imagemagick.cli import ImageMagickCLI
+
+        src = _rgba_shapes(tmp_path / "src.png")
+        out = tmp_path / "out.png"
+        result = ImageMagickCLI().run_pipeline(src, [command], str(out))
+        assert result.success, result.error
+
+        original = Image.open(src).convert("RGBA")
+        filtered = Image.open(out).convert("RGBA")
+        assert filtered.size == original.size
+
+        alpha_diff = ImageChops.difference(original.getchannel("A"), filtered.getchannel("A"))
+        assert alpha_diff.getbbox() is None, f"{command} changed the alpha channel"
+
+        colour_diff = _mean_diff(original.convert("RGB"), filtered.convert("RGB"))
+        assert colour_diff > 0.2, f"{command} did not change the colour"
+
+    @pytest.mark.parametrize("source_kind", ["rgba", "rgb"])
+    def test_rotate_padding_is_transparent(self, source_kind, tmp_path):
+        from imagemagick.cli import ImageMagickCLI
+
+        if source_kind == "rgba":
+            src = _rgba_shapes(tmp_path / "src.png")
+        else:
+            src = _gradient_image(tmp_path / "src.png")
+        out = tmp_path / "out.png"
+        result = ImageMagickCLI().run_pipeline(src, ["rotate,45.0"], str(out))
+        assert result.success, result.error
+
+        rotated = Image.open(out).convert("RGBA")
+        assert rotated.getpixel((0, 0))[3] == 0
+        assert rotated.getpixel((rotated.width - 1, 0))[3] == 0
 
 
 class TestDeprecatedOptions:

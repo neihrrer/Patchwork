@@ -36,7 +36,7 @@ class TestBuildArgs:
         ("median", ["3"], [("-statistic", ["Median", "3"])]),
         ("resize_pct", ["50"], [("-resize", "50%")]),
         ("resize_px", ["800", "600"], [("-resize", "800x600!")]),
-        ("rotate", ["90"], [("-rotate", "90")]),
+        ("rotate", ["90"], [("-background", "none"), ("-rotate", "90")]),
         ("grayscale", ["0"], [("-grayscale", "Rec709Luminance")]),
         ("sepia", ["80"], [("-sepia-tone", "80%")]),
         ("modulate", ["100", "150", "0"], [("-modulate", "100,150,0")]),
