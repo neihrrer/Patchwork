@@ -33,6 +33,7 @@ def test_probe_parses_json(monkeypatch):
     }''')
     monkeypatch.setattr("video.ffmpeg.subprocess.run", fake)
     monkeypatch.setattr("video.ffmpeg.os.path.isfile", lambda p: True)
+    monkeypatch.setattr("shutil.which", lambda p: "/usr/bin/" + p)
     info = cli.probe("/tmp/a.mp4")
     assert info["width"] == 640
     assert info["height"] == 480
@@ -48,6 +49,7 @@ def test_probe_frame_count_falls_back_to_duration(monkeypatch):
     ))
     monkeypatch.setattr("video.ffmpeg.subprocess.run", fake)
     monkeypatch.setattr("video.ffmpeg.os.path.isfile", lambda p: True)
+    monkeypatch.setattr("shutil.which", lambda p: "/usr/bin/" + p)
     info = cli.probe("/tmp/a.mp4")
     assert info["fps"] == 30.0
     assert info["frame_count"] == 60
