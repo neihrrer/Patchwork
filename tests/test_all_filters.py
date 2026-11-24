@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import os
+import re
 import sys
 import time
 import shutil
@@ -31,6 +32,7 @@ from PIL import Image, ImageDraw
 
 from gmic.cli import GmicCLI
 from gmic.parser import GmicFilterParser
+from models.filter import FilterDef
 from imagemagick.cli import ImageMagickCLI
 from imagemagick.filters import get_builtin_filters as get_im_filters
 from nodes import NodeGraph, InputNode, FilterNode, OutputNode
@@ -96,35 +98,67 @@ def _quick_sample(filters, n_per_category=2, total_cap=15):
 
 class FilterTestResult:
     def __init__(self, name: str, engine: str, success: bool,
-                 duration: float, error: str = ""):
+                 duration: float, error: str = "", note: str = ""):
         self.name = name
         self.engine = engine
         self.success = success
         self.duration = duration
         self.error = error
+        self.note = note
 
 
-def generate_test_image(path: str, size: int = 200):
+# Filters that need more than one layer without declaring it with ':*'/'+:'
+# are retried with two layers so we test the filter itself.
+TWO_LAYER_ERRORS = re.compile(
+    r"at least (?:two|2) (?:input )?layers?"
+    r"|needs? (?:two|2) (?:input )?layers?"
+    r"|needs? (?:two|2) images?"
+    r"|requires? (?:two|2)"
+    r"|not in range -1\.\.\.0",
+    re.IGNORECASE,
+)
+
+
+def generate_test_image(path: str, size: int = 200, variant: int = 0):
+    """Write a deterministic test image.
+
+    Variant 0 is the original gradient image; variant 1 is a distinct
+    picture, so two-layer filters (blend, montage, alignment) get real data
+    instead of the same layer twice.
+    """
     img = Image.new("RGB", (size, size))
     for x in range(size):
         for y in range(size):
-            r = x * 255 // size
-            g = y * 255 // size
-            b = 128
-            img.putpixel((x, y), (r, g, b))
+            if variant:
+                img.putpixel((x, y), (255 - x * 255 // size,
+                                      y * 255 // size // 2,
+                                      x * 128 // size + 60))
+            else:
+                img.putpixel((x, y), (x * 255 // size,
+                                      y * 255 // size,
+                                      128))
     draw = ImageDraw.Draw(img)
-    draw.ellipse([50, 50, 150, 150], outline=(255, 255, 255), width=3)
-    draw.rectangle([20, 20, 80, 80], outline=(0, 255, 0), width=2)
-    draw.line([0, 0, size, size], fill=(255, 0, 0), width=2)
+    if variant:
+        draw.rectangle([40, 120, 160, 190], fill=(250, 240, 10))
+        draw.ellipse([90, 10, 150, 70], fill=(0, 200, 255))
+        draw.line([0, size, size, 0], fill=(255, 0, 255), width=4)
+    else:
+        draw.ellipse([50, 50, 150, 150], outline=(255, 255, 255), width=3)
+        draw.rectangle([20, 20, 80, 80], outline=(0, 255, 0), width=2)
+        draw.line([0, 0, size, size], fill=(255, 0, 0), width=2)
     img.save(path)
 
 
-def build_filter_graph(test_image: str, filter_def) -> NodeGraph:
+def build_filter_graph(test_images: list[str], filter_def) -> NodeGraph:
+    """Build Input(s) -> Filter -> Output, one input per image port."""
     graph = NodeGraph()
 
-    input_node = InputNode("in")
-    input_node.file_path = test_image
-    graph.add_node(input_node)
+    input_nodes = []
+    for index in range(filter_def.image_input_count):
+        input_node = InputNode(f"in{index}")
+        input_node.file_path = test_images[index % len(test_images)]
+        graph.add_node(input_node)
+        input_nodes.append(input_node)
 
     filter_node = FilterNode("flt", filter_def)
     graph.add_node(filter_node)
@@ -132,45 +166,76 @@ def build_filter_graph(test_image: str, filter_def) -> NodeGraph:
     output_node = OutputNode("out")
     graph.add_node(output_node)
 
-    graph.add_edge("in", "image", "flt", "image")
+    graph.add_edge(input_nodes[0].id, "image", filter_node.id, "image")
+    for index in range(1, filter_def.image_input_count):
+        graph.add_edge(input_nodes[index].id, "image", filter_node.id,
+                       f"image_{index + 1}")
 
-    for i in range(1, filter_def.image_input_count):
-        port_name = f"image_{i + 1}"
-        graph.add_edge("in", "image", "flt", port_name)
-
-    graph.add_edge("flt", "image", "out", "image")
+    graph.add_edge(filter_node.id, "image", output_node.id, "image")
     return graph
 
 
-def test_filter(gmic: Optional[GmicCLI], imagemagick: Optional[ImageMagickCLI],
-                test_image: str, filter_def, timeout: int) -> FilterTestResult:
-    start = time.time()
-    try:
-        graph = build_filter_graph(test_image, filter_def)
-        executor = GraphExecutor(gmic, imagemagick)
-        result = executor.execute(graph, output_format="png", timeout=timeout)
-        duration = time.time() - start
+def with_input_count(filter_def, count: int):
+    """Copy of ``filter_def`` that declares ``count`` image inputs."""
+    if filter_def.image_input_count == count:
+        return filter_def
+    return FilterDef(
+        name=filter_def.name,
+        display_name=filter_def.display_name,
+        category=list(filter_def.category),
+        description=filter_def.description,
+        parameters=filter_def.parameters,
+        gmic_command=filter_def.gmic_command,
+        engine=filter_def.engine,
+        image_input_count=count,
+    )
 
-        if result.success and result.output_path and os.path.isfile(result.output_path):
-            fsize = os.path.getsize(result.output_path)
-            if fsize > 100:
-                return FilterTestResult(
-                    filter_def.name, filter_def.engine, True, duration)
-            return FilterTestResult(
-                filter_def.name, filter_def.engine, False, duration,
-                f"output too small ({fsize} bytes)")
-        return FilterTestResult(
-            filter_def.name, filter_def.engine, False, duration,
-            result.error or "no output produced")
+
+def _attempt(gmic, imagemagick, test_images: list[str], filter_def, timeout: int):
+    """Run one filter, returning (FilterTestResult, error-or-None)."""
+    start = time.time()
+    graph = build_filter_graph(test_images, filter_def)
+    executor = GraphExecutor(gmic, imagemagick)
+    result = executor.execute(graph, output_format="png", timeout=timeout)
+    duration = time.time() - start
+
+    if result.success and result.output_path and os.path.isfile(result.output_path):
+        fsize = os.path.getsize(result.output_path)
+        if fsize > 100:
+            return FilterTestResult(filter_def.name, filter_def.engine,
+                                    True, duration), None
+        error = f"output too small ({fsize} bytes)"
+        return FilterTestResult(filter_def.name, filter_def.engine, False,
+                                duration, error), error
+    error = result.error or "no output produced"
+    return FilterTestResult(filter_def.name, filter_def.engine, False,
+                            duration, error), error
+
+
+def test_filter(gmic: Optional[GmicCLI], imagemagick: Optional[ImageMagickCLI],
+                test_images: list[str], filter_def, timeout: int) -> FilterTestResult:
+    try:
+        result, error = _attempt(gmic, imagemagick, test_images, filter_def, timeout)
+        if (not result.success and filter_def.image_input_count < 2
+                and len(test_images) >= 2 and TWO_LAYER_ERRORS.search(error or "")):
+            # The filter needs a second layer but does not declare it in
+            # '#@gui'; retry with two distinct layers.
+            two_layer_def = with_input_count(filter_def, 2)
+            retry, _ = _attempt(gmic, imagemagick, test_images[:2],
+                                two_layer_def, timeout)
+            if retry.success:
+                retry.note = "needed two input layers"
+                return retry
+            result.error = error
+        return result
     except Exception as e:
-        duration = time.time() - start
-        return FilterTestResult(
-            filter_def.name, filter_def.engine, False, duration, str(e))
+        return FilterTestResult(filter_def.name, filter_def.engine, False,
+                                0.0, str(e))
 
 
 def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
               imagemagick: Optional[ImageMagickCLI],
-              test_image: str, timeout: int, quick: bool,
+              test_images: list[str], timeout: int, quick: bool,
               error_log
               ) -> tuple[int, int, float, int]:
     if not filters:
@@ -190,7 +255,7 @@ def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
             results.append(FilterTestResult(fd.name, fd.engine, True, 0.0, "skipped (interactive)"))
             skipped_count += 1
             continue
-        r = test_filter(gmic, imagemagick, test_image, fd, timeout)
+        r = test_filter(gmic, imagemagick, test_images, fd, timeout)
         results.append(r)
         if (i + 1) % 25 == 0 or i == total - 1:
             sofar = sum(1 for rr in results if rr.success)
@@ -214,7 +279,8 @@ def run_group(label: str, filters: list, gmic: Optional[GmicCLI],
                 error_log.write(f"  {l}\n")
             error_log.write("\n")
         print(f"  [{mark}] {r.name:45s} {r.duration:6.1f}s"
-              + (f"  {err}" if err else ""))
+              + (f"  {err}" if err else "")
+              + (f"  ({r.note})" if r.note else ""))
 
     line = "  " + "\u2500" * 60
     print(line)
@@ -265,9 +331,12 @@ def main():
         sys.exit(1)
 
     img_dir = tempfile.mkdtemp(prefix="patchwork_test_")
-    test_image = os.path.join(img_dir, "input.png")
-    generate_test_image(test_image)
-    print(f"\n  Test image: 200x200 PNG ({os.path.getsize(test_image)} bytes)")
+    test_images = [os.path.join(img_dir, "input.png"),
+                   os.path.join(img_dir, "input_second.png")]
+    generate_test_image(test_images[0])
+    generate_test_image(test_images[1], variant=1)
+    sizes = ", ".join(f"{os.path.getsize(p)} bytes" for p in test_images)
+    print(f"\n  Test images: 2 x 200x200 PNG ({sizes})")
 
     gmic_cli = GmicCLI() if gmic_ok else None
     im_cli = ImageMagickCLI() if magick_ok else None
@@ -313,7 +382,7 @@ def main():
 
     for label, filters in groups:
         ok, n, secs, skipped = run_group(label, filters, gmic_cli, im_cli,
-                                         test_image, args.timeout, args.quick,
+                                         test_images, args.timeout, args.quick,
                                          error_log)
         total_ok += ok
         total_all += n
