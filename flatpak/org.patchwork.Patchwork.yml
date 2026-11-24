@@ -38,7 +38,9 @@ modules:
     sources:
       - type: git
         url: https://github.com/GreycLab/gmic.git
-        tag: v.4.0.8
+        # Kept in step with the G'MIC Fedora ships (4.0.3): the community
+        # filter snapshot in src/gmic/stdlib.py is pinned for this version.
+        tag: v.4.0.3
 
   - name: patchwork
     buildsystem: meson
