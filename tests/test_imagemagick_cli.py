@@ -41,8 +41,6 @@ class TestBuildArgs:
         ("sepia", ["80"], [("-sepia-tone", "80%")]),
         ("modulate", ["100", "150", "0"], [("-modulate", "100,150,0")]),
         ("level", ["10", "240", "1.2"], [("-level", "10%,240%,1.2")]),
-        ("contrast", ["1"], [("-contrast", None)]),
-        ("contrast", ["0"], []),
         ("contrast_stretch", ["5", "245"], [("-contrast-stretch", "5%,245%")]),
         ("canny_edge", ["1", "1.0", "10", "30"], [("-canny", "1x1.0+10%+30%")]),
         ("charcoal", ["2"], [("-charcoal", "2")]),

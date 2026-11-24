@@ -165,3 +165,25 @@ class TestAddNoiseAmplitude:
         original = Image.open(src).convert("RGB")
         noisy = Image.open(out).convert("RGB")
         assert _mean_diff(original, noisy) > 0.2
+
+
+class TestDeprecatedOptions:
+    def test_contrast_filter_is_gone(self):
+        from imagemagick.filters import get_builtin_filters
+
+        names = {f.name for f in get_builtin_filters()}
+        assert "contrast" not in names
+
+    def test_no_builtin_emits_a_replaced_imagemagick_option(self, tmp_path):
+        from imagemagick.cli import ImageMagickCLI
+        from imagemagick.filters import get_builtin_filters
+        from gmic.pipeline import _serialize_param
+
+        src = _gradient_image(tmp_path / "src.png")
+        cli = ImageMagickCLI()
+        for filter_def in get_builtin_filters():
+            params = [_serialize_param(p.default, p) for p in filter_def.parameters]
+            command = ",".join([filter_def.gmic_command, *params])
+            result = cli.run_pipeline(src, [command], str(tmp_path / "out.png"))
+            assert result.success, (filter_def.name, result.error)
+            assert "has been replaced" not in result.stderr, (filter_def.name, result.stderr)

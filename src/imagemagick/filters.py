@@ -156,16 +156,6 @@ BUILTIN_FILTERS: list[FilterDef] = [
         gmic_command="level",
     ),
     FilterDef(
-        name="contrast",
-        display_name="Contrast",
-        category=["Colors"],
-        engine=ENGINE_IMAGEMAGICK,
-        parameters=[
-            ParamDef(name="enhance", label="Enhance", kind=ParamKind.BOOL, default=True),
-        ],
-        gmic_command="contrast",
-    ),
-    FilterDef(
         name="contrast_stretch",
         display_name="Contrast Stretch",
         category=["Colors"],

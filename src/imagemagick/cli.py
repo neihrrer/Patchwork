@@ -126,10 +126,6 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
             vals.append(raw_params[2])
         val = ",".join(vals) if vals else None
         return [("-level", val)]
-    elif op == "contrast":
-        if raw_params and raw_params[0] == "1":
-            return [("-contrast", None)]
-        return []
     elif op == "contrast_stretch":
         vals = [raw_params[0] + "%", raw_params[1] + "%"] if len(raw_params) >= 2 else []
         val = ",".join(vals) if vals else None
