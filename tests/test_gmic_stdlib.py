@@ -82,6 +82,15 @@ class TestCommunityPin:
         text = 'u "a"\\\n######################\n\n# end\n'
         assert _sanitize_community(text) == 'u "a"\n######################\n\n# end'
 
+    def test_keeps_comment_block_continuations(self):
+        # '#@gui'/'#@cli' definitions span lines with '\'; the filter parser
+        # needs those backslashes.
+        from gmic.stdlib import _sanitize_community
+        text = ('#@gui : Note = note{"hello \\\n'
+                '# world"}\n'
+                '#@gui : Angle = float(0,0,360)\n')
+        assert _sanitize_community(text) == text.rstrip()
+
     def test_drops_a_dangling_backslash_at_the_end(self):
         from gmic.stdlib import _sanitize_community
         assert _sanitize_community('cmd 1\\') == 'cmd 1'

@@ -100,18 +100,29 @@ def download_file(url: str, dest: Path) -> bool:
 
 
 def _sanitize_community(text: str) -> str:
-    """Repair continuations that run into a comment block.
+    """Repair command continuations that run into a comment block.
 
     Some community files end a command with a stray ``\\`` right before a
     comment block; G'MIC then appends the comment to the command line, which
     broke filters such as ``fx_jpeg_preview`` (``Unknown command or filename
     ':'``).  A continuation into a comment is meaningless, so the backslash is
     dropped.
+
+    Lines that are comments themselves (``#@gui``/``#@cli`` parameter blocks)
+    keep their backslash: the parser relies on it to join multi-line
+    definitions.
     """
     text = text.rstrip()
     if text.endswith("\\"):
         text = text[:-1].rstrip()
-    return re.sub(r"\\[ \t]*\r?\n(?=[ \t]*#)", "\n", text)
+    lines = text.split("\n")
+    for index, line in enumerate(lines[:-1]):
+        stripped = line.rstrip()
+        if not stripped.endswith("\\") or stripped.lstrip().startswith("#"):
+            continue
+        if lines[index + 1].lstrip().startswith("#"):
+            lines[index] = stripped[:-1]
+    return "\n".join(lines)
 
 
 def fetch_community_files(ref: str = COMMUNITY_REF) -> Optional[str]:
