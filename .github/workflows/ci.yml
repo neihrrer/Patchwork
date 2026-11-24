@@ -27,10 +27,8 @@ jobs:
             blueprint-compiler \
             gmic \
             ImageMagick \
-            python3-pip \
             python3-pillow \
-            python3-pytest \
-            glib2-devel
+            python3-pytest
 
       - name: Setup build
         run: meson setup build
