@@ -77,6 +77,20 @@ class TestStdlibSource:
 
 
 class TestCommunityPin:
+    def test_drops_a_continuation_into_a_comment(self):
+        from gmic.stdlib import _sanitize_community
+        text = 'u "a"\\\n######################\n\n# end\n'
+        assert _sanitize_community(text) == 'u "a"\n######################\n\n# end'
+
+    def test_drops_a_dangling_backslash_at_the_end(self):
+        from gmic.stdlib import _sanitize_community
+        assert _sanitize_community('cmd 1\\') == 'cmd 1'
+
+    def test_keeps_normal_continuations(self):
+        from gmic.stdlib import _sanitize_community
+        text = 'cmd a,\\\nb\n'
+        assert _sanitize_community(text) == 'cmd a,\\\nb'
+
     def test_cache_path_is_keyed_by_the_pinned_ref(self, tmp_path):
         from gmic.stdlib import COMMUNITY_REF, community_cache_path
         with patch("gmic.stdlib.CACHE_DIR", tmp_path):
@@ -107,9 +121,9 @@ class TestCommunityPin:
         with patch("gmic.stdlib.CACHE_DIR", cache_dir), \
                 patch("gmic.stdlib.urlopen", side_effect=fake_urlopen):
             text = fetch_community_files()
-            assert community_cache_path().read_text() == "#@gui A : fx_a\n"
+            assert community_cache_path().read_text() == "#@gui A : fx_a"
 
-        assert text == "#@gui A : fx_a\n"
+        assert text == "#@gui A : fx_a"
         assert urls[0] == (
             "https://api.github.com/repos/GreycLab/gmic-community/contents/include"
             f"?ref={COMMUNITY_REF}")

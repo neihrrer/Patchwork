@@ -517,20 +517,17 @@ class GmicFilterParser:
                         pass
                 continue
 
-            # Extract multi-input flags (*, +) from the right-hand side
+            # Extract the input mode from the right-hand side.  The mode is one
+            # of {x: none, .: active, *: all, +: active & below, -: active &
+            # above, v: all visible, i: all invisible}; '*' and '+' mean the
+            # filter wants every layer.
             image_input_count = 1
-            # Format: "command, preview_command(zoom_factor) [: *|+]"
-            m = re.match(r'^(.*?)\s*:\s*([*+])$', rhs)
+            # Format: "command, preview_command(zoom_factor) [: <mode>]"
+            m = re.match(r"^(.*?)\s*:\s*([x.*+\-vi])$", rhs)
             if m:
                 rhs = m.group(1).strip()
-                image_input_count = 2
-            # Also handle :* or :+ without space before the flag
-            elif rhs.endswith(":*") or rhs.endswith(":+") or rhs.endswith(": *") or rhs.endswith(": +"):
-                for sep in [":*", ":+", ": *", ": +"]:
-                    if rhs.endswith(sep):
-                        rhs = rhs[:-len(sep)].strip()
-                        image_input_count = 2
-                        break
+                if m.group(2) in "*+":
+                    image_input_count = 2
 
             display_name = _strip_name(lhs)
             if display_name in ("note", "sep", "separator"):

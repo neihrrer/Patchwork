@@ -99,6 +99,21 @@ def download_file(url: str, dest: Path) -> bool:
         return False
 
 
+def _sanitize_community(text: str) -> str:
+    """Repair continuations that run into a comment block.
+
+    Some community files end a command with a stray ``\\`` right before a
+    comment block; G'MIC then appends the comment to the command line, which
+    broke filters such as ``fx_jpeg_preview`` (``Unknown command or filename
+    ':'``).  A continuation into a comment is meaningless, so the backslash is
+    dropped.
+    """
+    text = text.rstrip()
+    if text.endswith("\\"):
+        text = text[:-1].rstrip()
+    return re.sub(r"\\[ \t]*\r?\n(?=[ \t]*#)", "\n", text)
+
+
 def fetch_community_files(ref: str = COMMUNITY_REF) -> Optional[str]:
     """Download the community filter sources pinned at ``ref``.
 
@@ -117,7 +132,8 @@ def fetch_community_files(ref: str = COMMUNITY_REF) -> Optional[str]:
             file_url = f"{_COMMUNITY_RAW}/{ref}/include/{entry['name']}"
             try:
                 file_req = urlopen(file_url, timeout=20)
-                parts.append(file_req.read().decode("utf-8", errors="replace"))
+                parts.append(_sanitize_community(
+                    file_req.read().decode("utf-8", errors="replace")))
             except (URLError, OSError, ValueError):
                 continue
         if not parts:

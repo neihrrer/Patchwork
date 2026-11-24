@@ -231,6 +231,29 @@ class TestTextUnescaping:
         assert param.choices[0] == "a\\nb"
 
 
+class TestInputMode:
+    @staticmethod
+    def _parse(mode):
+        gui = (f"#@gui Filter : fcmd, fcmd_preview(1) : {mode}\n"
+               "fcmd :\n  blur 1\n\n#@gui _\n")
+        return GmicFilterParser().parse_gui(gui)[0]
+
+    def test_star_and_plus_ask_for_two_layers(self):
+        for mode in ("*", "+"):
+            filter_def = self._parse(mode)
+            assert filter_def.gmic_command == "fcmd"
+            assert filter_def.image_input_count == 2
+
+    def test_other_modes_are_stripped(self):
+        # '.', 'v', 'i', '-', 'x' are layer *selection* modes, not extra
+        # inputs; they must not stay in the command ('fx_rep_premade_palette'
+        # uses ':.').
+        for mode in (".", "v", "i", "-", "x"):
+            filter_def = self._parse(mode)
+            assert filter_def.gmic_command == "fcmd"
+            assert filter_def.image_input_count == 1
+
+
 class TestGmicFilterParser:
     def test_builtin_filters_not_empty(self):
         parser = GmicFilterParser()
