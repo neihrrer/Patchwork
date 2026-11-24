@@ -35,7 +35,7 @@ class TestBuildArgs:
         ("adaptive_sharpen", ["3.0", "1.0"], [("-adaptive-sharpen", "3.0x1.0")]),
         ("median", ["3"], [("-median", "3")]),
         ("resize_pct", ["50"], [("-resize", "50%")]),
-        ("resize_px", ["800", "600"], [("-resize", "800x600")]),
+        ("resize_px", ["800", "600"], [("-resize", "800x600!")]),
         ("rotate", ["90"], [("-rotate", "90")]),
         ("grayscale", ["0"], [("-grayscale", "Rec709Luminance")]),
         ("sepia", ["80"], [("-sepia-tone", "80%")]),

@@ -46,3 +46,33 @@ class TestCharcoalSigma:
 
         diff = ImageStat.Stat(ImageChops.difference(soft, hard)).mean
         assert sum(diff) > 1.0, "charcoal sigma had no effect on the output"
+
+
+class TestResizePixels:
+    def test_resize_pixels_produces_requested_size(self, tmp_path):
+        from gmic.cli import GmicCLI
+        from imagemagick.cli import ImageMagickCLI
+        from imagemagick.filters import get_builtin_filters
+        from nodes import NodeGraph, InputNode, FilterNode, OutputNode
+        from processing.graph_executor import GraphExecutor
+
+        src = _gradient_image(tmp_path / "wide.png", size=(500, 100))
+        filter_def = next(f for f in get_builtin_filters() if f.name == "resize_px")
+
+        graph = NodeGraph()
+        inp = InputNode("in")
+        inp.file_path = src
+        graph.add_node(inp)
+        flt = FilterNode("flt", filter_def)
+        flt.set_param("width", 800)
+        flt.set_param("height", 600)
+        graph.add_node(flt)
+        out = OutputNode("out")
+        graph.add_node(out)
+        graph.add_edge("in", "image", "flt", "image")
+        graph.add_edge("flt", "image", "out", "image")
+
+        executor = GraphExecutor(GmicCLI(), ImageMagickCLI())
+        result = executor.execute(graph, output_format="png", timeout=60)
+        assert result.success, result.error
+        assert Image.open(result.output_path).size == (800, 600)
