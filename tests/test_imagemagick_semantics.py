@@ -138,12 +138,13 @@ class TestAddNoiseAmplitude:
         noisy = Image.open(out).convert("RGB")
         assert _mean_diff(original, noisy) > 0.5
 
-    def test_zero_amplitude_is_a_no_op(self, tmp_path):
+    @pytest.mark.parametrize("noise_index", range(6))
+    def test_zero_amplitude_is_a_no_op(self, noise_index, tmp_path):
         from imagemagick.cli import ImageMagickCLI
 
         src = _noise_image(tmp_path / "src.png")
-        out = tmp_path / "out.png"
-        result = ImageMagickCLI().run_pipeline(src, ["add_noise,0,0"], str(out))
+        out = tmp_path / f"noise{noise_index}.png"
+        result = ImageMagickCLI().run_pipeline(src, [f"add_noise,{noise_index},0"], str(out))
         assert result.success, result.error
 
         original = Image.open(src).convert("RGBA")
@@ -163,7 +164,8 @@ class TestAddNoiseAmplitude:
         assert _mean_diff(original, high) > 2 * _mean_diff(original, low)
 
     @pytest.mark.parametrize("noise_index", range(6))
-    def test_every_noise_type_renders(self, noise_index, tmp_path):
+    def test_amplitude_10_lands_in_the_documented_band(self, noise_index, tmp_path):
+        """Amplitude is normalised to mean mean 8-bit difference in levels."""
         from imagemagick.cli import ImageMagickCLI
 
         src = _gradient_image(tmp_path / "src.png")
@@ -173,7 +175,8 @@ class TestAddNoiseAmplitude:
 
         original = Image.open(src).convert("RGB")
         noisy = Image.open(out).convert("RGB")
-        assert _mean_diff(original, noisy) > 0.2
+        difference = _mean_diff(original, noisy)
+        assert 5.0 <= difference <= 20.0, f"noise type {noise_index} gave {difference:.1f} levels"
 
 
 class TestAlphaPreservation:
