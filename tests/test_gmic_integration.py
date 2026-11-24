@@ -14,7 +14,7 @@ from PIL import Image, ImageChops
 from gmic.cli import GmicCLI
 from gmic.parser import GmicFilterParser
 from gmic.stdlib import gmic_version, stdlib_cache_path, community_cache_path
-from nodes import FilterNode, InputNode, NodeGraph, OutputNode
+from nodes import FilterNode, InputNode, NodeGraph, OutputNode, PortType
 from processing.graph_executor import GraphExecutor
 
 pytestmark = pytest.mark.skipif(shutil.which("gmic") is None,
@@ -348,6 +348,48 @@ class TestMultiInput:
 
         assert result.success, result.error
         assert seen == [[gmic_image]]
+
+    def test_four_connected_image_ports_arrive_in_order(self, stdlib_filters,
+                                                        tmp_path, monkeypatch):
+        # Extra ports added to the node (UI: right-click -> Add Image Input)
+        # must reach G'MIC in port order, even when the wires were drawn in
+        # a different order.
+        filter_def = stdlib_filters["fx_blend"]
+        graph = NodeGraph()
+        node = FilterNode("flt", filter_def)
+        node.add_input_port()
+        node.add_input_port()
+        assert [p.name for p in node.inputs if p.port_type == PortType.IMAGE] == [
+            "image", "image_2", "image_3", "image_4"]
+        graph.add_node(node)
+        graph.add_node(OutputNode("out"))
+        graph.add_edge("flt", "image", "out", "image")
+
+        paths = []
+        ports = ["image", "image_2", "image_3", "image_4"]
+        for index in range(4):
+            path = tmp_path / f"layer{index}.png"
+            Image.new("RGB", (200, 200), (30 * index + 20, 120, 60)).save(str(path))
+            paths.append(str(path))
+            source = InputNode(f"in{index}")
+            source.file_path = paths[-1]
+            graph.add_node(source)
+        for port in reversed(ports):
+            graph.add_edge(f"in{ports.index(port)}", "image", "flt", port)
+
+        seen = []
+        real = GmicCLI.run_pipeline
+
+        def recording(self, *args, **kwargs):
+            seen.append(list(args[0]))
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(GmicCLI, "run_pipeline", recording)
+        result = GraphExecutor(GmicCLI(), None).execute(graph, output_format="png",
+                                                        timeout=120)
+
+        assert result.success, result.error
+        assert seen == [paths]
 
 
 class TestTextParameter:

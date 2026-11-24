@@ -499,6 +499,41 @@ class TestSerialization:
         graph = NodeGraph.from_dict(data, filter_def_map={})
         assert graph.get_node("f1") is None
 
+    def test_filter_node_extra_image_ports_round_trip(self):
+        fd = FilterDef(name="test", image_input_count=1)
+        graph = NodeGraph()
+        node = FilterNode("f1", fd)
+        node.add_input_port()
+        node.add_input_port()
+        graph.add_node(node)
+
+        data = graph.to_dict()
+        params = data["nodes"][0]["params"]
+        assert params["extra_image_ports"] == 2
+
+        graph2 = NodeGraph.from_dict(data, filter_def_map={"gmic:test": fd})
+        loaded = graph2.get_node("f1")
+        assert loaded is not None
+        assert loaded.extra_image_ports == 2
+        assert loaded.get_input_port("image_3") is not None
+
+    def test_old_filter_nodes_load_without_extra_ports(self):
+        # Project files written before the feature carry no extra_port count.
+        fd = FilterDef(name="test", image_input_count=1)
+        data = {
+            "version": 1,
+            "nodes": [{"id": "f1", "type": "filter", "label": "F", "x": 0,
+                       "y": 0, "width": 220, "height": 100,
+                       "params": {"filter_key": "gmic:test", "param_values": {}}}],
+            "edges": []
+        }
+        graph = NodeGraph.from_dict(data, filter_def_map={"gmic:test": fd})
+        loaded = graph.get_node("f1")
+        assert loaded is not None
+        assert loaded.extra_image_ports == 0
+        image_ports = [p.name for p in loaded.inputs if p.port_type == PortType.IMAGE]
+        assert image_ports == ["image"]
+
     def test_from_dict_preserves_positions(self):
         data = {
             "version": 1,

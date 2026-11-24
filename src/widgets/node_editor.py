@@ -546,6 +546,23 @@ class NodeWidget(Gtk.Box):
         click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
         row.add_controller(click)
         self._left_box.append(row)
+
+    def _remove_input_port_widget(self, port: Port):
+        pw = self._input_port_widgets.pop(port.name, None)
+        if pw is None:
+            return
+        row = pw.get_parent()
+        if row is not None:
+            self._left_box.remove(row)
+
+    def _sync_height_after_port_change(self):
+        """Keep widget and graph height in sync after adding/removing a port."""
+        self._logical_h = max(self._min_node_h, int(self._node.height))
+        self._node.height = self._logical_h
+        self.apply_zoom(self._canvas._zoom)
+        self._canvas._update_port_centers(self._node)
+        self.queue_resize()
+        self._canvas.queue_gl_render()
     def _build_ui(self):
         if isinstance(self._node, (LabelNode, CommentNode)):
             self._build_text_node_ui()
@@ -2320,8 +2337,37 @@ class NodeWidget(Gtk.Box):
             self._start_text_edit()
 
     def _on_right_click(self, gesture, n_press, x, y):
+        if isinstance(self._node, FilterNode):
+            self._show_filter_menu(x, y)
+            return
         a = self.get_allocation()
         self._canvas._on_canvas_right_click(gesture, n_press, a.x + x, a.y + y)
+
+    def _show_filter_menu(self, x, y):
+        popover = Gtk.Popover()
+        popover.set_parent(self)
+        popover.set_pointing_to(Gdk.Rectangle(int(x), int(y), 1, 1))
+        popover.set_has_arrow(False)
+        popover.connect("closed", lambda p: p.unparent())
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        for margin in ("set_margin_top", "set_margin_bottom",
+                       "set_margin_start", "set_margin_end"):
+            getattr(box, margin)(6)
+
+        add = Gtk.Button(label=_("Add Image Input"))
+        add.connect("clicked", lambda *_a: (
+            popover.popdown(), self._canvas.add_filter_input_port(self._node)))
+        box.append(add)
+
+        remove = Gtk.Button(label=_("Remove Image Input"))
+        remove.set_sensitive(self._node.extra_image_ports > 0)
+        remove.connect("clicked", lambda *_a: (
+            popover.popdown(), self._canvas.remove_filter_input_port(self._node)))
+        box.append(remove)
+
+        popover.set_child(box)
+        popover.popup()
 
 
 class WireOverlay(Gtk.Widget):
@@ -4636,6 +4682,34 @@ class NodeCanvas(Gtk.Overlay):
             self.emit("graph-changed")
             self._maybe_process_analysis_node(dst_id)
 
+    def add_filter_input_port(self, node: FilterNode):
+        """Give a filter node one more image input (right-click menu)."""
+        port = node.add_input_port()
+        widget = self._node_widgets.get(node.id)
+        if widget:
+            widget._add_input_port_widget(port)
+            widget._sync_height_after_port_change()
+            self._update_node_port_colors(node)
+        self.queue_gl_render()
+        self.emit("graph-changed")
+
+    def remove_filter_input_port(self, node: FilterNode):
+        """Remove the last extra image input and any wire into it."""
+        if node.extra_image_ports == 0:
+            return
+        number = node.filter_def.image_input_count + node.extra_image_ports
+        edge = self._graph.get_connected_input(node.id, f"image_{number}")
+        if edge:
+            self._graph.remove_edge(edge.id)
+        port = node.remove_input_port()
+        widget = self._node_widgets.get(node.id)
+        if widget and port:
+            widget._remove_input_port_widget(port)
+            widget._sync_height_after_port_change()
+            self._update_node_port_colors(node)
+        self.queue_gl_render()
+        self.emit("graph-changed")
+
     def set_extended_zoom(self, enabled: bool):
         self._extended_zoom = enabled
 
@@ -4701,6 +4775,8 @@ class NodeCanvas(Gtk.Overlay):
             elif isinstance(n, FilterNode):
                 nd["params"]["filter_key"] = f"{n.filter_def.engine}:{n.filter_def.name}"
                 nd["params"]["param_values"] = dict(n.param_values)
+                if n.extra_image_ports:
+                    nd["params"]["extra_image_ports"] = n.extra_image_ports
             elif isinstance(n, BlendNode):
                 nd["params"]["mode"] = n.mode
                 nd["params"]["extra_ports"] = len(n.inputs) - 2
@@ -4862,6 +4938,8 @@ class NodeCanvas(Gtk.Overlay):
                     node = FilterNode(nid, fdef, x, y)
                     for k, v in params.get("param_values", {}).items():
                         node.set_param(k, v)
+                    for _i in range(params.get("extra_image_ports", 0)):
+                        node.add_input_port()
                 else:
                     continue
             elif typ == "blend":

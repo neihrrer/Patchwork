@@ -89,6 +89,47 @@ class TestFilterNode:
         assert n.param_values.get("strength") == 0.5
         assert n.param_values.get("invert") is False
 
+    def test_add_input_port(self):
+        fd = FilterDef(name="test", image_input_count=2)
+        n = FilterNode("flt", fd)
+        height = n.height
+        port = n.add_input_port()
+        assert port.name == "image_3"
+        assert port.label == "Image 3"
+        assert port.direction == PortDirection.INPUT
+        assert port.port_type == PortType.IMAGE
+        assert n.get_input_port("image_3") is port
+        assert n.extra_image_ports == 1
+        assert n.height == height + 20
+
+    def test_added_image_port_stays_before_numeric_ports(self):
+        fd = FilterDef(
+            name="test", image_input_count=1,
+            parameters=[ParamDef("radius", "Radius", kind="float", default=5.0)])
+        n = FilterNode("flt", fd)
+        n.add_input_port()
+        names = [p.name for p in n.inputs]
+        assert names.index("image_2") < names.index("radius")
+
+    def test_remove_input_port(self):
+        fd = FilterDef(name="test", image_input_count=1)
+        n = FilterNode("flt", fd)
+        n.add_input_port()
+        n.add_input_port()
+        height = n.height
+        removed = n.remove_input_port()
+        assert removed.name == "image_3"
+        assert n.get_input_port("image_3") is None
+        assert n.extra_image_ports == 1
+        assert n.height == height - 20
+
+    def test_remove_input_port_keeps_declared_ports(self):
+        fd = FilterDef(name="test", image_input_count=2)
+        n = FilterNode("flt", fd)
+        assert n.remove_input_port() is None
+        names = {p.name for p in n.inputs}
+        assert {"image", "image_2"} <= names
+
 
 class TestBlendNode:
     def test_construction(self):

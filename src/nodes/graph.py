@@ -287,6 +287,8 @@ class NodeGraph:
             elif isinstance(n, FilterNode):
                 nd["params"]["filter_key"] = f"{n.filter_def.engine}:{n.filter_def.name}"
                 nd["params"]["param_values"] = dict(n.param_values)
+                if n.extra_image_ports:
+                    nd["params"]["extra_image_ports"] = n.extra_image_ports
             elif isinstance(n, BlendNode):
                 nd["params"]["mode"] = n.mode
                 nd["params"]["extra_ports"] = len(n.inputs) - 2
@@ -464,6 +466,8 @@ class NodeGraph:
                     continue
                 for k, v in params.get("param_values", {}).items():
                     node.set_param(k, v)
+                for _i in range(params.get("extra_image_ports", 0)):
+                    node.add_input_port()
             elif typ == "blend":
                 mode = params.get("mode", "over")
                 node = BlendNode(nid, mode, x, y)

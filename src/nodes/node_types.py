@@ -159,6 +159,7 @@ class FilterNode(Node):
         self.width = 220
         self.height = 100
         self._filter_def = filter_def
+        self._extra_image_ports = 0
         self._param_values: dict[str, ParamValue] = {
             p.name: p.default for p in filter_def.parameters
         }
@@ -171,6 +172,42 @@ class FilterNode(Node):
     @property
     def filter_def(self) -> FilterDef:
         return self._filter_def
+
+    @property
+    def extra_image_ports(self) -> int:
+        return self._extra_image_ports
+
+    def add_input_port(self) -> Port:
+        """Add one more image input after the declared ones.
+
+        Filters such as 'fx_jfif' need more layers than their '#@gui' flags
+        declare; the extra ports are named 'image_N' like the declared ones.
+        """
+        self._extra_image_ports += 1
+        number = self._filter_def.image_input_count + self._extra_image_ports
+        port = Port(self.id, f"image_{number}", f"Image {number}",
+                    PortDirection.INPUT, PortType.IMAGE)
+        # Keep the image inputs together, before any numeric parameter port.
+        index = len(self._inputs)
+        for position, existing in enumerate(self._inputs):
+            if existing.port_type != PortType.IMAGE:
+                index = position
+                break
+        self._inputs.insert(index, port)
+        self.height += 20
+        return port
+
+    def remove_input_port(self) -> Optional[Port]:
+        """Remove the last extra image input (declared inputs stay)."""
+        if self._extra_image_ports == 0:
+            return None
+        number = self._filter_def.image_input_count + self._extra_image_ports
+        self._extra_image_ports -= 1
+        for position, existing in enumerate(self._inputs):
+            if existing.name == f"image_{number}":
+                self.height = max(100, self.height - 20)
+                return self._inputs.pop(position)
+        return None
 
     @property
     def param_values(self) -> dict[str, ParamValue]:
