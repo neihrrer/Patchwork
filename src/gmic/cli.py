@@ -41,6 +41,7 @@ class GmicCLI:
         output_path: Optional[str] = None,
         timeout: int = 120,
         script_command: Optional[str] = None,
+        custom_commands: Optional[str] = None,
     ) -> GmicResult:
         """Run ``commands`` on ``input_paths`` and write ``output_path``.
 
@@ -50,6 +51,10 @@ class GmicCLI:
         space (its argv parser quotes such items and swallows the commas), but
         a command file is parsed by G'MIC itself, so filters that re-interpret
         their text parameter get the value verbatim.
+
+        ``custom_commands`` is a command file imported with ``-m`` before the
+        inputs.  Community filters need it: their definitions are not part of
+        the interpreter's own standard library.
         """
         if not self.available:
             return GmicResult(False, error=_("gmic not found on system. Install it with your package manager."))
@@ -63,16 +68,17 @@ class GmicCLI:
             os.close(fd)
 
         command_file = None
+        imports = ["-m", custom_commands] if custom_commands else []
         if script_command is not None:
             fd, command_file = tempfile.mkstemp(suffix=".gmic")
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 handle.write("__patchwork_run :\n")
                 for line in script_command.splitlines() or [script_command]:
                     handle.write("  " + line + "\n")
-            args = ([self._gmic_path, "-m", command_file] + input_paths
+            args = ([self._gmic_path] + imports + ["-m", command_file] + input_paths
                     + ["-__patchwork_run", "-o", output_path])
         else:
-            args = [self._gmic_path] + input_paths
+            args = [self._gmic_path] + imports + input_paths
             for cmd in commands:
                 if not cmd.strip():
                     continue
@@ -138,14 +144,20 @@ class GmicCLI:
         all_filters = []
         seen = set()
 
-        for text in (main_text, community_text):
-            if text:
-                gui_filters = self._parser.parse_gui(text)
-                for f in gui_filters:
-                    if f.name not in seen:
-                        seen.add(f.name)
-                        all_filters.append(f)
+        for text, source in ((main_text, "main"), (community_text, "community")):
+            if not text:
+                continue
+            for f in self._parser.parse_gui(text):
+                if f.name not in seen:
+                    seen.add(f.name)
+                    f.source = source
+                    all_filters.append(f)
 
-        return all_filters if all_filters else self._parser.get_builtin_filters()
+        if all_filters:
+            return all_filters
+        builtins = self._parser.get_builtin_filters()
+        for f in builtins:
+            f.source = "main"
+        return builtins
 
 

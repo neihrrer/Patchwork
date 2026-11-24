@@ -44,6 +44,57 @@ class TestRunPipelineArguments:
         assert result.success, result.error
         assert target.stat().st_size > 0
 
+    def test_custom_commands_are_imported_before_the_inputs(self):
+        from gmic.cli import GmicCLI
+        with patch("shutil.which", return_value="/usr/bin/gmic"), \
+                patch("subprocess.run", side_effect=_fake_completed) as run, \
+                patch("os.path.isfile", return_value=True), \
+                patch("os.path.getsize", return_value=42):
+            GmicCLI().run_pipeline(["/in.png"], ["blur 3"], "/out.png",
+                                   custom_commands="/tmp/community.gmic")
+        args = run.call_args[0][0]
+        assert args == ["/usr/bin/gmic", "-m", "/tmp/community.gmic",
+                        "/in.png", "-blur", "3", "-o", "/out.png"]
+
+    def test_custom_commands_and_script_command_are_both_imported(self):
+        from gmic.cli import GmicCLI
+        with patch("shutil.which", return_value="/usr/bin/gmic"), \
+                patch("subprocess.run", side_effect=_fake_completed) as run, \
+                patch("os.path.isfile", return_value=True), \
+                patch("os.path.getsize", return_value=42):
+            GmicCLI().run_pipeline(["/in.png"], [], "/out.png",
+                                   script_command="blur 3",
+                                   custom_commands="/tmp/community.gmic")
+        args = run.call_args[0][0]
+        assert args[:4] == ["/usr/bin/gmic", "-m", "/tmp/community.gmic", "-m"]
+        assert args[5:] == ["/in.png", "-__patchwork_run", "-o", "/out.png"]
+
+
+class TestListFiltersProvenance:
+    def test_marks_main_and_community_sources(self):
+        from gmic.cli import GmicCLI
+        main = "#@gui Main One : fx_main\n"
+        community = "#@gui Community One : fx_community\n"
+        with patch("gmic.cli.fetch_or_get_cached", return_value=(main, community)):
+            filters = {f.name: f for f in GmicCLI().list_filters()}
+        assert filters["fx_main"].source == "main"
+        assert filters["fx_community"].source == "community"
+
+    def test_main_definition_wins_over_community(self):
+        from gmic.cli import GmicCLI
+        main = "#@gui Shared : fx_shared\n"
+        community = "#@gui Shared : fx_shared\n"
+        with patch("gmic.cli.fetch_or_get_cached", return_value=(main, community)):
+            filters = GmicCLI().list_filters()
+        assert len(filters) == 1
+        assert filters[0].source == "main"
+
+    def test_builtin_fallback_is_marked_main(self):
+        from gmic.cli import GmicCLI
+        with patch("gmic.cli.fetch_or_get_cached", return_value=(None, None)):
+            filters = GmicCLI().list_filters()
+        assert filters and all(f.source == "main" for f in filters)
+
 
 class TestScriptCommandRoute:
     """Commands with space-containing text values run from a command file."""

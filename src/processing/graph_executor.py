@@ -21,6 +21,7 @@ from nodes import (
 from models.filter import ENGINE_GMIC, ParamKind
 from gmic.cli import GmicCLI
 from gmic.pipeline import _serialize_param
+from gmic.stdlib import community_cache_path
 from imagemagick.cli import ImageMagickCLI
 from processing.runner import ProcessResult
 from processing.pillow_ops import (
@@ -645,9 +646,18 @@ class GraphExecutor:
                              for value, p in zip(values, params)]
             script_cmd = cmd_name + ((" " + ",".join(script_values)) if script_values else "")
 
+        # Community filters are only in the pinned community list, not in the
+        # interpreter's own standard library: import their definitions first.
+        custom_commands = None
+        if getattr(node.filter_def, "source", "main") == "community":
+            community_file = community_cache_path()
+            if community_file.is_file():
+                custom_commands = str(community_file)
+
         if node.filter_def.engine == ENGINE_GMIC:
             result = self._gmic.run_pipeline(input_paths, commands[1:], out_path, timeout=timeout,
-                                             script_command=script_cmd)
+                                             script_command=script_cmd,
+                                             custom_commands=custom_commands)
         else:
             result = self._imagemagick.run_pipeline(input_paths[0], commands[1:], out_path, timeout=timeout)
 

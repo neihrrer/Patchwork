@@ -76,6 +76,74 @@ class TestStdlibSource:
             assert stdlib_cache_path(None).name == "gmic_stdlib.gmic"
 
 
+class TestCommunityPin:
+    def test_cache_path_is_keyed_by_the_pinned_ref(self, tmp_path):
+        from gmic.stdlib import COMMUNITY_REF, community_cache_path
+        with patch("gmic.stdlib.CACHE_DIR", tmp_path):
+            path = community_cache_path()
+            assert path.name == f"gmic_stdlib_community_{COMMUNITY_REF[:8]}.gmic"
+            assert path.name != "gmic_stdlib_community.gmic"
+
+    def test_lists_and_downloads_the_pinned_ref(self, tmp_path):
+        from gmic.stdlib import COMMUNITY_REF, community_cache_path, fetch_community_files
+        cache_dir = tmp_path / "stdlib"
+        contents = b'[{"type": "file", "name": "a.gmic"}, ' \
+                   b'{"type": "file", "name": "readme.txt"}]'
+        responses = [contents, b"#@gui A : fx_a\n"]
+
+        class Response:
+            def __init__(self, body):
+                self.body = body
+
+            def read(self):
+                return self.body
+
+        urls = []
+
+        def fake_urlopen(url, timeout=None):
+            urls.append(url)
+            return Response(responses[len(urls) - 1])
+
+        with patch("gmic.stdlib.CACHE_DIR", cache_dir), \
+                patch("gmic.stdlib.urlopen", side_effect=fake_urlopen):
+            text = fetch_community_files()
+            assert community_cache_path().read_text() == "#@gui A : fx_a\n"
+
+        assert text == "#@gui A : fx_a\n"
+        assert urls[0] == (
+            "https://api.github.com/repos/GreycLab/gmic-community/contents/include"
+            f"?ref={COMMUNITY_REF}")
+        assert urls[1] == (
+            "https://raw.githubusercontent.com/GreycLab/gmic-community/"
+            f"{COMMUNITY_REF}/include/a.gmic")
+
+    def test_cached_ref_is_used_without_network(self, tmp_path):
+        from gmic.stdlib import community_cache_path, fetch_community_pinned
+        cache_dir = tmp_path / "stdlib"
+        cache_dir.mkdir()
+        with patch("gmic.stdlib.CACHE_DIR", cache_dir):
+            community_cache_path().write_text("#@gui Cached : fx_cached\n")
+            with patch("gmic.stdlib.urlopen", side_effect=URLError("offline")):
+                assert "fx_cached" in fetch_community_pinned()
+
+    def test_legacy_unpinned_cache_is_ignored(self, tmp_path):
+        from gmic.stdlib import fetch_community_pinned
+        cache_dir = tmp_path / "stdlib"
+        cache_dir.mkdir()
+        (cache_dir / "gmic_stdlib_community.gmic").write_text("#@gui Old : fx_old\n")
+        with patch("gmic.stdlib.CACHE_DIR", cache_dir), \
+                patch("gmic.stdlib.urlopen", side_effect=URLError("offline")):
+            assert fetch_community_pinned() is None
+
+    def test_no_master_fallback_when_ref_download_fails(self, tmp_path):
+        # A newer list declares filters this interpreter cannot run, so a
+        # failure to fetch the pinned ref must not fall back to 'master'.
+        from gmic.stdlib import fetch_community_pinned
+        with patch("gmic.stdlib.CACHE_DIR", tmp_path / "stdlib"), \
+                patch("gmic.stdlib.urlopen", side_effect=URLError("offline")):
+            assert fetch_community_pinned() is None
+
+
 class TestStdlibFetchOrGetCached:
     def test_returns_tuple(self, tmp_path):
         from gmic.stdlib import fetch_or_get_cached

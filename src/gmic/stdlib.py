@@ -17,9 +17,18 @@ _STDLIB_RAW = "https://raw.githubusercontent.com/GreycLab/gmic"
 _REPO_STDLIB_PATH = "src/gmic_stdlib.gmic"
 # Fallback used when the local G'MIC version cannot be detected.
 STDLIB_URL = f"{_STDLIB_RAW}/master/{_REPO_STDLIB_PATH}"
-COMMUNITY_API = "https://api.github.com/repos/GreycLab/gmic-community/contents/include"
+
+_COMMUNITY_REPO = "GreycLab/gmic-community"
+_COMMUNITY_RAW = f"https://raw.githubusercontent.com/{_COMMUNITY_REPO}"
+COMMUNITY_API = f"https://api.github.com/repos/{_COMMUNITY_REPO}/contents/include"
+# Community filter sources pinned to the last commit before the G'MIC v.4.0.3
+# tag (released 2026-07-20), i.e. the snapshot matching the interpreter Fedora
+# 45 ships (gmic-4.0.3-6.fc45).  The community repository moves faster than
+# G'MIC releases: filters added later declare commands the installed binary
+# does not know, so this list deliberately does not track 'master'.
+COMMUNITY_REF = "ea527ed510fcba0e578d33fcf884f67290810646"
+
 CACHE_DIR = Path.home() / ".cache" / "patchwork" / "stdlib"
-CACHE_COMMUNITY = CACHE_DIR / "gmic_stdlib_community.gmic"
 
 _VERSION_RE = re.compile(r"Version\s+(\d+\.\d+\.\d+)")
 
@@ -67,6 +76,15 @@ def stdlib_cache_path(version: Optional[str]) -> Path:
     return CACHE_DIR / "gmic_stdlib.gmic"
 
 
+def community_cache_path(ref: str = COMMUNITY_REF) -> Path:
+    """Cache file for the community filter list pinned at ``ref``.
+
+    The ref is part of the filename so the unpinned list cached by older
+    versions of the app (``gmic_stdlib_community.gmic``) is never reused.
+    """
+    return CACHE_DIR / f"gmic_stdlib_community_{ref[:8]}.gmic"
+
+
 def _ensure_cache_dir():
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -81,24 +99,34 @@ def download_file(url: str, dest: Path) -> bool:
         return False
 
 
-def fetch_community_files() -> Optional[str]:
+def fetch_community_files(ref: str = COMMUNITY_REF) -> Optional[str]:
+    """Download the community filter sources pinned at ``ref``.
+
+    The include directory is listed for that commit and every ``.gmic`` file
+    is fetched from its raw URL at the same commit, then cached under a
+    ref-keyed name.  Returns ``None`` when the download fails; the caller then
+    keeps an existing cache or runs with the main stdlib only.
+    """
     try:
-        req = urlopen(COMMUNITY_API, timeout=15)
+        req = urlopen(f"{COMMUNITY_API}?ref={ref}", timeout=20)
         entries = json.loads(req.read().decode())
         parts = []
         for entry in entries:
-            if entry["type"] == "file" and entry["name"].endswith(".gmic"):
-                try:
-                    file_url = entry["download_url"]
-                    file_req = urlopen(file_url, timeout=15)
-                    parts.append(file_req.read().decode("utf-8", errors="replace"))
-                except (URLError, OSError, ValueError):
-                    continue
+            if entry.get("type") != "file" or not entry.get("name", "").endswith(".gmic"):
+                continue
+            file_url = f"{_COMMUNITY_RAW}/{ref}/include/{entry['name']}"
+            try:
+                file_req = urlopen(file_url, timeout=20)
+                parts.append(file_req.read().decode("utf-8", errors="replace"))
+            except (URLError, OSError, ValueError):
+                continue
+        if not parts:
+            return None
         result = "\n#@gui _\n".join(parts)
-        if parts:
-            CACHE_COMMUNITY.write_text(result, encoding="utf-8")
+        _ensure_cache_dir()
+        community_cache_path(ref).write_text(result, encoding="utf-8")
         return result
-    except (URLError, OSError, ValueError, json.JSONDecodeError):
+    except (URLError, OSError, ValueError, json.JSONDecodeError, KeyError):
         return None
 
 
@@ -119,14 +147,24 @@ def _fetch_stdlib(version: Optional[str]) -> tuple[Optional[str], Optional[Path]
     return None, None
 
 
+def fetch_community_pinned(ref: str = COMMUNITY_REF) -> Optional[str]:
+    """Return the community list for ``ref``, from cache or network.
+
+    There is deliberately no fallback to ``master``: a newer list is exactly
+    what declares filters the installed interpreter cannot run.  When the
+    pinned ref cannot be downloaded and nothing is cached yet, community
+    filters are simply absent and the main stdlib still works.
+    """
+    cache_path = community_cache_path(ref)
+    if cache_path.exists():
+        return cache_path.read_text(encoding="utf-8", errors="replace")
+    return fetch_community_files(ref)
+
+
 def fetch_or_get_cached() -> tuple[Optional[str], Optional[str]]:
     _ensure_cache_dir()
 
     main_text, _ = _fetch_stdlib(gmic_version())
-
-    if CACHE_COMMUNITY.exists():
-        community_text = CACHE_COMMUNITY.read_text(encoding="utf-8", errors="replace")
-    else:
-        community_text = fetch_community_files()
+    community_text = fetch_community_pinned()
 
     return main_text, community_text

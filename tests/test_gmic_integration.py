@@ -13,7 +13,7 @@ from PIL import Image, ImageChops
 
 from gmic.cli import GmicCLI
 from gmic.parser import GmicFilterParser
-from gmic.stdlib import gmic_version, stdlib_cache_path, CACHE_COMMUNITY
+from gmic.stdlib import gmic_version, stdlib_cache_path, community_cache_path
 from nodes import FilterNode, InputNode, NodeGraph, OutputNode
 from processing.graph_executor import GraphExecutor
 
@@ -28,8 +28,9 @@ def stdlib_filters():
     if not cache.is_file():
         pytest.skip(f"G'MIC stdlib cache missing ({cache})")
     texts = [cache.read_text(encoding="utf-8", errors="replace")]
-    if CACHE_COMMUNITY.is_file():
-        texts.append(CACHE_COMMUNITY.read_text(encoding="utf-8", errors="replace"))
+    community = community_cache_path()
+    if community.is_file():
+        texts.append(community.read_text(encoding="utf-8", errors="replace"))
     parser = GmicFilterParser()
     filters = {}
     for text in texts:
@@ -43,6 +44,16 @@ def gmic_image(tmp_path):
     path = tmp_path / "input.png"
     Image.new("RGB", (200, 200), (90, 120, 60)).save(str(path))
     return str(path)
+
+
+@pytest.fixture(scope="session")
+def listed_filters():
+    """Filters as the app lists them, with main/community provenance."""
+    if not stdlib_cache_path(gmic_version()).is_file():
+        pytest.skip("G'MIC stdlib cache missing")
+    if not community_cache_path().is_file():
+        pytest.skip("pinned community list is not cached (offline?)")
+    return {f.name: f for f in GmicCLI().list_filters()}
 
 
 def run_filter(image_path, filter_def, timeout=60, params=None, reverse_edges=False):
@@ -245,6 +256,45 @@ class TestMultiImageOutput:
         assert Image.open(result.output_path).size == (200, 200)
 
 
+class TestCommunityFilters:
+    def test_sources_are_marked(self, listed_filters):
+        assert listed_filters["jdoe_toyfilter"].source == "community"
+        assert listed_filters["fx_equation_plot"].source == "main"
+
+    def test_filters_newer_than_the_pinned_snapshot_are_not_listed(
+            self, listed_filters):
+        # Added to gmic-community after the G'MIC 4.0.3 snapshot; the
+        # installed interpreter does not know their commands.
+        assert "giniart_buzinga" not in listed_filters
+        assert "fx_hexagon_grid" not in listed_filters
+        assert "fx_dream_smoothing_enhanced_v2" not in listed_filters
+
+    def test_community_only_filter_renders(self, listed_filters, gmic_image):
+        # 'jdoe_toyfilter' only exists in the community list; without the
+        # '-m' import G'MIC answered "Unknown command or filename".
+        filter_def = listed_filters["jdoe_toyfilter"]
+
+        result = run_filter(gmic_image, filter_def, timeout=120)
+
+        assert result.success, result.error
+        assert Image.open(result.output_path).size == (200, 200)
+
+    def test_only_community_filters_import_the_community_file(
+            self, listed_filters, gmic_image, monkeypatch):
+        imports = []
+        real = GmicCLI.run_pipeline
+
+        def recording(self, *args, **kwargs):
+            imports.append(kwargs.get("custom_commands"))
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(GmicCLI, "run_pipeline", recording)
+        run_filter(gmic_image, listed_filters["fx_equation_plot"], timeout=120)
+        run_filter(gmic_image, listed_filters["jdoe_toyfilter"], timeout=120)
+
+        assert imports == [None, str(community_cache_path())]
+
+
 class TestMultiInput:
     @staticmethod
     def _two_images(tmp_path):
@@ -272,11 +322,9 @@ class TestMultiInput:
         seen = []
         real = GmicCLI.run_pipeline
 
-        def recording(self, input_paths, commands, output_path=None,
-                      timeout=120, script_command=None):
-            seen.append(list(input_paths))
-            return real(self, input_paths, commands, output_path, timeout,
-                        script_command)
+        def recording(self, *args, **kwargs):
+            seen.append(list(args[0]))
+            return real(self, *args, **kwargs)
 
         monkeypatch.setattr(GmicCLI, "run_pipeline", recording)
         result = run_filter([str(first), str(second)], filter_def,
@@ -291,11 +339,9 @@ class TestMultiInput:
         seen = []
         real = GmicCLI.run_pipeline
 
-        def recording(self, input_paths, commands, output_path=None,
-                      timeout=120, script_command=None):
-            seen.append(list(input_paths))
-            return real(self, input_paths, commands, output_path, timeout,
-                        script_command)
+        def recording(self, *args, **kwargs):
+            seen.append(list(args[0]))
+            return real(self, *args, **kwargs)
 
         monkeypatch.setattr(GmicCLI, "run_pipeline", recording)
         result = run_filter(gmic_image, filter_def, timeout=120)
