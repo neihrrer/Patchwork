@@ -406,7 +406,7 @@ def _join_continuations(lines: list[str]) -> list[str]:
 def _munge_gui_command(command: str) -> str:
     command = command.strip()
     # Strip preview suffix: ..., preview_command(zoom)[*|+]
-    m = re.search(r',\s*[a-zA-Z_]\w*(?:\([^)]*\))?\s*[*+]?\s*$', command)
+    m = re.search(r',\s*[a-zA-Z_]\w*\s*(?:\([^)]*\))?\s*[*+]?\s*$', command)
     if m:
         command = command[:m.start()]
     return command.strip()

@@ -107,6 +107,16 @@ class TestMungeGuiCommand:
         result = _munge_gui_command("test, preview(2) *")
         assert result == "test"
 
+    def test_strips_preview_suffix_with_space_before_zoom(self):
+        # 'samj_*' filters write 'command , preview (1)'; the space used to
+        # leave the preview in the filter command.
+        assert (_munge_gui_command(
+            "samj_Carres_Noirs , samj_Carres_Noirs (1)")
+            == "samj_Carres_Noirs")
+
+    def test_keeps_a_trailing_numeric_argument(self):
+        assert _munge_gui_command("fx_foo,1") == "fx_foo,1"
+
 
 FOLDER_TREE = textwrap.dedent("""\
     #@gui ____<b>Artistic</b>
