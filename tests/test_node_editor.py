@@ -43,6 +43,33 @@ def filter_node(canvas):
     return node
 
 
+def _find_widget(widget, cls):
+    if isinstance(widget, cls):
+        return widget
+    child = widget.get_first_child()
+    while child is not None:
+        found = _find_widget(child, cls)
+        if found is not None:
+            return found
+        child = child.get_next_sibling()
+    return None
+
+
+class TestParameterChanges:
+    def test_editing_a_parameter_emits_graph_changed(self, canvas, filter_node):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gtk
+
+        changes = []
+        canvas.connect("graph-changed", lambda *_: changes.append(True))
+        widget = canvas._node_widgets["f1"]
+        spin = _find_widget(widget, Gtk.SpinButton)
+        assert spin is not None
+        spin.set_value(spin.get_value() + 1.0)
+        assert changes
+
+
 class TestCanvasImageInputs:
     def test_add_image_input_updates_node_and_widget(self, canvas, filter_node):
         canvas.add_filter_input_port(filter_node)

@@ -1047,6 +1047,28 @@ class NodeWidget(Gtk.Box):
             self._build_random_params()
         elif isinstance(self._node, RawDecodeNode):
             self._build_raw_decode_params()
+        self._connect_param_change_signals()
+
+    def _connect_param_change_signals(self):
+        """Report any parameter edit so the project is marked modified.
+
+        The individual controls update the node themselves; this only
+        re-emits 'graph-changed', which the window uses for the dirty flag,
+        autosave and the render button.
+        """
+        def walk(widget):
+            if isinstance(widget, Gtk.SpinButton):
+                widget.connect("value-changed", lambda *_: self._canvas.emit("graph-changed"))
+            elif isinstance(widget, Gtk.Switch):
+                widget.connect("notify::active", lambda *_: self._canvas.emit("graph-changed"))
+            elif isinstance(widget, Gtk.DropDown):
+                widget.connect("notify::selected", lambda *_: self._canvas.emit("graph-changed"))
+            child = widget.get_first_child()
+            while child is not None:
+                walk(child)
+                child = child.get_next_sibling()
+
+        walk(self)
 
     def _build_filter_params(self):
         fd = self._node.filter_def
