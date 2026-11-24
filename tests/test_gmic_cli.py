@@ -1,8 +1,6 @@
 import subprocess
 from unittest.mock import patch
 
-import pytest
-
 
 class TestGmicResult:
     def test_construction(self):

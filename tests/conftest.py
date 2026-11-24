@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -28,21 +27,6 @@ def filter_def():
         ],
         gmic_command="test_command",
         engine="gmic",
-        image_input_count=1,
-    )
-
-
-@pytest.fixture(scope="session")
-def im_filter_def():
-    return FilterDef(
-        name="blur",
-        display_name="Blur",
-        category=["Blur"],
-        description="A test blur filter",
-        parameters=[
-            ParamDef("radius", "Radius", kind="float", default=3.0, min_val=0, max_val=100),
-        ],
-        engine="imagemagick",
         image_input_count=1,
     )
 
@@ -95,25 +79,3 @@ def graph_with_filter(filter_def, test_image):
     graph.add_edge("in", "image", "flt", "image")
     graph.add_edge("flt", "image", "out", "image")
     return graph
-
-
-@pytest.fixture
-def mock_gmic_cli():
-    cli = MagicMock()
-    cli.available = True
-    cli.run_pipeline.return_value = MagicMock(
-        success=True, output_path="/tmp/test_output.png", error="",
-        stdout="", stderr=""
-    )
-    return cli
-
-
-@pytest.fixture
-def mock_imagemagick_cli():
-    cli = MagicMock()
-    cli.available = True
-    cli.run_pipeline.return_value = MagicMock(
-        success=True, output_path="/tmp/test_output.png", error="",
-        stdout="", stderr=""
-    )
-    return cli

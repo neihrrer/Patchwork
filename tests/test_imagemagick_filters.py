@@ -19,7 +19,7 @@ class TestGetBuiltinFilters:
     def test_all_have_name(self):
         filters = get_builtin_filters()
         for fd in filters:
-            assert fd.name, f"Filter missing name"
+            assert fd.name, "Filter missing name"
             assert fd.display_name, f"Filter {fd.name} missing display_name"
 
     def test_all_have_parameters(self):

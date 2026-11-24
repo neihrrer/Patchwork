@@ -32,7 +32,7 @@ from nodes import (
     NotNode, AndNode, OrNode, NandNode, NorNode, XorNode, XnorNode,
     CompareNode, ClampNode, MapRangeNode,
 )
-from nodes.node_types import LABEL_COLORS, NODE_CATEGORY_MAP, CATEGORY_GDK_RGBA, HistogramNode, WaveformMonitorNode, VectorscopeNode, FrequencyDomainNode
+from nodes.node_types import LABEL_COLORS, NODE_CATEGORY_MAP, CATEGORY_GDK_RGBA
 from models.filter import FilterDef, ParamKind
 from .filter_browser import get_pending_drag_text, peek_pending_drag_text
 
@@ -542,7 +542,6 @@ class NodeWidget(Gtk.Box):
         lbl.set_css_classes(["port-label"])
         row.append(pw)
         row.append(lbl)
-        row._row_port = pw
         click = Gtk.GestureClick(button=1)
         click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
         row.add_controller(click)
@@ -601,7 +600,6 @@ class NodeWidget(Gtk.Box):
             lbl.set_css_classes(["port-label"])
             row.append(pw)
             row.append(lbl)
-            row._row_port = pw
             click = Gtk.GestureClick(button=1)
             click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
             row.add_controller(click)
@@ -615,7 +613,6 @@ class NodeWidget(Gtk.Box):
             lbl.set_css_classes(["port-label"])
             row.append(lbl)
             row.append(pw)
-            row._row_port = pw
             click = Gtk.GestureClick(button=1)
             click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
             row.add_controller(click)
@@ -686,7 +683,6 @@ class NodeWidget(Gtk.Box):
                 lbl.set_css_classes(["port-label"])
                 row.append(pw)
                 row.append(lbl)
-                row._row_port = pw
                 click = Gtk.GestureClick(button=1)
                 click.connect("pressed", lambda g, n, x, y, pw=pw: (pw.update_center(), self._canvas.handle_port_click(pw))[-1])
                 row.add_controller(click)
@@ -704,7 +700,6 @@ class NodeWidget(Gtk.Box):
         body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         body.set_hexpand(True)
         body.set_vexpand(True)
-        self._body = body
         body.set_name(f"node-body-{self._node.id.replace('-', '_')}")
 
         self._text_stack = Gtk.Stack()
@@ -793,7 +788,6 @@ class NodeWidget(Gtk.Box):
                     break
         dd.set_selected(idx)
         dd.connect("notify::selected", self._on_color_changed)
-        self._color_dropdown = dd
         self._color_row.append(dd)
         body.append(self._color_row)
 
@@ -2268,8 +2262,6 @@ class NodeWidget(Gtk.Box):
         if not shift and not self._selected:
             self._canvas.select_node(self)
         self._canvas._dragging_node = self._node
-        self._canvas._drag_start_x = self._node.x
-        self._canvas._drag_start_y = self._node.y
         self._canvas._drag_group_starts = {
             w: (w.graph_node.x, w.graph_node.y)
             for w in self._canvas._selected_widgets
@@ -2698,8 +2690,6 @@ class NodeCanvas(Gtk.Overlay):
         self._selected_widgets: set[NodeWidget] = set()
         self._dragging_node: Optional[Node] = None
         self._resizing_node: Optional[Node] = None
-        self._drag_start_x = 0.0
-        self._drag_start_y = 0.0
         self._drag_pointer_start_x = 0.0
         self._drag_pointer_start_y = 0.0
         self._drag_group_starts: dict[NodeWidget, tuple[float, float]] = {}
@@ -2912,21 +2902,6 @@ class NodeCanvas(Gtk.Overlay):
             widget.set_selected(True)
             self._selected_widgets.add(widget)
         self.emit("node-selected", widget.graph_node if widget else None)
-
-    def _select_nodes_in_rect(self, gx1, gy1, gx2, gy2):
-        for w in list(self._selected_widgets):
-            w.set_selected(False)
-        self._selected_widgets.clear()
-        min_gx, max_gx = min(gx1, gx2), max(gx1, gx2)
-        min_gy, max_gy = min(gy1, gy2), max(gy1, gy2)
-        for widget in self._node_widgets.values():
-            node = widget.graph_node
-            if (node.x < max_gx and node.x + (node.width or 1) > min_gx
-                    and node.y < max_gy and node.y + (node.height or 1) > min_gy):
-                widget.set_selected(True)
-                self._selected_widgets.add(widget)
-        first = next(iter(self._selected_widgets), None)
-        self.emit("node-selected", first.graph_node if first else None)
 
     def add_node(self, node: Node):
         self._graph.add_node(node)

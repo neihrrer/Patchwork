@@ -78,7 +78,7 @@ class TestStdlibSource:
 
 class TestStdlibFetchOrGetCached:
     def test_returns_tuple(self, tmp_path):
-        from gmic.stdlib import fetch_or_get_cached, CACHE_DIR
+        from gmic.stdlib import fetch_or_get_cached
         with patch("gmic.stdlib.CACHE_DIR", tmp_path / "stdlib"):
             with patch("gmic.stdlib.gmic_version", return_value=None):
                 with patch("gmic.stdlib.urlopen", side_effect=URLError("offline")):
@@ -98,7 +98,7 @@ class TestStdlibFetchOrGetCached:
 
     def test_community_returns_none_when_offline(self, tmp_path):
         from urllib.error import URLError
-        from gmic.stdlib import fetch_community_files, CACHE_DIR
+        from gmic.stdlib import fetch_community_files
         with patch("gmic.stdlib.CACHE_DIR", tmp_path / "stdlib"):
             with patch("gmic.stdlib.urlopen", side_effect=URLError("offline")):
                 result = fetch_community_files()

@@ -30,7 +30,7 @@ from processing.runner import ProcessResult
 from video.ffmpeg import FfmpegCLI
 from video.renderer import (
     AnimationSettings, render_frames, mux_animation,
-    FORMAT_MP4, FORMAT_GIF, FORMAT_PNG_SEQUENCE, VALID_ANIMATION_FORMATS,
+    FORMAT_MP4, FORMAT_GIF, FORMAT_PNG_SEQUENCE,
 )
 
 try:
@@ -71,7 +71,6 @@ class PatchworkWindow(Adw.ApplicationWindow):
         self._graph = NodeGraph()
         self._executor = GraphExecutor(self._gmic, self._imagemagick)
         self._executor.set_ffmpeg(self._ffmpeg)
-        self._all_filter_defs: list[FilterDef] = []
         self._filter_def_map: dict[str, FilterDef] = {}
 
         self._config = AppConfig()
@@ -109,7 +108,6 @@ class PatchworkWindow(Adw.ApplicationWindow):
                 self.set_default_size(1100, 750)
             self.set_title(root.get_title() or _("Node Editor"))
 
-        self._builder = builder
         self._open_button = builder.get_object("open_button")
         self._render_button = builder.get_object("render_button")
         self._export_button = builder.get_object("export_button")
@@ -124,7 +122,6 @@ class PatchworkWindow(Adw.ApplicationWindow):
         self._output_text = builder.get_object("output_text")
         self._output_box = builder.get_object("output_box")
         self._output_paned = builder.get_object("output_paned")
-        self._output_scrolled = builder.get_object("output_scrolled")
 
         if self._output_paned:
             self._output_paned.set_position(100000)
@@ -457,7 +454,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
             if file:
                 path = file.get_path()
                 try:
-                    pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
+                    GdkPixbuf.Pixbuf.new_from_file(path)
                 except Exception as e:
                     self._show_error(str(e))
                     return
@@ -585,7 +582,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
                 path = file.get_path()
                 if isinstance(node, InputNode):
                     try:
-                        pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
+                        GdkPixbuf.Pixbuf.new_from_file(path)
                     except Exception as e:
                         self._show_error(str(e))
                         return
@@ -1137,7 +1134,6 @@ class PatchworkWindow(Adw.ApplicationWindow):
         def done(result):
             gmic_f, im_f = result
             all_f = gmic_f + im_f
-            self._all_filter_defs = all_f
             self._filter_def_map = {f"{f.engine}:{f.name}": f for f in all_f}
             if self._filter_browser:
                 self._filter_browser.set_filters(all_f)

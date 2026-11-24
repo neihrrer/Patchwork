@@ -321,8 +321,6 @@ class FilterBrowser(GObject.Object):
             store = Gio.ListStore.new(TreeItemNode)
             for _key, label, ntype in items:
                 node = TreeItemNode(display_name=label, node_type=ntype)
-                if ntype == "blend":
-                    node._blend_mode = "over"
                 store.append(node)
             return self._mark_last_child(store)
         elif item.node_type == "advanced_category":

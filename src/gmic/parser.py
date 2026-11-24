@@ -120,9 +120,6 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
         modifiers += rest[0]
         rest = rest[1:]
 
-    no_preview = "_" in modifiers and "~" not in modifiers
-    randomizable = "~" in modifiers
-
     paren_idx = rest.find("(")
     brace_idx = rest.find("{")
     if paren_idx < 0 and brace_idx < 0:
