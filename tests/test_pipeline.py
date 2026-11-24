@@ -6,20 +6,25 @@ class TestGmicEscape:
     def test_no_special_chars_unchanged(self):
         assert _gmic_escape("plain") == "plain"
 
-    def test_space_becomes_octal(self):
-        assert _gmic_escape("a b") == "a\\040b"
+    def test_space_is_kept(self):
+        # G'MIC items may contain spaces; escaping them breaks filters that
+        # re-interpret the value as a command line.
+        assert _gmic_escape("a b") == "a b"
 
-    def test_leading_space_becomes_octal(self):
-        assert _gmic_escape(" .oO0") == "\\040.oO0"
+    def test_leading_space_is_kept(self):
+        assert _gmic_escape(" .oO0") == " .oO0"
 
-    def test_double_quote_becomes_octal(self):
-        assert _gmic_escape('a"b') == 'a\\042b'
+    def test_double_quote_is_escaped(self):
+        assert _gmic_escape('a"b') == 'a\\"b'
 
-    def test_backslash_becomes_octal(self):
-        assert _gmic_escape("a\\b") == "a\\134b"
+    def test_backslash_is_escaped(self):
+        assert _gmic_escape("a\\b") == "a\\\\b"
+
+    def test_comma_is_escaped(self):
+        assert _gmic_escape("0,1,0") == "0\\,1\\,0"
 
     def test_combined(self):
-        assert _gmic_escape(' !"#$') == "\\040!\\042#$"
+        assert _gmic_escape('a,b"c\\d') == 'a\\,b\\"c\\\\d'
 
 
 class TestSerializeParam:
@@ -32,14 +37,14 @@ class TestSerializeParam:
 
     def test_none_with_string_default(self):
         p = ParamDef("x", "X", kind="text", default=" .oO0")
-        assert _serialize_param(None, p) == ".oO0"
+        assert _serialize_param(None, p) == " .oO0"
 
     def test_empty_string(self):
         assert _serialize_param("") == "0"
 
     def test_empty_string_with_default(self):
         p = ParamDef("x", "X", kind="text", default=" .oO0")
-        assert _serialize_param("", p) == ".oO0"
+        assert _serialize_param("", p) == " .oO0"
 
     def test_bool_true(self):
         assert _serialize_param(True) == "1"
@@ -87,18 +92,22 @@ class TestSerializeParam:
     def test_string_no_whitespace_unchanged(self):
         assert _serialize_param("hello") == "hello"
 
-    def test_text_value_with_space_escaped_and_quoted(self):
+    def test_text_value_with_space_kept_verbatim(self):
         p = ParamDef("x", "X", kind="text", default=" .oO0")
-        assert _serialize_param("a b", p) == '"a\\040b"'
+        assert _serialize_param("a b", p) == "a b"
 
-    def test_text_value_with_quote_escaped_and_quoted(self):
+    def test_text_value_with_quote_escaped(self):
         p = ParamDef("x", "X", kind="text", default=" .oO0")
-        assert _serialize_param('a"b', p) == '"a\\042b"'
+        assert _serialize_param('a"b', p) == 'a\\"b'
 
-    def test_text_value_with_commas_quoted_not_split(self):
+    def test_text_value_with_commas_escaped(self):
         p = ParamDef("x", "X", kind="text", default=" .oO0")
-        assert _serialize_param("0,1,0", p) == '"0,1,0"'
+        assert _serialize_param("0,1,0", p) == "0\\,1\\,0"
 
-    def test_text_value_no_special_chars_quoted(self):
+    def test_text_value_leading_whitespace_kept(self):
         p = ParamDef("x", "X", kind="text", default=" .oO0")
-        assert _serialize_param("hello", p) == '"hello"'
+        assert _serialize_param(" .oO0", p) == " .oO0"
+
+    def test_text_value_no_special_chars_unchanged(self):
+        p = ParamDef("x", "X", kind="text", default=" .oO0")
+        assert _serialize_param("hello", p) == "hello"

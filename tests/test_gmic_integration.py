@@ -106,6 +106,20 @@ class TestPointParameter:
         assert result.success, result.error
 
 
+class TestTextParameter:
+    def test_text_value_with_spaces_reaches_gmic(self, stdlib_filters,
+                                                 gmic_image):
+        # 'iain_fast_formula' runs its text parameter as a command
+        # ("apply_gamma 2.2"); escaping the space as '\040' made G'MIC look
+        # for a file called 'apply_gamma\0402.2'.
+        filter_def = stdlib_filters["iain_fast_formula"]
+        assert filter_def.parameters[0].kind == "text"
+        assert " " in filter_def.parameters[0].default
+
+        result = run_filter(gmic_image, filter_def, timeout=120)
+        assert result.success, result.error
+
+
 class TestButtonParameter:
     def test_button_is_parsed_as_a_boolean(self):
         params = GmicFilterParser().parse_gui(BUTTON_FILTER)[0].parameters
