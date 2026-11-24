@@ -57,8 +57,9 @@ class GmicCLI:
             if not cmd.strip():
                 continue
             if cmd.startswith("-"):
-                args.append(cmd)
-                continue
+                # Already an option: split it like a bare command, otherwise
+                # "-blur 3" reaches G'MIC as a single (unknown) item.
+                cmd = cmd[1:]
             comma_idx = cmd.find(",")
             space_idx = cmd.find(" ")
             comma_first = comma_idx >= 0 and (space_idx < 0 or comma_idx < space_idx)

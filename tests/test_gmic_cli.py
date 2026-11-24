@@ -1,5 +1,81 @@
+import shutil
 import subprocess
 from unittest.mock import patch
+
+import pytest
+from PIL import Image
+
+
+def _fake_completed(args, **kwargs):
+    return subprocess.CompletedProcess(args, returncode=0, stdout="", stderr="")
+
+
+class TestRunPipelineArguments:
+    def test_plain_command_with_arguments_is_split(self):
+        from gmic.cli import GmicCLI
+        with patch("shutil.which", return_value="/usr/bin/gmic"), \
+                patch("subprocess.run", side_effect=_fake_completed) as run, \
+                patch("os.path.isfile", return_value=True), \
+                patch("os.path.getsize", return_value=42):
+            GmicCLI().run_pipeline(["/in.png"], ["blur 3"], "/out.png")
+        args = run.call_args[0][0]
+        assert args == ["/usr/bin/gmic", "/in.png", "-blur", "3", "-o", "/out.png"]
+
+    def test_dash_prefixed_command_with_arguments_is_split(self):
+        # "-blur 3" used to be handed to G'MIC as one item, so G'MIC reported
+        # "Unknown command or filename '-blur 3'".
+        from gmic.cli import GmicCLI
+        with patch("shutil.which", return_value="/usr/bin/gmic"), \
+                patch("subprocess.run", side_effect=_fake_completed) as run, \
+                patch("os.path.isfile", return_value=True), \
+                patch("os.path.getsize", return_value=42):
+            GmicCLI().run_pipeline(["/in.png"], ["-blur 3"], "/out.png")
+        args = run.call_args[0][0]
+        assert args == ["/usr/bin/gmic", "/in.png", "-blur", "3", "-o", "/out.png"]
+
+    @pytest.mark.skipif(shutil.which("gmic") is None, reason="gmic not installed")
+    def test_dash_prefixed_command_runs(self, tmp_path):
+        from gmic.cli import GmicCLI
+        source = tmp_path / "in.png"
+        Image.new("RGB", (64, 64), (10, 20, 30)).save(str(source))
+        target = tmp_path / "out.png"
+        result = GmicCLI().run_pipeline([str(source)], ["-blur 3"], str(target))
+        assert result.success, result.error
+        assert target.stat().st_size > 0
+
+
+class TestRunPipelineOutput:
+    def test_numbered_output_is_promoted_when_output_file_is_empty(self, tmp_path):
+        # G'MIC numbers outputs when a filter returns several images; the
+        # pre-created output file stays empty and used to be returned as is.
+        from gmic.cli import GmicCLI
+        source = tmp_path / "in.png"
+        Image.new("RGB", (8, 8), (0, 0, 0)).save(str(source))
+        target = tmp_path / "out.png"
+        target.write_bytes(b"")
+        (tmp_path / "out_000000.png").write_bytes(b"first-image")
+        (tmp_path / "out_000001.png").write_bytes(b"second-image")
+
+        with patch("shutil.which", return_value="/usr/bin/gmic"), \
+                patch("subprocess.run", side_effect=_fake_completed):
+            result = GmicCLI().run_pipeline([str(source)], ["blur 3"], str(target))
+
+        assert result.success, result.error
+        assert target.read_bytes() == b"first-image"
+
+    def test_missing_output_is_an_error(self, tmp_path):
+        from gmic.cli import GmicCLI
+        source = tmp_path / "in.png"
+        Image.new("RGB", (8, 8), (0, 0, 0)).save(str(source))
+        target = tmp_path / "out.png"
+        target.write_bytes(b"")
+
+        with patch("shutil.which", return_value="/usr/bin/gmic"), \
+                patch("subprocess.run", side_effect=_fake_completed):
+            result = GmicCLI().run_pipeline([str(source)], ["blur 3"], str(target))
+
+        assert result.success is False
+        assert "no output" in result.error.lower()
 
 
 class TestGmicResult:
