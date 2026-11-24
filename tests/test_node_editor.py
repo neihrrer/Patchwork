@@ -12,10 +12,12 @@ from models.filter import FilterDef
 
 
 def _canvas_available() -> bool:
-    import gi
-    gi.require_version("Gtk", "4.0")
-    from gi.repository import Gtk
-    return bool(Gtk.init_check())
+    # Gtk.init_check() is a no-op in GTK4 (it returns True even with no
+    # display, and widget creation then crashes), and GDK only resolves its
+    # default display lazily, so probe the session variables instead: the
+    # container running the tests has neither.
+    import os
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
 pytestmark = pytest.mark.skipif(not _canvas_available(),
