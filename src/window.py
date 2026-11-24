@@ -82,6 +82,9 @@ class PatchworkWindow(Adw.ApplicationWindow):
         self._auto_save_id: Optional[int] = None
         self._pending_graph: Optional["NodeGraph"] = None
         self._missing_images: list["InputNode"] = []
+        self._modified: bool = False
+        self._project_path: Optional[str] = None
+        self._close_dialog: Optional[Adw.AlertDialog] = None
         self._render_active: bool = False
         self._render_cancel_event: Optional[Event] = None
 
@@ -107,6 +110,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
             except Exception:
                 self.set_default_size(1100, 750)
             self.set_title(root.get_title() or _("Node Editor"))
+        self._base_title = self.get_title() or _("Node Editor")
 
         self._open_button = builder.get_object("open_button")
         self._render_button = builder.get_object("render_button")
@@ -122,6 +126,10 @@ class PatchworkWindow(Adw.ApplicationWindow):
         self._output_text = builder.get_object("output_text")
         self._output_box = builder.get_object("output_box")
         self._output_paned = builder.get_object("output_paned")
+        self._content_title = builder.get_object("content_title")
+        self._content_base_title = (
+            self._content_title.get_title() if self._content_title else self._base_title
+        )
 
         if self._output_paned:
             self._output_paned.set_position(100000)
@@ -201,6 +209,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
             self._search_entry.connect("search-changed", self._on_search_changed)
         if self._search_toggle:
             self._search_toggle.connect("toggled", self._on_search_toggle)
+        self.connect("close-request", self._on_close_request)
 
     # ─── Menu / Preferences ─────────────────────────────────────────────────
 
@@ -412,9 +421,96 @@ class PatchworkWindow(Adw.ApplicationWindow):
             self._set_status("")
 
     def _on_graph_changed(self, canvas):
+        self._mark_modified()
         self._update_render_button()
         self._setup_auto_save()
         self._clear_animation_result()
+
+    # ─── Unsaved changes ─────────────────────────────────────────────────────
+
+    def _mark_modified(self, modified: bool = True):
+        self._modified = modified
+        self._update_window_title()
+
+    def _update_window_title(self):
+        base = getattr(self, "_base_title", None) or _("Patchwork")
+        content_base = getattr(self, "_content_base_title", None) or base
+        self.set_title(f"{base} •" if self._modified else base)
+        content_title = getattr(self, "_content_title", None)
+        if content_title:
+            content_title.set_title(
+                f"{content_base} •" if self._modified else content_base)
+
+    def _project_file_filter(self) -> Gtk.FileFilter:
+        file_filter = Gtk.FileFilter()
+        file_filter.set_name(_("Patchwork Projects"))
+        file_filter.add_suffix("patch")
+        return file_filter
+
+    def _on_close_request(self, *_args) -> bool:
+        """Ask before closing a project with unsaved changes."""
+        if not self._modified:
+            return False
+
+        dialog = Adw.AlertDialog(
+            heading=_("Save Changes?"),
+            body=_("This project has unsaved changes. Save them before closing?"),
+        )
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("discard", _("Discard"))
+        dialog.add_response("save", _("Save"))
+        dialog.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("save")
+        dialog.set_close_response("cancel")
+        dialog.connect("response", self._on_close_response)
+        self._close_dialog = dialog
+        dialog.present(self)
+        return True
+
+    def _on_close_response(self, dialog, response: str):
+        self._close_dialog = None
+        if response == "discard":
+            self._modified = False
+            self.close()
+        elif response == "save":
+            self._save_before_close()
+
+    def _save_before_close(self):
+        if self._project_path:
+            try:
+                self._save_patchwork_to_path(self._project_path, self._graph)
+            except Exception as e:
+                self._show_error(str(e))
+                return
+            self._modified = False
+            self.close()
+            return
+
+        dialog = Gtk.FileDialog(
+            title=_("Save Project"),
+            default_filter=self._project_file_filter(),
+            modal=True,
+        )
+        dialog.save(self, None, self._on_close_save_response)
+
+    def _on_close_save_response(self, dialog, result):
+        try:
+            file = dialog.save_finish(result)
+            if not file:
+                return  # the user cancelled: keep the window open
+            path = file.get_path()
+            if not path.endswith(".patch"):
+                path += ".patch"
+            self._save_patchwork_to_path(path, self._graph)
+            self._project_path = path
+            self._modified = False
+            self.close()
+        except GLib.Error as e:
+            if e.domain != "gtk-dialog-error-quark":
+                self._show_error(str(e))
+        except Exception as e:
+            self._show_error(str(e))
 
     def _update_render_button(self):
         order = self._graph.topological_sort()
@@ -462,6 +558,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
                 if self._export_button:
                     self._export_button.set_sensitive(False)
 
+                self._mark_modified()
                 self._set_status(f"{Path(path).name} loaded")
 
                 found = None
@@ -592,6 +689,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
                 if self._canvas:
                     self._canvas.update_node_display(node.id)
                     self._canvas.queue_gl_render()
+                self._mark_modified()
                 self._set_status(f"{Path(path).name} loaded")
         except GLib.Error as e:
             if e.domain != "gtk-dialog-error-quark":
@@ -654,6 +752,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
             file = dialog.open_finish(result)
             if not file:
                 return
+            self._project_path = file.get_path()
             data, pack_dir = self._load_patchwork_from_path(file.get_path())
             if not isinstance(data, dict) or data.get("version") != 1:
                 self._show_error(_("Invalid project file"))
@@ -697,6 +796,7 @@ class PatchworkWindow(Adw.ApplicationWindow):
             self._canvas.queue_gl_render()
             self._canvas.emit("graph-changed")
             self._canvas.reset_history()
+        self._mark_modified(False)
         self._set_status(_("Project loaded"))
         self._update_render_button()
 
@@ -755,6 +855,8 @@ class PatchworkWindow(Adw.ApplicationWindow):
             if not path.endswith(".patch"):
                 path += ".patch"
             self._save_patchwork_to_path(path, self._graph)
+            self._project_path = path
+            self._mark_modified(False)
             self._set_status(_("Project saved"))
         except GLib.Error as e:
             if e.domain != "gtk-dialog-error-quark":

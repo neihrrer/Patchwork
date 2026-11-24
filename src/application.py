@@ -50,13 +50,20 @@ class PatchworkApplication(Adw.Application):
 
     def _setup_actions(self):
         quit_action = Gio.SimpleAction.new("quit", None)
-        quit_action.connect("activate", lambda *_: self.quit())
+        quit_action.connect("activate", lambda *_: self._request_quit())
         self.add_action(quit_action)
         self.set_accels_for_action("app.quit", ["<primary>q"])
 
         about_action = Gio.SimpleAction.new("about", None)
         about_action.connect("activate", lambda *_: self._show_about())
         self.add_action(about_action)
+
+    def _request_quit(self):
+        """Close the window so unsaved changes are confirmed first."""
+        if self._window:
+            self._window.close()
+        else:
+            self.quit()
 
     def _show_about(self):
         about = Adw.AboutDialog(
