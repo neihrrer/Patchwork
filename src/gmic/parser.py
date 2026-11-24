@@ -113,6 +113,53 @@ def _param_kind(type_name: str) -> Optional[str]:
     return None
 
 
+_TEXT_ESCAPES = {
+    "a": "\a", "b": "\b", "e": "\x1b", "f": "\f", "n": "\n",
+    "r": "\r", "t": "\t", "v": "\v",
+    "\\": "\\", "'": "'", '"': '"', "?": "?",
+}
+
+_OCTAL_DIGITS = "01234567"
+_HEX_DIGITS = "0123456789abcdefABCDEF"
+
+
+def _unescape_text(text: str) -> str:
+    """Decode escape sequences in a text parameter default.
+
+    Mirrors ``cimg::strunescape``, which G'MIC-Qt applies to text, value, file
+    and folder parameters: a default written as ``line1\\nline2`` holds two
+    lines, and ``\\\\`` is a single backslash.
+    """
+    result = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char != "\\" or index + 1 >= len(text):
+            result.append(char)
+            index += 1
+            continue
+        nxt = text[index + 1]
+        if nxt in _TEXT_ESCAPES:
+            result.append(_TEXT_ESCAPES[nxt])
+            index += 2
+        elif nxt in _OCTAL_DIGITS:
+            end = index + 1
+            while end < len(text) and end - (index + 1) < 3 and text[end] in _OCTAL_DIGITS:
+                end += 1
+            result.append(chr(int(text[index + 1:end], 8) & 0xFF))
+            index = end
+        elif nxt == "x" and index + 2 < len(text) and text[index + 2] in _HEX_DIGITS:
+            end = index + 2
+            while end < len(text) and end - (index + 2) < 2 and text[end] in _HEX_DIGITS:
+                end += 1
+            result.append(chr(int(text[index + 2:end], 16)))
+            index = end
+        else:
+            result.append(nxt)
+            index += 2
+    return "".join(result)
+
+
 def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
     eq_idx = text.find("=")
     if eq_idx < 0:
@@ -258,17 +305,20 @@ def _parse_param_def(text: str) -> Optional[tuple[Optional[ParamDef], str]]:
             # 'value(25,25)' is passed as a single (quoted) argument; G'MIC
             # commands commonly bind it to several variables at once.
             v = _parse_param_value(args_text.strip())
-            default = str(v) if v is not None else ""
+            if isinstance(v, str):
+                default = _unescape_text(v)
+            else:
+                default = str(v) if v is not None else ""
         elif args:
             v = _parse_param_value(args[-1])
-            default = str(v) if v is not None else ""
+            default = _unescape_text(str(v)) if v is not None else ""
         else:
             default = ""
 
     elif kind in (ParamKind.FILE, ParamKind.FOLDER):
         if args:
             v = _parse_param_value(args[0])
-            default = str(v) if v is not None else ""
+            default = _unescape_text(str(v)) if v is not None else ""
 
     return ParamDef(
         name=label,

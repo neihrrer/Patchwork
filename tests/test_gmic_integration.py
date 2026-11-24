@@ -333,6 +333,17 @@ class TestTextParameter:
         result = run_filter(gmic_image, filter_def, timeout=120)
         assert result.success, result.error
 
+    def test_code_parameter_with_escaped_newlines(self, stdlib_filters,
+                                                  gmic_image):
+        # 'Custom Code' defaults to a multi-line program written with '\n'
+        # escapes; G'MIC-Qt decodes them (cimg::strunescape), so must we.
+        filter_def = stdlib_filters["fx_custom_code"]
+        code = next(p for p in filter_def.parameters if p.name == "Code")
+        assert "\n" in code.default
+
+        result = run_filter(gmic_image, filter_def, timeout=120)
+        assert result.success, result.error
+
     def test_whitespace_in_a_text_value_is_not_stripped(self, stdlib_filters):
         # 'Ascii Art' defaults its dictionary to ' .oO0': the leading space
         # is one of the characters to draw with, and stripping it changed

@@ -7,7 +7,7 @@ import pytest
 
 from gmic.parser import (
     _strip_html, _strip_name, _find_matching_close, _split_args,
-    _parse_param_value, _parse_param_def,
+    _parse_param_value, _parse_param_def, _unescape_text,
     _join_continuations, _munge_gui_command, GmicFilterParser,
 )
 
@@ -210,6 +210,25 @@ class TestChoiceParameter:
         assert _parse_param_value('"None"') == "None"
         assert _parse_param_value("'none'") == "none"
         assert _parse_param_value("None") is None
+
+
+class TestTextUnescaping:
+    def test_newline_escape_becomes_a_newline(self):
+        (param,) = _parse_gui_params('#@gui : Code = text(1,"line1\\nline2")\n')
+        assert param.default == "line1\nline2"
+
+    def test_doubled_backslash_becomes_one(self):
+        (param,) = _parse_gui_params('#@gui : Path = file("C:\\\\dir\\\\file.png")\n')
+        assert param.default == "C:\\dir\\file.png"
+
+    def test_octal_and_hex_escapes(self):
+        assert _unescape_text("\\101\\x42") == "AB"
+
+    def test_choice_labels_are_not_unescaped(self):
+        # G'MIC-Qt does not decode escapes in choice labels.
+        (param,) = _parse_gui_params(
+            '#@gui : Pick = choice(0,"a\\nb","c")\n')
+        assert param.choices[0] == "a\\nb"
 
 
 class TestGmicFilterParser:
