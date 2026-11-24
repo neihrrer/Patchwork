@@ -123,15 +123,15 @@ class TestAddNoiseAmplitude:
         amplitude = next(p for p in filter_def.parameters if p.name == "amplitude")
         assert amplitude.kind == "float"
         assert amplitude.min_val == 0.0
-        assert amplitude.max_val == 1.0
-        assert amplitude.default == 0.1
+        assert amplitude.max_val == 100.0
+        assert amplitude.default == 10.0
 
     def test_default_amplitude_is_visible(self, tmp_path):
         from imagemagick.cli import ImageMagickCLI
 
         src = _gradient_image(tmp_path / "src.png")
         out = tmp_path / "out.png"
-        result = ImageMagickCLI().run_pipeline(src, ["add_noise,0,0.1"], str(out))
+        result = ImageMagickCLI().run_pipeline(src, ["add_noise,0,10"], str(out))
         assert result.success, result.error
 
         original = Image.open(src).convert("RGB")
@@ -157,8 +157,8 @@ class TestAddNoiseAmplitude:
         cli = ImageMagickCLI()
         original = Image.open(src).convert("RGB")
 
-        low = _run(cli, src, "add_noise,0,0.1", tmp_path / "low.png")
-        high = _run(cli, src, "add_noise,0,0.8", tmp_path / "high.png")
+        low = _run(cli, src, "add_noise,0,10", tmp_path / "low.png")
+        high = _run(cli, src, "add_noise,0,60", tmp_path / "high.png")
 
         assert _mean_diff(original, high) > 2 * _mean_diff(original, low)
 
@@ -168,7 +168,7 @@ class TestAddNoiseAmplitude:
 
         src = _gradient_image(tmp_path / "src.png")
         out = tmp_path / f"noise{noise_index}.png"
-        result = ImageMagickCLI().run_pipeline(src, [f"add_noise,{noise_index},0.1"], str(out))
+        result = ImageMagickCLI().run_pipeline(src, [f"add_noise,{noise_index},10"], str(out))
         assert result.success, result.error
 
         original = Image.open(src).convert("RGB")
@@ -182,7 +182,7 @@ class TestAlphaPreservation:
         "edge,1.0",
         "canny_edge,1.0,1.0,10.0,30.0",
         "vignette,10.0,10.0,3.0,0",
-        "add_noise,0,0.2",
+        "add_noise,0,10",
     ])
     def test_transparent_areas_stay_transparent(self, command, tmp_path):
         from imagemagick.cli import ImageMagickCLI

@@ -14,22 +14,12 @@ except Exception:
 
 _NOISE_TYPES = ["Uniform", "Gaussian", "Multiplicative", "Impulse", "Laplacian", "Poisson"]
 
-# ImageMagick's +noise amplitude does not mean the same thing for every noise
-# type: on Q16 builds `-attenuate 1` is invisible for Uniform noise while it is
-# plenty for Gaussian.  These factors normalise the UI "Amplitude" (0..1) so
-# amplitude 0.1 is a light grain (~1 mean 8-bit level of difference) and
-# amplitude 1.0 is strong (~15 levels).  Measured against ImageMagick 7.1.2
-# Q16-HDRI; Poisson needs its own inverse mapping (see _noise_attenuate).
-_NOISE_ATTENUATE_SCALE = {
-    "Uniform": 15.0,
-    "Gaussian": 0.95,
-    "Multiplicative": 0.65,
-    "Impulse": 1.17,
-    "Laplacian": 1.52,
-}
-
-# Used when a command carries no amplitude argument (e.g. old project files).
-_NOISE_DEFAULT_AMPLITUDE = "0.1"
+# The UI amplitude is ImageMagick's -attenuate value (0..100, percent-like for
+# the default Uniform type).  Note that +noise types do not share a scale:
+# Gaussian/Multiplicative/Impulse/Laplacian reach heavy noise at much smaller
+# values, and Poisson's -attenuate is inverted, so users may need to lower the
+# amplitude after switching type.
+_NOISE_DEFAULT_AMPLITUDE = "10"
 
 # Filters that only alter colour: their output must keep the source alpha
 # channel instead of flattening transparency to the background colour.
@@ -50,20 +40,12 @@ def _join_params_raw(params: list[str], joiner: str, count: Optional[int] = None
     return joiner.join(vals)
 
 
-def _noise_attenuate(noise_type: str, amplitude: str) -> str:
+def _noise_attenuate(amplitude: str) -> str:
     try:
         amount = float(amplitude)
     except (TypeError, ValueError):
         amount = 0.0
-    if amount <= 0.0:
-        return "0"
-    if noise_type == "Poisson":
-        # Poisson noise is shot noise: for ImageMagick -attenuate is an
-        # inverse intensity scale (larger values mean less noise) and values
-        # above ~50 clip the image.  Clamp to that useful range so raising the
-        # UI amplitude still produces more noise.
-        return f"{min(50.0, max(1.0, 1.0 / amount)):g}"
-    return f"{amount * _NOISE_ATTENUATE_SCALE.get(noise_type, 1.0):g}"
+    return f"{max(0.0, min(100.0, amount)):g}"
 
 
 def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]]]:
@@ -166,7 +148,7 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
         idx = max(0, min(idx, len(_NOISE_TYPES) - 1))
         noise_type = _NOISE_TYPES[idx]
         amplitude = raw_params[1] if len(raw_params) > 1 else _NOISE_DEFAULT_AMPLITUDE
-        attenuate = _noise_attenuate(noise_type, amplitude)
+        attenuate = _noise_attenuate(amplitude)
         if attenuate == "0":
             return []
         return [("-attenuate", attenuate), ("+noise", noise_type)]
