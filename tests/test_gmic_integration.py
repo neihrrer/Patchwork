@@ -40,7 +40,7 @@ def stdlib_filters():
 @pytest.fixture
 def gmic_image(tmp_path):
     path = tmp_path / "input.png"
-    Image.new("RGB", (64, 64), (90, 120, 60)).save(str(path))
+    Image.new("RGB", (200, 200), (90, 120, 60)).save(str(path))
     return str(path)
 
 
@@ -101,6 +101,45 @@ class TestPointParameter:
         filter_def = stdlib_filters["fx_distort_rbf"]
         points = [p for p in filter_def.parameters if p.kind == "point"]
         assert points and all(len(p.default) == 2 for p in points)
+
+        result = run_filter(gmic_image, filter_def, timeout=120)
+        assert result.success, result.error
+
+
+CONTINUED_FILTER = """\
+#@gui Plot [Y=f(X)] : plotcmd, plotcmd_preview
+#@gui : F(X) = text{"X*c+10*cos(X+c+u)"}
+#@gui : Mode = choice(0,"Nil",
+#@gui : "Lines","Splines")
+#@gui : Resolution = int(100,2,1024)
+
+plotcmd :
+  blur 1
+
+#@gui _
+"""
+
+
+class TestGuiLineJoining:
+    def test_equals_sign_in_filter_name_is_not_a_parameter(self):
+        # 'Plot [Y=f(X)]' used to absorb the parameter lines into the
+        # command because its name contains '='.
+        filter_def = GmicFilterParser().parse_gui(CONTINUED_FILTER)[0]
+        assert filter_def.gmic_command == "plotcmd"
+        assert [p.name for p in filter_def.parameters] == [
+            "F(X)", "Mode", "Resolution"]
+
+    def test_parameter_definition_continues_on_the_next_line(self):
+        params = GmicFilterParser().parse_gui(CONTINUED_FILTER)[0].parameters
+        assert params[1].choices == ["Nil", "Lines", "Splines"]
+
+    def test_equation_plot_filter_runs(self, stdlib_filters, gmic_image):
+        # The command used to be "fx_equation_plot, fx_equation_plot
+        # Description = note{...", so G'MIC got one argument instead of eight
+        # ("Undefined argument '$4' ... (for 1 argument specified)").
+        filter_def = stdlib_filters["fx_equation_plot"]
+        assert filter_def.gmic_command == "fx_equation_plot"
+        assert len(filter_def.parameters) == 7
 
         result = run_filter(gmic_image, filter_def, timeout=120)
         assert result.success, result.error

@@ -308,6 +308,39 @@ def _parse_params(text: str) -> list[ParamDef]:
     return results
 
 
+def _gui_param_incomplete(line: str) -> bool:
+    """Tell whether a ``#@gui :`` parameter line ends inside brackets/quotes.
+
+    Such a line is continued on the following ``#@gui`` line (long choice
+    lists, multi-line text defaults) without a trailing backslash.
+    """
+    content = line.strip()[5:].strip()
+    if not content.startswith(":"):
+        return False
+    text = content[1:]
+    eq_idx = text.find("=")
+    if eq_idx < 0:
+        return False
+    depth = 0
+    in_quote = False
+    escaped = False
+    for ch in text[eq_idx + 1:]:
+        if escaped:
+            escaped = False
+        elif ch == "\\":
+            escaped = True
+        elif in_quote:
+            if ch == '"':
+                in_quote = False
+        elif ch == '"':
+            in_quote = True
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+    return depth > 0 or in_quote
+
+
 def _join_continuations(lines: list[str]) -> list[str]:
     joined = []
     buf: list[str] = []
@@ -331,11 +364,10 @@ def _join_continuations(lines: list[str]) -> list[str]:
         stripped = line.strip()
         if stripped.startswith("#@gui"):
             content = stripped[5:].strip()
-            if ":" in content:
-                lhs, rhs = content.split(":", 1)
-                if not lhs.strip() and "=" in gui_buf:
-                    gui_buf += " " + rhs.strip()
-                    continue
+            is_param = content.startswith(":")
+            if gui_buf and is_param and _gui_param_incomplete(gui_buf):
+                gui_buf += " " + content[1:].strip()
+                continue
             if gui_buf:
                 merged.append(gui_buf)
             gui_buf = stripped
