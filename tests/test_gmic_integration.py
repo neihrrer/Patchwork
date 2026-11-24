@@ -5,6 +5,7 @@ through :class:`GraphExecutor`, so a wrong argument list fails loudly instead
 of silently shifting the filter's parameters.
 """
 
+import os
 import shutil
 
 import pytest
@@ -193,6 +194,19 @@ class TestGuiLineJoining:
 
         result = run_filter(gmic_image, filter_def, timeout=120)
         assert result.success, result.error
+
+
+class TestMultiImageOutput:
+    def test_first_output_image_is_kept_when_gmic_numbers_them(
+            self, stdlib_filters, gmic_image):
+        # 'fx_ball' returns several layers, which G'MIC writes as
+        # out_000000.png, out_000001.png, ... while the pre-created output
+        # file stays empty (the run used to "succeed" with a 0-byte image).
+        filter_def = stdlib_filters["fx_ball"]
+        result = run_filter(gmic_image, filter_def, timeout=120)
+        assert result.success, result.error
+        assert os.path.getsize(result.output_path) > 0
+        assert Image.open(result.output_path).size == (200, 200)
 
 
 class TestTextParameter:

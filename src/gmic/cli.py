@@ -85,8 +85,16 @@ class GmicCLI:
                 err_msg = stderr.strip() or _("Unknown error")
                 return GmicResult(False, error=err_msg, stdout=stdout, stderr=stderr)
 
-            if not os.path.isfile(output_path):
-                return GmicResult(False, error=_("gmic produced no output file"), stdout=stdout, stderr=stderr)
+            if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+                # G'MIC appends an index when a filter returns several
+                # images ('out_000000.png', ...) and the pre-created output
+                # file stays empty: keep the first image.
+                stem, suffix = os.path.splitext(output_path)
+                first = f"{stem}_000000{suffix}"
+                if os.path.isfile(first) and os.path.getsize(first) > 0:
+                    os.replace(first, output_path)
+                else:
+                    return GmicResult(False, error=_("gmic produced no output file"), stdout=stdout, stderr=stderr)
 
             return GmicResult(True, output_path=output_path, stdout=stdout, stderr=stderr)
 
