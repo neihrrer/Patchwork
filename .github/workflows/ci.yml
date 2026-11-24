@@ -11,11 +11,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: fedora:40
+      image: fedora:45
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
@@ -29,6 +29,7 @@ jobs:
             ImageMagick \
             python3-pip \
             python3-pillow \
+            python3-pytest \
             glib2-devel
 
       - name: Setup build
@@ -39,6 +40,9 @@ jobs:
 
       - name: Lint
         run: python3 -m py_compile src/main.py src/application.py src/window.py
+
+      - name: Test
+        run: python3 -m pytest tests/ -q
 
       - name: Create tarball
         if: startsWith(github.ref, 'refs/tags/')
