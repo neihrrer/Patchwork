@@ -46,8 +46,9 @@ def _build_args(op: str, raw_params: list[str]) -> list[tuple[str, Optional[str]
         val = raw_params[0] if raw_params else None
         return [("-rotational-blur", val)]
     elif op == "median":
-        val = raw_params[0] if raw_params else None
-        return [("-median", val)]
+        if not raw_params:
+            return []
+        return [("-statistic", ["Median", raw_params[0]])]
     elif op == "sharpen":
         val = _join_params_raw(raw_params, "x", 2) if raw_params else None
         return [("-sharpen", val)]
