@@ -74,6 +74,8 @@ The filter suites exercise the installed `gmic` and `magick` CLIs and are skippe
 5. **Tweak parameters:** click a filter node to adjust its parameters
 6. **Render:** click the **Render** button in the toolbar to process the graph
 7. **Export/Save:** once rendered, click the save icon to export the result and save your project
+8. **Projects:** **Ctrl+N** starts a new project, **Ctrl+O** opens one, **Ctrl+S** saves it. Replacing or closing a project with unsaved changes asks Save / Discard / Cancel first
+9. **Autosave:** while a project has unsaved changes it is written every 5 minutes to `~/.cache/patchwork/autosave.patch` (interval configurable in Preferences). After a crash, Patchwork offers to restore it on the next start; the file is deleted on save and on a normal exit
 
 ### Node types
 
@@ -92,8 +94,9 @@ The filter suites exercise the installed `gmic` and `magick` CLIs and are skippe
 
 | Shortcut | Action |
 |---|---|
-| Ctrl+O | Open image |
-| Ctrl+S | Export result |
+| Ctrl+N | New project |
+| Ctrl+O | Open project |
+| Ctrl+S | Save project |
 | Ctrl+Q | Quit |
 | Ctrl+P | Toggle preview |
 | Ctrl+Return | Apply filter |
