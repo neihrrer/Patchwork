@@ -250,6 +250,7 @@ BUILTIN_FILTERS: list[FilterDef] = [
         engine=ENGINE_IMAGEMAGICK,
         parameters=[
             ParamDef(name="type", label="Noise Type", kind=ParamKind.CHOICE, default=0, choices=["Uniform", "Gaussian", "Multiplicative", "Impulse", "Laplacian", "Poisson"]),
+            ParamDef(name="amplitude", label="Amplitude", kind=ParamKind.FLOAT, default=0.1, min_val=0.0, max_val=1.0),
         ],
         gmic_command="add_noise",
     ),

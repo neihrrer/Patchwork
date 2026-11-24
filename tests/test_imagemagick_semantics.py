@@ -38,6 +38,10 @@ def _noise_image(path, size=(160, 120)):
     return str(path)
 
 
+def _mean_diff(a, b):
+    return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / 3.0
+
+
 def _run(cli, src, command, dst):
     result = cli.run_pipeline(str(src), [command], str(dst))
     assert result.success, result.error
@@ -100,3 +104,64 @@ class TestMedianSyntax:
         original = Image.open(src).convert("RGB")
         filtered = Image.open(out).convert("RGB")
         assert ImageStat.Stat(ImageChops.difference(original, filtered)).mean != [0, 0, 0]
+
+
+class TestAddNoiseAmplitude:
+    def test_filter_exposes_amplitude_default(self):
+        from imagemagick.filters import get_builtin_filters
+
+        filter_def = next(f for f in get_builtin_filters() if f.name == "add_noise")
+        amplitude = next(p for p in filter_def.parameters if p.name == "amplitude")
+        assert amplitude.kind == "float"
+        assert amplitude.min_val == 0.0
+        assert amplitude.max_val == 1.0
+        assert amplitude.default == 0.1
+
+    def test_default_amplitude_is_visible(self, tmp_path):
+        from imagemagick.cli import ImageMagickCLI
+
+        src = _gradient_image(tmp_path / "src.png")
+        out = tmp_path / "out.png"
+        result = ImageMagickCLI().run_pipeline(src, ["add_noise,0,0.1"], str(out))
+        assert result.success, result.error
+
+        original = Image.open(src).convert("RGB")
+        noisy = Image.open(out).convert("RGB")
+        assert _mean_diff(original, noisy) > 0.5
+
+    def test_zero_amplitude_is_a_no_op(self, tmp_path):
+        from imagemagick.cli import ImageMagickCLI
+
+        src = _noise_image(tmp_path / "src.png")
+        out = tmp_path / "out.png"
+        result = ImageMagickCLI().run_pipeline(src, ["add_noise,0,0"], str(out))
+        assert result.success, result.error
+
+        original = Image.open(src).convert("RGBA")
+        passed = Image.open(out).convert("RGBA")
+        assert ImageChops.difference(original, passed).getbbox() is None
+
+    def test_larger_amplitude_adds_more_noise(self, tmp_path):
+        from imagemagick.cli import ImageMagickCLI
+
+        src = _gradient_image(tmp_path / "src.png")
+        cli = ImageMagickCLI()
+        original = Image.open(src).convert("RGB")
+
+        low = _run(cli, src, "add_noise,0,0.1", tmp_path / "low.png")
+        high = _run(cli, src, "add_noise,0,0.8", tmp_path / "high.png")
+
+        assert _mean_diff(original, high) > 2 * _mean_diff(original, low)
+
+    @pytest.mark.parametrize("noise_index", range(6))
+    def test_every_noise_type_renders(self, noise_index, tmp_path):
+        from imagemagick.cli import ImageMagickCLI
+
+        src = _gradient_image(tmp_path / "src.png")
+        out = tmp_path / f"noise{noise_index}.png"
+        result = ImageMagickCLI().run_pipeline(src, [f"add_noise,{noise_index},0.1"], str(out))
+        assert result.success, result.error
+
+        original = Image.open(src).convert("RGB")
+        noisy = Image.open(out).convert("RGB")
+        assert _mean_diff(original, noisy) > 0.2
