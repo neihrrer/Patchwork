@@ -29,8 +29,9 @@ def _gmic_script_escape(s: str) -> str:
     Command files are parsed by G'MIC itself instead of the shell CLI, so
     double quotes protect ``$``, ``{``, commas and spaces and the value reads
     back verbatim (this is what filters that re-interpret a parameter, such as
-    "run this code", need).  Only backslashes, quotes and line breaks need an
-    escape; line breaks must not reach the file as raw newlines.
+    "run this code", need).  Only backslashes, quotes, line breaks and ``#``
+    need an escape: a comment marker after a blank would otherwise end the
+    line even inside the quotes.
     """
     return (
         s.replace("\\", "\\\\")
@@ -38,6 +39,7 @@ def _gmic_script_escape(s: str) -> str:
         .replace("\n", "\\012")
         .replace("\r", "\\015")
         .replace("\t", "\\011")
+        .replace("#", "\\#")
     )
 
 

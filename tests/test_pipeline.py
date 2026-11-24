@@ -132,6 +132,12 @@ class TestSerializeParam:
         assert (_serialize_param('a\\b"c\nd', p, style="script")
                 == '"a\\\\b\\"c\\012d"')
 
+    def test_text_value_script_style_escapes_comment_marker(self):
+        # A '#' after a blank starts a comment in a command file, even
+        # inside the quotes, so it has to be escaped.
+        p = ParamDef("x", "X", kind="text", default="")
+        assert _serialize_param("a # b", p, style="script") == '"a \\# b"'
+
     def test_script_style_keeps_numbers_and_lists_bare(self):
         assert _serialize_param(3, ParamDef("x", "X", kind="int", default=1),
                                 style="script") == "3"
